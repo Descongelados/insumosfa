@@ -155,12 +155,12 @@ function StatCard({ icon, color, label, value, sub }: {
   icon: React.ReactNode, color: string, label: string, value: React.ReactNode, sub: string
 }) {
   return (
-    <div className="card-sm flex items-start gap-4">
-      <div className={`p-3 rounded-xl ${color} flex-shrink-0`}>{icon}</div>
-      <div className="min-w-0">
-        <div className="text-xs text-gray-500 font-medium">{label}</div>
-        <div className="text-xl font-bold text-gray-900 mt-0.5">{value}</div>
-        <div className="text-xs text-gray-400 mt-0.5">{sub}</div>
+    <div className="card-sm flex items-start gap-3">
+      <div className={`p-2 md:p-3 rounded-xl ${color} flex-shrink-0`}>{icon}</div>
+      <div className="min-w-0 flex-1">
+        <div className="text-xs text-gray-500 font-medium leading-tight">{label}</div>
+        <div className="text-base md:text-xl font-bold text-gray-900 mt-0.5 truncate">{value}</div>
+        <div className="text-xs text-gray-400 mt-0.5 leading-tight">{sub}</div>
       </div>
     </div>
   )
