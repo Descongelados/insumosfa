@@ -8,6 +8,7 @@ interface SalesOrdersState {
   orders: SalesOrder[]
   addOrder: (o: Omit<SalesOrder, 'pedidoId' | 'folio'>) => SalesOrder
   updateOrder: (id: string, data: Partial<SalesOrder>) => void
+  deleteOrder: (id: string) => void
 }
 
 export const useSalesOrdersStore = create<SalesOrdersState>((set) => ({
@@ -23,5 +24,8 @@ export const useSalesOrdersStore = create<SalesOrdersState>((set) => ({
   },
   updateOrder(id, data) {
     set((s) => ({ orders: s.orders.map((o) => (o.pedidoId === id ? { ...o, ...data } : o)) }))
+  },
+  deleteOrder(id) {
+    set((s) => ({ orders: s.orders.filter((o) => o.pedidoId !== id) }))
   },
 }))

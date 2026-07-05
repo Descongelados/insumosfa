@@ -6,6 +6,7 @@ import { DataTable } from '../../components/ui/DataTable'
 import { SearchBar } from '../../components/ui/SearchBar'
 import { Modal } from '../../components/ui/Modal'
 import { StatusBadge } from '../../components/ui/StatusBadge'
+import { toast } from '../../store/toastStore'
 import type { MovimientoTipo } from '../../types'
 import { Warehouse, PlusCircle, History } from 'lucide-react'
 
@@ -43,7 +44,8 @@ export function InventoryPage() {
   })
 
   function handleMovimiento() {
-    if (!selProd || form.cantidad <= 0) return
+    if (!selProd) { toast.error('Selecciona un producto.'); return }
+    if (form.cantidad <= 0) { toast.error('La cantidad debe ser mayor a cero.'); return }
     applyMovimiento({
       productId: selProd,
       tipo: form.tipo,
@@ -52,6 +54,8 @@ export function InventoryPage() {
       usuario: user?.email ?? 'sistema',
       notas: form.notas,
     })
+    const prod = products.find(p => p.productId === selProd)
+    toast.success(`Movimiento registrado: ${form.tipo} x${form.cantidad} — ${prod?.sku ?? selProd}`)
     setModal(false)
     setForm({ tipo: TIPOS[0], cantidad: 1, doc: '', notas: '' })
     setSelProd('')

@@ -7,6 +7,7 @@ import { SearchBar } from '../../components/ui/SearchBar'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { Modal } from '../../components/ui/Modal'
 import { Currency } from '../../components/ui/Currency'
+import { toast } from '../../store/toastStore'
 import type { Product } from '../../types'
 import { Plus, Edit2, Trash2, Package, ToggleLeft, ToggleRight, AlertCircle } from 'lucide-react'
 
@@ -50,13 +51,15 @@ export function ProductsPage() {
   function openDelete(p: Product) { setDeleteTarget(p); setModal('confirm_delete') }
 
   function handleSave() {
-    if (editId) updateProduct(editId, form)
-    else addProduct(form)
+    if (!form.sku?.trim()) { toast.error('El SKU es obligatorio.'); return }
+    if (!form.descripcion?.trim()) { toast.error('La descripción es obligatoria.'); return }
+    if (editId) { updateProduct(editId, form); toast.success('Producto actualizado.') }
+    else { addProduct(form); toast.success(`Producto ${form.sku} creado.`) }
     setModal(null)
   }
 
   function handleDelete() {
-    if (deleteTarget) deleteProduct(deleteTarget.productId)
+    if (deleteTarget) { deleteProduct(deleteTarget.productId); toast.success(`Producto ${deleteTarget.sku} eliminado.`) }
     setModal(null)
     setDeleteTarget(null)
   }

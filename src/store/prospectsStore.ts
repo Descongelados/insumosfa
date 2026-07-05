@@ -6,6 +6,7 @@ interface ProspectsState {
   prospects: Prospect[]
   addProspect: (p: Omit<Prospect, 'prospectoId' | 'fechaAlta'>) => void
   updateProspect: (id: string, data: Partial<Prospect>) => void
+  deleteProspect: (id: string) => void
 }
 
 export const useProspectsStore = create<ProspectsState>((set) => ({
@@ -16,5 +17,8 @@ export const useProspectsStore = create<ProspectsState>((set) => ({
   },
   updateProspect(id, data) {
     set((s) => ({ prospects: s.prospects.map((p) => (p.prospectoId === id ? { ...p, ...data } : p)) }))
+  },
+  deleteProspect(id) {
+    set((s) => ({ prospects: s.prospects.filter((p) => p.prospectoId !== id) }))
   },
 }))

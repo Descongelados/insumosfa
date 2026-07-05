@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { useAuthStore } from './store/authStore'
 import { canAccess } from './rbac'
 import { Layout } from './components/Layout'
+import { Toaster } from './components/ui/Toaster'
 import { LoginPage } from './pages/Login'
 import { DashboardPage } from './pages/Dashboard'
 import { ClientsPage } from './pages/clients/ClientsPage'
@@ -48,6 +49,8 @@ function AccesoDenegado() {
 
 export function App() {
   return (
+    <>
+    <Toaster />
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/sin-acceso" element={<AccesoDenegado />} />
@@ -67,5 +70,6 @@ export function App() {
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </>
   )
 }

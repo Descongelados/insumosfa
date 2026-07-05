@@ -4,6 +4,7 @@ import { useAuthStore } from '../../store/authStore'
 import { DataTable } from '../../components/ui/DataTable'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { Modal } from '../../components/ui/Modal'
+import { toast } from '../../store/toastStore'
 import type { User, Role } from '../../types'
 import {
   Users, Plus, Edit2, Trash2,
@@ -130,6 +131,7 @@ export function UsersPage() {
   function handleSaveEdit() {
     if (!targetUser) return
     updateUser(targetUser.userId, form)
+    toast.success('Usuario actualizado.')
     setModal(null)
   }
 
@@ -141,6 +143,7 @@ export function UsersPage() {
     if (users.some(u => u.email === newForm.email)) { setNewError('Ya existe un usuario con ese correo.'); return }
     const { password, confirm, ...userData } = newForm
     addUser(userData, password)
+    toast.success(`Usuario ${newForm.email} creado.`)
     setModal(null)
   }
 
@@ -148,12 +151,12 @@ export function UsersPage() {
     setPwdError('')
     if (pwdForm.newPwd.length < 6) { setPwdError('La contraseña debe tener al menos 6 caracteres.'); return }
     if (pwdForm.newPwd !== pwdForm.confirm) { setPwdError('Las contraseñas no coinciden.'); return }
-    if (targetUser) changePassword(targetUser.userId, pwdForm.newPwd)
+    if (targetUser) { changePassword(targetUser.userId, pwdForm.newPwd); toast.success('Contraseña actualizada.') }
     setModal(null)
   }
 
   function handleDelete() {
-    if (targetUser) deleteUser(targetUser.userId)
+    if (targetUser) { deleteUser(targetUser.userId); toast.success(`Usuario ${targetUser.email} eliminado.`) }
     setModal(null)
   }
 

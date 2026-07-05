@@ -9,8 +9,10 @@ interface PurchasesState {
   ordenesCompra: OrdenCompra[]
   addSolicitud: (s: Omit<SolicitudCompra, 'solicitudId'>) => void
   updateSolicitud: (id: string, data: Partial<SolicitudCompra>) => void
+  deleteSolicitud: (id: string) => void
   addOrdenCompra: (o: Omit<OrdenCompra, 'ordenCompraId' | 'folio'>) => OrdenCompra
   updateOrdenCompra: (id: string, data: Partial<OrdenCompra>) => void
+  deleteOrdenCompra: (id: string) => void
 }
 
 export const usePurchasesStore = create<PurchasesState>((set) => ({
@@ -21,6 +23,9 @@ export const usePurchasesStore = create<PurchasesState>((set) => ({
   },
   updateSolicitud(id, data) {
     set((s) => ({ solicitudes: s.solicitudes.map((sc) => (sc.solicitudId === id ? { ...sc, ...data } : sc)) }))
+  },
+  deleteSolicitud(id) {
+    set((s) => ({ solicitudes: s.solicitudes.filter((sc) => sc.solicitudId !== id) }))
   },
   addOrdenCompra(data) {
     const oc: OrdenCompra = {
@@ -33,5 +38,8 @@ export const usePurchasesStore = create<PurchasesState>((set) => ({
   },
   updateOrdenCompra(id, data) {
     set((s) => ({ ordenesCompra: s.ordenesCompra.map((oc) => (oc.ordenCompraId === id ? { ...oc, ...data } : oc)) }))
+  },
+  deleteOrdenCompra(id) {
+    set((s) => ({ ordenesCompra: s.ordenesCompra.filter((oc) => oc.ordenCompraId !== id) }))
   },
 }))

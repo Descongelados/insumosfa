@@ -6,6 +6,7 @@ import { DataTable } from '../../components/ui/DataTable'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { Modal } from '../../components/ui/Modal'
 import { Currency } from '../../components/ui/Currency'
+import { toast } from '../../store/toastStore'
 import type { FacturaVenta } from '../../types'
 import { DollarSign, CreditCard, Building } from 'lucide-react'
 
@@ -27,7 +28,9 @@ export function FinancePage() {
   function handlePagoCliente() {
     const fv = facturasVenta.find(f => f.facturaId === selFv)
     if (!fv) return
+    if (pagoForm.monto <= 0) { toast.error('El monto debe ser mayor a cero.'); return }
     addPagoCliente({ facturaId: selFv, clienteId: fv.clienteId, fecha: new Date().toISOString().split('T')[0], ...pagoForm })
+    toast.success(`Cobro registrado por ${pagoForm.monto.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}.`)
     setModal(null)
     setPagoForm({ monto: 0, formaPago: 'Transferencia', referencia: '' })
   }
@@ -35,7 +38,9 @@ export function FinancePage() {
   function handlePagoProveedor() {
     const fp = facturasProveedor.find(f => f.facturaProvId === selFp)
     if (!fp) return
+    if (pagoForm.monto <= 0) { toast.error('El monto debe ser mayor a cero.'); return }
     addPagoProveedor({ facturaProvId: selFp, supplierId: fp.supplierId, fecha: new Date().toISOString().split('T')[0], ...pagoForm })
+    toast.success(`Pago a proveedor registrado por ${pagoForm.monto.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}.`)
     setModal(null)
     setPagoForm({ monto: 0, formaPago: 'Transferencia', referencia: '' })
   }

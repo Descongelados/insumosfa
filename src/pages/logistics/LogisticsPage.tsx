@@ -3,6 +3,7 @@ import { useLogisticsStore } from '../../store/logisticsStore'
 import { useAuthStore } from '../../store/authStore'
 import { hasRole } from '../../store/usersStore'
 import { useSalesOrdersStore } from '../../store/salesOrdersStore'
+import { toast } from '../../store/toastStore'
 import { DataTable } from '../../components/ui/DataTable'
 import { SearchBar } from '../../components/ui/SearchBar'
 import { StatusBadge } from '../../components/ui/StatusBadge'
@@ -81,9 +82,10 @@ export function LogisticsPage() {
       setFormEmb(f => ({ ...f, [k]: k === 'costoFlete' ? Number(e.target.value) : e.target.value }))
 
   function handleSaveEmb() {
-    if (!formEmb.transportistaId) { alert('Selecciona un transportista.'); return }
-    if (!formEmb.destino.trim()) { alert('El destino es obligatorio.'); return }
+    if (!formEmb.transportistaId) { toast.error('Selecciona un transportista.'); return }
+    if (!formEmb.destino.trim()) { toast.error('El destino es obligatorio.'); return }
     addEmbarque({ ...formEmb, estatus: 'solicitado' })
+    toast.success('Embarque registrado.')
     setEmbModal(null)
     setFormEmb(BLANK_EMB)
   }
@@ -104,13 +106,13 @@ export function LogisticsPage() {
     setSelTrans(t); setTransModal('del_trans')
   }
   function handleSaveTrans() {
-    if (!formTrans.nombre.trim()) { alert('El nombre es obligatorio.'); return }
-    if (editTransId) updateTransportista(editTransId, formTrans)
-    else addTransportista(formTrans)
+    if (!formTrans.nombre.trim()) { toast.error('El nombre del transportista es obligatorio.'); return }
+    if (editTransId) { updateTransportista(editTransId, formTrans); toast.success('Transportista actualizado.') }
+    else { addTransportista(formTrans); toast.success('Transportista creado.') }
     setTransModal(null)
   }
   function handleDeleteTrans() {
-    if (selTrans) deleteTransportista(selTrans.transportistaId)
+    if (selTrans) { deleteTransportista(selTrans.transportistaId); toast.success(`Transportista "${selTrans.nombre}" eliminado.`) }
     setTransModal(null)
     setSelTrans(null)
   }

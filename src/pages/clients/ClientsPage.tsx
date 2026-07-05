@@ -7,6 +7,7 @@ import { SearchBar } from '../../components/ui/SearchBar'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { Modal } from '../../components/ui/Modal'
 import { Currency } from '../../components/ui/Currency'
+import { toast } from '../../store/toastStore'
 import type { Client } from '../../types'
 import { Plus, Edit2, Trash2, Users, AlertCircle } from 'lucide-react'
 
@@ -52,13 +53,14 @@ export function ClientsPage() {
   function openDelete(c: Client) { setDeleteTarget(c); setModal('confirm_delete') }
 
   function handleSave() {
-    if (editId) updateClient(editId, form)
-    else addClient(form)
+    if (!form.razonSocial?.trim()) { toast.error('La razón social es obligatoria.'); return }
+    if (editId) { updateClient(editId, form); toast.success('Cliente actualizado.') }
+    else { addClient(form); toast.success('Cliente creado.') }
     setModal(null)
   }
 
   function handleDelete() {
-    if (deleteTarget) deleteClient(deleteTarget.clientId)
+    if (deleteTarget) { deleteClient(deleteTarget.clientId); toast.success(`Cliente "${deleteTarget.razonSocial}" eliminado.`) }
     setModal(null)
     setDeleteTarget(null)
   }

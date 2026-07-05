@@ -8,6 +8,7 @@ import { SearchBar } from '../../components/ui/SearchBar'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { Modal } from '../../components/ui/Modal'
 import { Currency } from '../../components/ui/Currency'
+import { toast } from '../../store/toastStore'
 import type { Quote, QuoteItem, CotizacionEstatus } from '../../types'
 import { Plus, FileText, ArrowRight, Trash2 } from 'lucide-react'
 
@@ -59,14 +60,17 @@ export function QuotesPage() {
   }
 
   function handleSave() {
+    if (!form.clienteId) { toast.error('Selecciona un cliente.'); return }
+    if (form.items.length === 0) { toast.error('Agrega al menos una partida.'); return }
     const { subtotal, impuestos, total } = calcTotals(form.items)
     addQuote({ ...form, fecha: new Date().toISOString().split('T')[0], subtotal, impuestos, total, estatus: 'borrador' })
+    toast.success('Cotización creada.')
     setModal(null)
     setForm({ clienteId: '', vigencia: '', notas: '', items: [] })
   }
 
   function convertirAPedido(quote: Quote) {
-    addOrder({
+    const order = addOrder({
       clienteId: quote.clienteId,
       cotizacionId: quote.cotizacionId,
       fechaPedido: new Date().toISOString().split('T')[0],
@@ -79,7 +83,7 @@ export function QuotesPage() {
       notas: quote.notas,
     })
     updateQuote(quote.cotizacionId, { estatus: 'aceptada' })
-    alert(`Pedido creado desde ${quote.folio}`)
+    toast.success(`Pedido ${order.folio} creado desde ${quote.folio}.`)
   }
 
   return (

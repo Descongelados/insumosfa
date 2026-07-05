@@ -6,6 +6,7 @@ import { DataTable } from '../../components/ui/DataTable'
 import { SearchBar } from '../../components/ui/SearchBar'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { Modal } from '../../components/ui/Modal'
+import { toast } from '../../store/toastStore'
 import type { Supplier } from '../../types'
 import { Plus, Edit2, Trash2, Building2, Star, AlertCircle } from 'lucide-react'
 
@@ -53,11 +54,14 @@ export function SuppliersPage() {
   function openDelete(s: Supplier) { setDeleteTarget(s); setModal('confirm_delete') }
 
   function handleSave() {
-    if (editId) updateSupplier(editId, form); else addSupplier(form); setModal(null)
+    if (!form.razonSocial?.trim()) { toast.error('La razón social es obligatoria.'); return }
+    if (editId) { updateSupplier(editId, form); toast.success('Proveedor actualizado.') }
+    else { addSupplier(form); toast.success('Proveedor creado.') }
+    setModal(null)
   }
 
   function handleDelete() {
-    if (deleteTarget) deleteSupplier(deleteTarget.supplierId)
+    if (deleteTarget) { deleteSupplier(deleteTarget.supplierId); toast.success(`Proveedor "${deleteTarget.razonSocial}" eliminado.`) }
     setModal(null)
     setDeleteTarget(null)
   }

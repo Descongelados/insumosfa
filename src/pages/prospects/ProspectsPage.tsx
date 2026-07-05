@@ -1,12 +1,15 @@
 import { useState } from 'react'
 import { useProspectsStore } from '../../store/prospectsStore'
+import { useAuthStore } from '../../store/authStore'
+import { hasRole } from '../../store/usersStore'
 import { DataTable } from '../../components/ui/DataTable'
 import { SearchBar } from '../../components/ui/SearchBar'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { Modal } from '../../components/ui/Modal'
 import { Currency } from '../../components/ui/Currency'
+import { toast } from '../../store/toastStore'
 import type { Prospect, ProspectoEstatus } from '../../types'
-import { Plus, Edit2, UserSearch } from 'lucide-react'
+import { Plus, Edit2, UserSearch, Trash2 } from 'lucide-react'
 
 const ESTADOS: ProspectoEstatus[] = ['nuevo', 'contactado', 'calificado', 'cotizado', 'ganado', 'perdido']
 const ORIGENES = ['Referido', 'LinkedIn', 'Expo', 'Web', 'Llamada', 'Visita', 'Otro']
@@ -17,11 +20,15 @@ const BLANK: Omit<Prospect, 'prospectoId' | 'fechaAlta'> = {
 }
 
 export function ProspectsPage() {
-  const { prospects, addProspect, updateProspect } = useProspectsStore()
+  const { prospects, addProspect, updateProspect, deleteProspect } = useProspectsStore()
+  const { user: me } = useAuthStore()
   const [q, setQ] = useState('')
-  const [modal, setModal] = useState<'new' | 'edit' | null>(null)
+  const [modal, setModal] = useState<'new' | 'edit' | 'del' | null>(null)
   const [form, setForm] = useState(BLANK)
   const [editId, setEditId] = useState<string | null>(null)
+  const [delTarget, setDelTarget] = useState<Prospect | null>(null)
+
+  const canDelete = me ? hasRole(me, 'director', 'ventas', 'administracion') : false
 
   const filtered = prospects.filter((p) =>
     [p.empresa, p.contacto, p.correo].join(' ').toLowerCase().includes(q.toLowerCase())
@@ -32,11 +39,18 @@ export function ProspectsPage() {
     const { prospectoId, fechaAlta, ...rest } = p
     setForm(rest); setEditId(p.prospectoId); setModal('edit')
   }
+  function openDel(p: Prospect) { setDelTarget(p); setModal('del') }
 
   function handleSave() {
-    if (editId) updateProspect(editId, form)
-    else addProspect(form)
+    if (!form.empresa.trim()) { toast.error('La empresa es obligatoria.'); return }
+    if (editId) { updateProspect(editId, form); toast.success('Prospecto actualizado.') }
+    else { addProspect(form); toast.success('Prospecto creado.') }
     setModal(null)
+  }
+
+  function handleDelete() {
+    if (delTarget) { deleteProspect(delTarget.prospectoId); toast.success(`Prospecto "${delTarget.empresa}" eliminado.`) }
+    setModal(null); setDelTarget(null)
   }
 
   const F = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -81,16 +95,24 @@ export function ProspectsPage() {
             { key: 'fechaAlta', header: 'Fecha Alta' },
             {
               key: 'acciones', header: '', render: (p) => (
-                <button className="btn btn-secondary btn-sm" onClick={() => openEdit(p)}>
-                  <Edit2 size={13} /> Editar
-                </button>
+                <div className="flex gap-1">
+                  <button className="btn btn-secondary btn-sm" onClick={() => openEdit(p)}>
+                    <Edit2 size={13} /> Editar
+                  </button>
+                  {canDelete && (
+                    <button className="btn btn-danger btn-sm" onClick={() => openDel(p)} title="Eliminar">
+                      <Trash2 size={13} />
+                    </button>
+                  )}
+                </div>
               )
             },
           ]}
         />
       </div>
 
-      {modal && (
+      {/* New / Edit modal */}
+      {(modal === 'new' || modal === 'edit') && (
         <Modal
           title={modal === 'new' ? 'Nuevo Prospecto' : 'Editar Prospecto'}
           onClose={() => setModal(null)}
@@ -135,6 +157,25 @@ export function ProspectsPage() {
               </select>
             </div>
           </div>
+        </Modal>
+      )}
+
+      {/* Delete confirm modal */}
+      {modal === 'del' && delTarget && (
+        <Modal
+          title="Eliminar prospecto"
+          onClose={() => setModal(null)}
+          footer={
+            <>
+              <button className="btn-secondary" onClick={() => setModal(null)}>Cancelar</button>
+              <button className="btn-danger" onClick={handleDelete}><Trash2 size={14} /> Eliminar definitivamente</button>
+            </>
+          }
+        >
+          <p className="text-sm text-gray-700">
+            ¿Estás seguro de que deseas eliminar el prospecto{' '}
+            <strong>{delTarget.empresa}</strong>? Esta acción no se puede deshacer.
+          </p>
         </Modal>
       )}
     </div>
