@@ -9,7 +9,7 @@ import { Modal } from '../../components/ui/Modal'
 import { Currency } from '../../components/ui/Currency'
 import { toast } from '../../store/toastStore'
 import type { Client } from '../../types'
-import { Plus, Edit2, Trash2, Users, AlertCircle } from 'lucide-react'
+import { Edit2, Trash2, Users, AlertCircle, Info } from 'lucide-react'
 
 const REGIMENES = [
   '601 - General de Ley Personas Morales',
@@ -30,13 +30,13 @@ const BLANK: Omit<Client, 'clientId' | 'fechaAlta'> = {
 const DELETE_ROLES = ['director', 'administracion'] as const
 
 export function ClientsPage() {
-  const { clients, addClient, updateClient, deleteClient } = useClientsStore()
+  const { clients, updateClient, deleteClient } = useClientsStore()
   const { user: me } = useAuthStore()
 
   const canDelete = me ? hasRole(me, ...DELETE_ROLES) : false
 
   const [q, setQ] = useState('')
-  const [modal, setModal] = useState<'new' | 'edit' | 'confirm_delete' | null>(null)
+  const [modal, setModal] = useState<'edit' | 'confirm_delete' | null>(null)
   const [form, setForm] = useState(BLANK)
   const [editId, setEditId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Client | null>(null)
@@ -45,7 +45,6 @@ export function ClientsPage() {
     [c.razonSocial, c.rfc, c.correo].join(' ').toLowerCase().includes(q.toLowerCase())
   )
 
-  function openNew() { setForm(BLANK); setEditId(null); setModal('new') }
   function openEdit(c: Client) {
     const { clientId, fechaAlta, ...rest } = c
     setForm(rest); setEditId(c.clientId); setModal('edit')
@@ -54,8 +53,7 @@ export function ClientsPage() {
 
   function handleSave() {
     if (!form.razonSocial?.trim()) { toast.error('La razón social es obligatoria.'); return }
-    if (editId) { updateClient(editId, form); toast.success('Cliente actualizado.') }
-    else { addClient(form); toast.success('Cliente creado.') }
+    updateClient(editId!, form); toast.success('Cliente actualizado.')
     setModal(null)
   }
 
@@ -73,9 +71,16 @@ export function ClientsPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title flex items-center gap-2"><Users size={24} /> Clientes</h1>
-          <p className="page-subtitle">{clients.length} clientes registrados</p>
+          <p className="page-subtitle">{clients.filter(c => c.estatus === 'activo').length} activos · {clients.length} total</p>
         </div>
-        <button className="btn-primary" onClick={openNew}><Plus size={16} /> Nuevo Cliente</button>
+      </div>
+
+      {/* Aviso de origen */}
+      <div className="flex items-start gap-3 p-4 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-800">
+        <Info size={16} className="flex-shrink-0 mt-0.5" />
+        <span>
+          Los clientes se crean automáticamente desde el módulo de <strong>Prospectos</strong> cuando un prospecto llega al estatus <strong>Ganado</strong> y se convierte. No es posible crear clientes manualmente.
+        </span>
       </div>
 
       <div className="card">
@@ -114,10 +119,10 @@ export function ClientsPage() {
         />
       </div>
 
-      {/* ── Modal: Nuevo / Editar Cliente ─────────────────────────────── */}
-      {(modal === 'new' || modal === 'edit') && (
+      {/* ── Modal: Editar Cliente ─────────────────────────────────────── */}
+      {modal === 'edit' && (
         <Modal
-          title={modal === 'new' ? 'Nuevo Cliente' : 'Editar Cliente'}
+          title="Editar Cliente"
           onClose={() => setModal(null)}
           footer={
             <>
