@@ -6,6 +6,7 @@ interface SuppliersState {
   suppliers: Supplier[]
   addSupplier: (s: Omit<Supplier, 'supplierId'>) => void
   updateSupplier: (id: string, data: Partial<Supplier>) => void
+  deleteSupplier: (id: string) => void
 }
 
 export const useSuppliersStore = create<SuppliersState>((set) => ({
@@ -16,5 +17,8 @@ export const useSuppliersStore = create<SuppliersState>((set) => ({
   },
   updateSupplier(id, data) {
     set((st) => ({ suppliers: st.suppliers.map((s) => (s.supplierId === id ? { ...s, ...data } : s)) }))
+  },
+  deleteSupplier(id) {
+    set((st) => ({ suppliers: st.suppliers.filter((s) => s.supplierId !== id) }))
   },
 }))
