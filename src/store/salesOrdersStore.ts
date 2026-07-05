@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { SalesOrder } from '../types'
 import { SEED_SALES_ORDERS } from '../data/seed'
+import { useFinanceStore } from './financeStore'
 
 let folioCounter = SEED_SALES_ORDERS.length + 1
 
@@ -11,7 +12,7 @@ interface SalesOrdersState {
   deleteOrder: (id: string) => void
 }
 
-export const useSalesOrdersStore = create<SalesOrdersState>((set) => ({
+export const useSalesOrdersStore = create<SalesOrdersState>((set, get) => ({
   orders: SEED_SALES_ORDERS,
   addOrder(data) {
     const order: SalesOrder = {
@@ -24,6 +25,30 @@ export const useSalesOrdersStore = create<SalesOrdersState>((set) => ({
   },
   updateOrder(id, data) {
     set((s) => ({ orders: s.orders.map((o) => (o.pedidoId === id ? { ...o, ...data } : o)) }))
+    // When an order is marked as 'facturado', automatically create a FacturaVenta in Finance
+    if (data.estatus === 'facturado') {
+      const order = get().orders.find((o) => o.pedidoId === id)
+      if (order) {
+        const alreadyExists = useFinanceStore.getState().facturasVenta.some(
+          (f) => f.pedidoId === id
+        )
+        if (!alreadyExists) {
+          const today = new Date().toISOString().split('T')[0]
+          const venc = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+          useFinanceStore.getState().addFacturaVenta({
+            clienteId: order.clienteId,
+            pedidoId: order.pedidoId,
+            fecha: today,
+            fechaVencimiento: venc,
+            subtotal: order.subtotal,
+            impuestos: order.impuestos,
+            total: order.total,
+            saldoPendiente: order.total,
+            estatus: 'emitida',
+          })
+        }
+      }
+    }
   },
   deleteOrder(id) {
     set((s) => ({ orders: s.orders.filter((o) => o.pedidoId !== id) }))

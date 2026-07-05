@@ -13,7 +13,9 @@ import { toast } from '../../store/toastStore'
 import type { SalesOrder, SalesOrderItem, PedidoEstatus } from '../../types'
 import { ShoppingCart, Edit2, Plus, Trash2 } from 'lucide-react'
 
+// 'facturado' moves to Finance — excluded from active pipeline display
 const ESTADOS: PedidoEstatus[] = ['nuevo', 'confirmado', 'surtiendo', 'embarcado', 'entregado', 'facturado', 'cerrado']
+const ESTADOS_ACTIVOS: PedidoEstatus[] = ['nuevo', 'confirmado', 'surtiendo', 'embarcado', 'entregado', 'cerrado']
 
 export function SalesOrdersPage() {
   const { orders, addOrder, updateOrder, deleteOrder } = useSalesOrdersStore()
@@ -28,7 +30,11 @@ export function SalesOrdersPage() {
 
   const canDelete = me ? hasRole(me, 'director', 'administracion') : false
 
-  const filtered = orders.filter((o) => {
+  // Facturado orders are handled in Finance — only show active pipeline here
+  const activeOrders = orders.filter((o) => o.estatus !== 'facturado')
+  const facturadosCount = orders.filter((o) => o.estatus === 'facturado').length
+
+  const filtered = activeOrders.filter((o) => {
     const client = clients.find((c) => c.clientId === o.clienteId)
     return [o.folio, client?.razonSocial ?? ''].join(' ').toLowerCase().includes(q.toLowerCase())
   })
@@ -84,19 +90,36 @@ export function SalesOrdersPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title flex items-center gap-2"><ShoppingCart size={24} /> Pedidos de Venta</h1>
-          <p className="page-subtitle">{orders.length} pedidos en total</p>
+          <p className="page-subtitle">{activeOrders.length} pedidos activos en pipeline</p>
         </div>
         <button className="btn-primary" onClick={openNew}><Plus size={16} /> Nuevo Pedido</button>
       </div>
 
+      {/* Pipeline status counters — only active statuses */}
       <div className="flex gap-3 overflow-x-auto pb-2">
-        {byStatus.map(({ e, count }) => (
+        {byStatus.filter(({ e }) => ESTADOS_ACTIVOS.includes(e)).map(({ e, count }) => (
           <div key={e} className="card-sm flex-shrink-0 min-w-[110px] text-center">
             <div className="text-2xl font-bold text-gray-900">{count}</div>
             <StatusBadge status={e} />
           </div>
         ))}
+        {facturadosCount > 0 && (
+          <div className="card-sm flex-shrink-0 min-w-[130px] text-center border-purple-200 bg-purple-50">
+            <div className="text-2xl font-bold text-purple-700">{facturadosCount}</div>
+            <div className="text-xs text-purple-600 font-medium mt-1">Facturado → Finanzas</div>
+          </div>
+        )}
       </div>
+
+      {/* Info banner when there are facturado orders */}
+      {facturadosCount > 0 && (
+        <div className="flex items-start gap-3 p-3 bg-purple-50 border border-purple-200 rounded-xl text-sm text-purple-800">
+          <ShoppingCart size={15} className="flex-shrink-0 mt-0.5" />
+          <span>
+            <strong>{facturadosCount} pedido(s) facturado(s)</strong> han pasado al módulo de <strong>Finanzas → CxC</strong> para su cobro. Ya no aparecen en esta lista.
+          </span>
+        </div>
+      )}
 
       <div className="card">
         <div className="flex justify-between mb-4">
@@ -167,6 +190,7 @@ export function SalesOrdersPage() {
             </div>
             <div>
               <p className="label mb-2">Cambiar estatus</p>
+              <p className="text-xs text-gray-400 mb-2">Al marcar como <strong>Facturado</strong> el pedido pasa automáticamente a Finanzas y desaparece de esta lista.</p>
               <div className="flex flex-wrap gap-2">
                 {ESTADOS.map((e) => (
                   <button key={e} className={`btn btn-sm ${sel.estatus === e ? 'btn-primary' : 'btn-secondary'}`}

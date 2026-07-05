@@ -15,6 +15,7 @@ interface FinanceState {
   pagosProveedores: PagoProveedor[]
   bancos: Banco[]
   addFacturaVenta: (f: Omit<FacturaVenta, 'facturaId' | 'folio'>) => void
+  updateFacturaVenta: (id: string, data: Partial<FacturaVenta>) => void
   addPagoCliente: (p: Omit<PagoCliente, 'pagoId'>) => void
   addFacturaProveedor: (f: Omit<FacturaProveedor, 'facturaProvId' | 'folio'>) => void
   addPagoProveedor: (p: Omit<PagoProveedor, 'pagoId'>) => void
@@ -31,6 +32,10 @@ export const useFinanceStore = create<FinanceState>((set) => ({
   addFacturaVenta(data) {
     const f: FacturaVenta = { ...data, facturaId: `fv${Date.now()}`, folio: `FAC-${String(fvCounter++).padStart(4, '0')}` }
     set((s) => ({ facturasVenta: [f, ...s.facturasVenta] }))
+  },
+
+  updateFacturaVenta(id, data) {
+    set((s) => ({ facturasVenta: s.facturasVenta.map((f) => (f.facturaId === id ? { ...f, ...data } : f)) }))
   },
 
   addPagoCliente(data) {
