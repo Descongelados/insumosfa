@@ -8,6 +8,7 @@ interface QuotesState {
   quotes: Quote[]
   addQuote: (q: Omit<Quote, 'cotizacionId' | 'folio'>) => Quote
   updateQuote: (id: string, data: Partial<Quote>) => void
+  deleteQuote: (id: string) => void
 }
 
 export const useQuotesStore = create<QuotesState>((set, get) => ({
@@ -23,5 +24,8 @@ export const useQuotesStore = create<QuotesState>((set, get) => ({
   },
   updateQuote(id, data) {
     set((s) => ({ quotes: s.quotes.map((q) => (q.cotizacionId === id ? { ...q, ...data } : q)) }))
+  },
+  deleteQuote(id) {
+    set((s) => ({ quotes: s.quotes.filter((q) => q.cotizacionId !== id) }))
   },
 }))
