@@ -62,10 +62,3 @@
   .table-wrapper { touch-action: pan-x pan-y; }
 }
 
-/* ── Print styles — only the quote document prints ───────────────────────── */
-@media print {
-  body > * { display: none !important; }
-  #quote-print-frame { display: block !important; position: static !important; }
-  #quote-pdf-root { padding: 0 !important; box-shadow: none !important; }
-  @page { margin: 15mm 15mm; size: A4; }
-}

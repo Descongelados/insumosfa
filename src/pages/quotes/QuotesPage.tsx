@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import { useQuotesStore } from '../../store/quotesStore'
 import { useSalesOrdersStore } from '../../store/salesOrdersStore'
 import { useClientsStore } from '../../store/clientsStore'
@@ -12,12 +13,49 @@ import { Modal } from '../../components/ui/Modal'
 import { Currency } from '../../components/ui/Currency'
 import { QuotePDF } from '../../components/QuotePDF'
 import { toast } from '../../store/toastStore'
-import type { Quote, QuoteItem, CotizacionEstatus } from '../../types'
-import { Plus, FileText, ArrowRight, Trash2, Eye, Printer, Share2, X } from 'lucide-react'
+import type { Quote, QuoteItem, CotizacionEstatus, Client, Product } from '../../types'
+import { Plus, FileText, ArrowRight, Trash2, Eye, Download, Share2, X, Copy, Check } from 'lucide-react'
 
 const TAX = 0.16
 const ESTADOS: CotizacionEstatus[] = ['borrador', 'enviada', 'aceptada', 'rechazada', 'vencida']
 const DELETE_ROLES = ['director', 'administracion', 'ventas'] as const
+
+// ── Print via hidden iframe (no app chrome bleeds into output) ───────────────
+function printQuoteInIframe(quote: Quote, client: Client | undefined, products: Product[]) {
+  const html = renderToStaticMarkup(
+    <QuotePDF quote={quote} client={client} products={products} />
+  )
+  const doc = `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>${quote.folio}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #fff; }
+    @page { margin: 15mm; size: A4; }
+  </style>
+</head>
+<body>${html}</body>
+</html>`
+
+  const iframe = document.createElement('iframe')
+  iframe.style.cssText = 'position:fixed;width:0;height:0;border:none;opacity:0;pointer-events:none;'
+  document.body.appendChild(iframe)
+
+  const win = iframe.contentWindow!
+  win.document.open()
+  win.document.write(doc)
+  win.document.close()
+
+  // Wait for resources to load before printing
+  win.onload = () => {
+    win.focus()
+    win.print()
+    // Remove after a short delay to let the print dialog open
+    setTimeout(() => document.body.removeChild(iframe), 1000)
+  }
+}
 
 export function QuotesPage() {
   const { quotes, addQuote, updateQuote, deleteQuote } = useQuotesStore()
@@ -34,8 +72,10 @@ export function QuotesPage() {
   const [delTarget, setDelTarget] = useState<Quote | null>(null)
   const [form, setForm] = useState({ clienteId: '', vigencia: '', notas: '', items: [] as QuoteItem[] })
 
-  // ref to the rendered PDF div for printing
-  const printFrameRef = useRef<HTMLDivElement>(null)
+  // Share panel state
+  const [shareOpen, setShareOpen] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const shareRef = useRef<HTMLDivElement>(null)
 
   const filtered = quotes.filter((qt) => {
     const client = clients.find((c) => c.clientId === qt.clienteId)
@@ -77,7 +117,6 @@ export function QuotesPage() {
     toast.success(`Cotización ${quote.folio} creada.`)
     setModal(null)
     setForm({ clienteId: '', vigencia: '', notas: '', items: [] })
-    // Immediately open preview of the new quote
     setSelQuote(quote)
     setModal('preview')
   }
@@ -107,27 +146,63 @@ export function QuotesPage() {
     setModal(null); setDelTarget(null)
   }
 
-  // ── Print / Export PDF ─────────────────────────────────────────────────────
-  function handlePrint() {
-    window.print()
+  // ── PDF Export (iframe print) ──────────────────────────────────────────────
+  function handlePrint(quote: Quote) {
+    const client = clients.find(c => c.clientId === quote.clienteId)
+    printQuoteInIframe(quote, client, products)
   }
 
-  // ── Share ──────────────────────────────────────────────────────────────────
-  async function handleShare(quote: Quote) {
+  // ── Share helpers ──────────────────────────────────────────────────────────
+  function buildShareText(quote: Quote) {
     const client = clients.find(c => c.clientId === quote.clienteId)
-    const text = `Cotización ${quote.folio} — ${client?.razonSocial ?? ''}\nTotal: ${quote.total.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}\nVigencia: ${quote.vigencia || 'N/A'}\n\nGenerado por InsumosFa ERP`
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: `Cotización ${quote.folio}`, text })
-        return
-      } catch { /* user cancelled */ }
-    }
-    // fallback: copy to clipboard
+    const mxn = (v: number) => v.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })
+    const lines = [
+      `📋 Cotización ${quote.folio}`,
+      `Cliente: ${client?.razonSocial ?? '—'}`,
+      `Fecha: ${quote.fecha}${quote.vigencia ? `  ·  Vigente hasta: ${quote.vigencia}` : ''}`,
+      ``,
+      ...quote.items.map((it) => {
+        const prod = products.find(p => p.productId === it.productId)
+        const importe = it.cantidad * it.precio * (1 - it.descuento / 100)
+        return `• ${prod?.sku ?? '?'} ${prod?.descripcion ?? '—'}  x${it.cantidad}  ${mxn(importe)}`
+      }),
+      ``,
+      `Subtotal:  ${mxn(quote.subtotal)}`,
+      `IVA 16%:   ${mxn(quote.impuestos)}`,
+      `TOTAL:     ${mxn(quote.total)}`,
+      ``,
+      `Generado por InsumosFa ERP`,
+    ]
+    return lines.join('\n')
+  }
+
+  async function handleCopyText(quote: Quote) {
+    const text = buildShareText(quote)
     try {
       await navigator.clipboard.writeText(text)
-      toast.info('Resumen de la cotización copiado al portapapeles.')
+      setCopied(true)
+      toast.success('Cotización copiada al portapapeles.')
+      setTimeout(() => setCopied(false), 2500)
     } catch {
-      toast.error('No fue posible compartir. Usa el botón Imprimir para exportar el PDF.')
+      toast.error('No fue posible copiar al portapapeles.')
+    }
+  }
+
+  async function handleNativeShare(quote: Quote) {
+    const text = buildShareText(quote)
+    const client = clients.find(c => c.clientId === quote.clienteId)
+    if ('share' in navigator) {
+      try {
+        await navigator.share({
+          title: `Cotización ${quote.folio} — ${client?.razonSocial ?? ''}`,
+          text,
+        })
+        setShareOpen(false)
+      } catch { /* user cancelled */ }
+    } else {
+      // Fallback: copy
+      await handleCopyText(quote)
+      setShareOpen(false)
     }
   }
 
@@ -273,56 +348,108 @@ export function QuotesPage() {
 
       {/* ── Preview / PDF Modal ─────────────────────────────────────────── */}
       {modal === 'preview' && selQuote && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-gray-800/80" onClick={(e) => { if (e.target === e.currentTarget) setModal(null) }}>
+        <div
+          className="fixed inset-0 z-50 flex flex-col bg-gray-800/80"
+          onClick={(e) => { if (e.target === e.currentTarget) { setModal(null); setShareOpen(false) } }}
+        >
           {/* Toolbar */}
-          <div className="flex items-center justify-between px-4 py-3 bg-gray-900 text-white flex-shrink-0 gap-3">
+          <div className="flex items-center justify-between px-4 py-3 bg-gray-900 text-white flex-shrink-0 gap-3 flex-wrap">
+            {/* Left: folio + status */}
             <div className="flex items-center gap-3 min-w-0">
               <FileText size={18} className="flex-shrink-0 text-blue-400" />
-              <span className="font-semibold truncate">{selQuote.folio} — {clients.find(c => c.clientId === selQuote.clienteId)?.razonSocial}</span>
+              <span className="font-semibold truncate text-sm">
+                {selQuote.folio} — {clients.find(c => c.clientId === selQuote.clienteId)?.razonSocial}
+              </span>
               <StatusBadge status={selQuote.estatus} />
             </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
+
+            {/* Right: actions */}
+            <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
               {/* Change status */}
               <select
-                className="text-xs bg-gray-700 text-white border border-gray-600 rounded-lg px-2 py-1"
+                className="text-xs bg-gray-700 text-white border border-gray-600 rounded-lg px-2 py-1.5"
                 value={selQuote.estatus}
-                onChange={(e) => { updateQuote(selQuote.cotizacionId, { estatus: e.target.value as CotizacionEstatus }); setSelQuote({ ...selQuote, estatus: e.target.value as CotizacionEstatus }) }}
+                onChange={(e) => {
+                  updateQuote(selQuote.cotizacionId, { estatus: e.target.value as CotizacionEstatus })
+                  setSelQuote({ ...selQuote, estatus: e.target.value as CotizacionEstatus })
+                }}
               >
                 {ESTADOS.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
               </select>
+
               {/* Convert to order */}
               {(selQuote.estatus === 'borrador' || selQuote.estatus === 'enviada') && (
                 <button className="btn btn-success btn-sm" onClick={() => convertirAPedido(selQuote)}>
                   <ArrowRight size={13} /> Crear Pedido
                 </button>
               )}
-              {/* Share */}
-              <button className="btn btn-secondary btn-sm" onClick={() => handleShare(selQuote)}>
-                <Share2 size={13} /> Compartir
+
+              {/* ── Compartir dropdown ─────────────────────────── */}
+              <div className="relative" ref={shareRef}>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setShareOpen(o => !o)}
+                >
+                  <Share2 size={13} /> Compartir
+                </button>
+
+                {shareOpen && (
+                  <div
+                    className="absolute right-0 top-full mt-1 w-52 bg-white text-gray-900 rounded-xl shadow-2xl border border-gray-200 z-10 overflow-hidden"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="px-3 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100">
+                      Compartir cotización
+                    </div>
+
+                    {/* Copy as text */}
+                    <button
+                      className="flex items-center gap-3 w-full px-4 py-3 text-sm hover:bg-gray-50 text-left transition-colors"
+                      onClick={() => { handleCopyText(selQuote); setShareOpen(false) }}
+                    >
+                      {copied ? <Check size={15} className="text-green-600" /> : <Copy size={15} className="text-gray-500" />}
+                      <span>{copied ? 'Copiado' : 'Copiar como texto'}</span>
+                    </button>
+
+                    {/* Native share / WhatsApp */}
+                    <button
+                      className="flex items-center gap-3 w-full px-4 py-3 text-sm hover:bg-gray-50 text-left transition-colors border-t border-gray-100"
+                      onClick={() => handleNativeShare(selQuote)}
+                    >
+                      <Share2 size={15} className="text-blue-500" />
+                      <span>
+                        {'share' in navigator
+                          ? 'Compartir (WhatsApp, Email…)'
+                          : 'Copiar al portapapeles'}
+                      </span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* ── Descargar / Imprimir PDF ───────────────────── */}
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={() => { handlePrint(selQuote); setShareOpen(false) }}
+              >
+                <Download size={13} /> Descargar PDF
               </button>
-              {/* Print / Export PDF */}
-              <button className="btn btn-primary btn-sm" onClick={handlePrint}>
-                <Printer size={13} /> Exportar PDF
-              </button>
-              <button className="p-2 rounded hover:bg-gray-700 text-gray-400 hover:text-white" onClick={() => setModal(null)}>
+
+              <button
+                className="p-2 rounded hover:bg-gray-700 text-gray-400 hover:text-white"
+                onClick={() => { setModal(null); setShareOpen(false) }}
+              >
                 <X size={18} />
               </button>
             </div>
           </div>
 
           {/* Scrollable document area */}
-          <div className="flex-1 overflow-y-auto p-4 md:p-8">
+          <div
+            className="flex-1 overflow-y-auto p-4 md:p-8"
+            onClick={() => setShareOpen(false)}
+          >
             <div className="shadow-2xl rounded-xl overflow-hidden">
-              {/* Hidden print frame — only this div is shown when printing */}
-              <div id="quote-print-frame" style={{ display: 'none' }}>
-                <QuotePDF
-                  ref={printFrameRef}
-                  quote={selQuote}
-                  client={clients.find(c => c.clientId === selQuote.clienteId)}
-                  products={products}
-                />
-              </div>
-              {/* Visible preview */}
               <QuotePDF
                 quote={selQuote}
                 client={clients.find(c => c.clientId === selQuote.clienteId)}
