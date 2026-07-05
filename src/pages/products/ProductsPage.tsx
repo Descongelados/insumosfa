@@ -1,12 +1,17 @@
 import { useState } from 'react'
 import { useProductsStore } from '../../store/productsStore'
+import { useAuthStore } from '../../store/authStore'
+import { hasRole } from '../../store/usersStore'
 import { DataTable } from '../../components/ui/DataTable'
 import { SearchBar } from '../../components/ui/SearchBar'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { Modal } from '../../components/ui/Modal'
 import { Currency } from '../../components/ui/Currency'
 import type { Product } from '../../types'
-import { Plus, Edit2, Package, ToggleLeft, ToggleRight } from 'lucide-react'
+import { Plus, Edit2, Trash2, Package, ToggleLeft, ToggleRight, AlertCircle } from 'lucide-react'
+
+// Roles que pueden eliminar productos
+const DELETE_ROLES = ['director', 'administracion', 'compras'] as const
 
 const CATEGORIAS = ['PVC', 'Tornillería', 'Eléctrico', 'Válvulas', 'Perfiles', 'Cementantes', 'Hidráulica', 'Herramientas', 'Otro']
 const UNIDADES = ['PZA', 'MT', 'KG', 'LT', 'SAC', 'CJA', 'ROL', 'TON']
@@ -17,12 +22,17 @@ const BLANK: Omit<Product, 'productId'> = {
 }
 
 export function ProductsPage() {
-  const { products, addProduct, updateProduct, toggleProduct } = useProductsStore()
+  const { products, addProduct, updateProduct, deleteProduct, toggleProduct } = useProductsStore()
+  const { user: me } = useAuthStore()
+
+  const canDelete = me ? hasRole(me, ...DELETE_ROLES) : false
+
   const [q, setQ] = useState('')
   const [cat, setCat] = useState('Todos')
-  const [modal, setModal] = useState<'new' | 'edit' | null>(null)
+  const [modal, setModal] = useState<'new' | 'edit' | 'confirm_delete' | null>(null)
   const [form, setForm] = useState(BLANK)
   const [editId, setEditId] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Product | null>(null)
 
   const cats = ['Todos', ...Array.from(new Set(products.map((p) => p.categoria)))]
 
@@ -37,10 +47,18 @@ export function ProductsPage() {
     const { productId, ...rest } = p
     setForm(rest); setEditId(p.productId); setModal('edit')
   }
+  function openDelete(p: Product) { setDeleteTarget(p); setModal('confirm_delete') }
+
   function handleSave() {
     if (editId) updateProduct(editId, form)
     else addProduct(form)
     setModal(null)
+  }
+
+  function handleDelete() {
+    if (deleteTarget) deleteProduct(deleteTarget.productId)
+    setModal(null)
+    setDeleteTarget(null)
   }
 
   const N = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
@@ -84,10 +102,15 @@ export function ProductsPage() {
             {
               key: 'acciones', header: '', render: (p) => (
                 <div className="flex gap-1">
-                  <button className="btn btn-secondary btn-sm" onClick={() => openEdit(p)}><Edit2 size={13} /></button>
+                  <button className="btn btn-secondary btn-sm" onClick={() => openEdit(p)} title="Editar"><Edit2 size={13} /></button>
                   <button className="btn btn-secondary btn-sm" onClick={() => toggleProduct(p.productId)} title={p.activo ? 'Desactivar' : 'Activar'}>
                     {p.activo ? <ToggleRight size={16} className="text-green-600" /> : <ToggleLeft size={16} className="text-gray-400" />}
                   </button>
+                  {canDelete && (
+                    <button className="btn btn-danger btn-sm" onClick={() => openDelete(p)} title="Eliminar producto">
+                      <Trash2 size={13} />
+                    </button>
+                  )}
                 </div>
               )
             },
@@ -95,7 +118,7 @@ export function ProductsPage() {
         />
       </div>
 
-      {modal && (
+      {(modal === 'new' || modal === 'edit') && (
         <Modal
           title={modal === 'new' ? 'Nuevo Producto' : 'Editar Producto'}
           onClose={() => setModal(null)}
@@ -138,6 +161,36 @@ export function ProductsPage() {
             <div className="form-group">
               <label className="label">Precio de Venta (MXN)</label>
               <input type="number" className="input" value={form.precioVenta} onChange={N('precioVenta')} min={0} step="0.01" />
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Modal: Confirmar eliminación ──────────────────────────────── */}
+      {modal === 'confirm_delete' && deleteTarget && (
+        <Modal
+          title="Eliminar producto"
+          onClose={() => setModal(null)}
+          footer={
+            <>
+              <button className="btn-secondary" onClick={() => setModal(null)}>Cancelar</button>
+              <button className="btn-danger" onClick={handleDelete}>
+                <Trash2 size={14} /> Eliminar definitivamente
+              </button>
+            </>
+          }
+        >
+          <div className="space-y-3 text-sm text-gray-700">
+            <p>¿Estás seguro de que deseas eliminar el producto:</p>
+            <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-1">
+              <div className="font-mono font-semibold text-blue-700">{deleteTarget.sku}</div>
+              <div className="font-medium text-gray-900">{deleteTarget.descripcion}</div>
+              <div className="text-gray-500">{deleteTarget.categoria} · {deleteTarget.marca}</div>
+              <div className="mt-1"><StatusBadge status={deleteTarget.activo ? 'activo' : 'inactivo'} /></div>
+            </div>
+            <div className="flex items-start gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800">
+              <AlertCircle size={15} className="flex-shrink-0 mt-0.5" />
+              <span>Se eliminarán también los movimientos de inventario asociados a este SKU. Esta acción no se puede deshacer.</span>
             </div>
           </div>
         </Modal>
