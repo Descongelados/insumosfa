@@ -8,6 +8,8 @@ interface LogisticsState {
   transportistas: Transportista[]
   embarques: Embarque[]
   addTransportista: (t: Omit<Transportista, 'transportistaId'>) => void
+  updateTransportista: (id: string, data: Partial<Transportista>) => void
+  deleteTransportista: (id: string) => void
   addEmbarque: (e: Omit<Embarque, 'embarqueId' | 'folio'>) => void
   updateEmbarque: (id: string, data: Partial<Embarque>) => void
 }
@@ -15,8 +17,15 @@ interface LogisticsState {
 export const useLogisticsStore = create<LogisticsState>((set) => ({
   transportistas: SEED_TRANSPORTISTAS,
   embarques: SEED_EMBARQUES,
+
   addTransportista(data) {
     set((s) => ({ transportistas: [...s.transportistas, { ...data, transportistaId: `t${Date.now()}` }] }))
+  },
+  updateTransportista(id, data) {
+    set((s) => ({ transportistas: s.transportistas.map((t) => t.transportistaId === id ? { ...t, ...data } : t) }))
+  },
+  deleteTransportista(id) {
+    set((s) => ({ transportistas: s.transportistas.filter((t) => t.transportistaId !== id) }))
   },
   addEmbarque(data) {
     const emb: Embarque = {
