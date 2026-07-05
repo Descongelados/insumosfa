@@ -34,6 +34,8 @@ export function LogisticsPage() {
   })
 
   function handleSave() {
+    if (!form.transportistaId) { alert('Selecciona un transportista.'); return }
+    if (!form.destino.trim())  { alert('El destino es obligatorio.'); return }
     addEmbarque({ ...form, estatus: 'solicitado' })
     setModal(null)
     setForm(BLANK)
@@ -53,7 +55,7 @@ export function LogisticsPage() {
           <h1 className="page-title flex items-center gap-2"><Truck size={24} /> Logística</h1>
           <p className="page-subtitle">Gestión de embarques y transportistas</p>
         </div>
-        <button className="btn-primary" onClick={() => { setForm({ ...BLANK, transportistaId: transportistas[0]?.transportistaId ?? '' }); setModal('new') }}>
+        <button className="btn-primary" onClick={() => { setForm(BLANK); setModal('new') }}>
           <Plus size={16} /> Nuevo Embarque
         </button>
       </div>
@@ -118,7 +120,12 @@ export function LogisticsPage() {
             <div className="form-group">
               <label className="label">Transportista *</label>
               <select className="select" value={form.transportistaId} onChange={F('transportistaId')}>
-                {transportistas.map((t) => <option key={t.transportistaId} value={t.transportistaId}>{t.nombre}</option>)}
+                <option value="">— Seleccionar transportista —</option>
+                {transportistas.filter(t => t.activo).map((t) => (
+                  <option key={t.transportistaId} value={t.transportistaId}>
+                    {t.nombre} — ${t.tarifaBase.toLocaleString('es-MX')}
+                  </option>
+                ))}
               </select>
             </div>
             <div className="form-group sm:col-span-2">
