@@ -5,7 +5,7 @@ export interface User {
   userId: string
   name: string
   email: string
-  role: Role
+  roles: Role[]          // uno o más roles por usuario
   active: boolean
   createdAt: string
 }

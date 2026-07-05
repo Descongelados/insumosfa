@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { User } from '../types'
+import type { User, Role } from '../types'
 import { SEED_USERS } from '../data/seed'
 
 // Contraseñas en memoria (en producción estarían hasheadas en backend)
@@ -21,12 +21,19 @@ interface UsersState {
   changePassword: (userId: string, newPassword: string) => void
 }
 
+/** Devuelve true si el usuario tiene al menos uno de los roles indicados */
+export function hasRole(user: { roles: Role[] }, ...check: Role[]): boolean {
+  return check.some(r => user.roles.includes(r))
+}
+
 export const useUsersStore = create<UsersState>((set, get) => ({
   users: SEED_USERS,
 
   addUser(data, password) {
+    // Garantizar al menos un rol
+    const safeData = { ...data, roles: data.roles.length ? data.roles : ['ventas' as Role] }
     const user: User = {
-      ...data,
+      ...safeData,
       userId: `u${Date.now()}`,
       createdAt: new Date().toISOString().split('T')[0],
     }

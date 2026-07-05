@@ -7,11 +7,11 @@ import type {
 
 // ─── Users ─────────────────────────────────────────────────────────────────
 export const SEED_USERS: User[] = [
-  { userId: 'u1', name: 'Admin Sistema', email: 'admin@insumosfa.com', role: 'director', active: true, createdAt: '2024-01-01' },
-  { userId: 'u2', name: 'Carlos Ventas', email: 'carlos@insumosfa.com', role: 'ventas', active: true, createdAt: '2024-01-05' },
-  { userId: 'u3', name: 'María Compras', email: 'maria@insumosfa.com', role: 'compras', active: true, createdAt: '2024-01-05' },
-  { userId: 'u4', name: 'Pedro Almacén', email: 'pedro@insumosfa.com', role: 'almacen', active: true, createdAt: '2024-01-10' },
-  { userId: 'u5', name: 'Laura Admin', email: 'laura@insumosfa.com', role: 'administracion', active: true, createdAt: '2024-01-10' },
+  { userId: 'u1', name: 'Admin Sistema',  email: 'admin@insumosfa.com',  roles: ['director'],                     active: true, createdAt: '2024-01-01' },
+  { userId: 'u2', name: 'Carlos Ventas',  email: 'carlos@insumosfa.com', roles: ['ventas'],                       active: true, createdAt: '2024-01-05' },
+  { userId: 'u3', name: 'María Compras',  email: 'maria@insumosfa.com',  roles: ['compras', 'operaciones'],       active: true, createdAt: '2024-01-05' },
+  { userId: 'u4', name: 'Pedro Almacén',  email: 'pedro@insumosfa.com',  roles: ['almacen', 'operaciones'],       active: true, createdAt: '2024-01-10' },
+  { userId: 'u5', name: 'Laura Admin',    email: 'laura@insumosfa.com',  roles: ['administracion', 'ventas'],     active: true, createdAt: '2024-01-10' },
 ]
 
 // ─── Clients ───────────────────────────────────────────────────────────────

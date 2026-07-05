@@ -17,7 +17,44 @@ const ROLE_LABELS: Record<Role, string> = {
 }
 
 const BLANK_USER: Omit<User, 'userId' | 'createdAt'> = {
-  name: '', email: '', role: 'ventas', active: true,
+  name: '', email: '', roles: ['ventas'], active: true,
+}
+
+// Selector de roles múltiple reutilizable
+function RolesSelector({
+  selected, onChange, disabled = false,
+}: { selected: Role[]; onChange: (r: Role[]) => void; disabled?: boolean }) {
+  function toggle(r: Role) {
+    if (selected.includes(r)) {
+      // no permitir dejar vacío
+      if (selected.length === 1) return
+      onChange(selected.filter(x => x !== r))
+    } else {
+      onChange([...selected, r])
+    }
+  }
+  return (
+    <div className="flex flex-wrap gap-2">
+      {ROLES.map(r => {
+        const active = selected.includes(r)
+        return (
+          <button
+            key={r}
+            type="button"
+            disabled={disabled}
+            onClick={() => toggle(r)}
+            className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+              active
+                ? 'bg-purple-600 text-white border-purple-600'
+                : 'bg-white text-gray-600 border-gray-300 hover:border-purple-400'
+            } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+          >
+            {ROLE_LABELS[r]}
+          </button>
+        )
+      })}
+    </div>
+  )
 }
 
 // Solo el rol 'director' con email de admin puede gestionar todos los usuarios
@@ -158,8 +195,14 @@ export function UsersPage() {
             { key: 'name', header: 'Nombre' },
             { key: 'email', header: 'Correo' },
             {
-              key: 'role', header: 'Rol',
-              render: (u) => <span className="badge badge-purple">{ROLE_LABELS[u.role]}</span>,
+              key: 'roles', header: 'Roles',
+              render: (u) => (
+                <div className="flex flex-wrap gap-1">
+                  {u.roles.map(r => (
+                    <span key={r} className="badge badge-purple">{ROLE_LABELS[r]}</span>
+                  ))}
+                </div>
+              ),
             },
             { key: 'createdAt', header: 'Fecha Alta' },
             {
@@ -228,11 +271,11 @@ export function UsersPage() {
                 onChange={e => setNewForm(f => ({ ...f, email: e.target.value }))} />
             </div>
             <div className="form-group">
-              <label className="label">Rol *</label>
-              <select className="select" value={newForm.role}
-                onChange={e => setNewForm(f => ({ ...f, role: e.target.value as Role }))}>
-                {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
-              </select>
+              <label className="label">Roles * <span className="text-gray-400 font-normal">(selecciona uno o más)</span></label>
+              <RolesSelector
+                selected={newForm.roles}
+                onChange={roles => setNewForm(f => ({ ...f, roles }))}
+              />
             </div>
             <div className="form-grid">
               <div className="form-group">
@@ -271,13 +314,14 @@ export function UsersPage() {
               <label className="label">Correo electrónico *</label>
               <input type="email" className="input" value={form.email} onChange={F('email')} />
             </div>
-            {/* Solo admin puede cambiar rol */}
+            {/* Solo admin puede cambiar roles */}
             {isAdmin && (
               <div className="form-group">
-                <label className="label">Rol</label>
-                <select className="select" value={form.role} onChange={F('role')}>
-                  {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
-                </select>
+                <label className="label">Roles <span className="text-gray-400 font-normal">(selecciona uno o más)</span></label>
+                <RolesSelector
+                  selected={form.roles}
+                  onChange={roles => setForm(f => ({ ...f, roles }))}
+                />
               </div>
             )}
           </div>
@@ -338,8 +382,10 @@ export function UsersPage() {
             <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
               <div className="font-semibold">{targetUser.name}</div>
               <div className="text-gray-500">{targetUser.email}</div>
-              <div className="mt-1">
-                <span className="badge badge-purple">{ROLE_LABELS[targetUser.role]}</span>
+              <div className="mt-1 flex flex-wrap gap-1">
+                {targetUser.roles.map(r => (
+                  <span key={r} className="badge badge-purple">{ROLE_LABELS[r]}</span>
+                ))}
               </div>
             </div>
             <p className="text-red-600 font-medium">Esta acción no se puede deshacer.</p>

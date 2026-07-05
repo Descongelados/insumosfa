@@ -96,7 +96,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
             {open && (
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium text-white truncate">{user?.name}</div>
-                <div className="text-xs text-gray-400">{ROLE_LABELS[user?.role ?? ''] ?? user?.role}</div>
+                <div className="text-xs text-gray-400">
+                  {user?.roles?.map(r => ROLE_LABELS[r] ?? r).join(' · ')}
+                </div>
               </div>
             )}
             {open && (
