@@ -1,27 +1,9 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
-import {
-  LayoutDashboard, Users, UserSearch, FileText, ShoppingCart,
-  Package, Warehouse, Truck, TrendingUp, DollarSign,
-  Building2, ClipboardList, LogOut, Menu, X, ChevronDown
-} from 'lucide-react'
+import { NAV_ITEMS } from '../rbac'
+import { LogOut, Menu, X } from 'lucide-react'
 import { useState } from 'react'
 import clsx from 'clsx'
-
-const NAV = [
-  { label: 'Dashboard', icon: LayoutDashboard, to: '/' },
-  { label: 'Clientes', icon: Users, to: '/clientes' },
-  { label: 'Prospectos', icon: UserSearch, to: '/prospectos' },
-  { label: 'Cotizaciones', icon: FileText, to: '/cotizaciones' },
-  { label: 'Pedidos Venta', icon: ShoppingCart, to: '/pedidos' },
-  { label: 'Productos', icon: Package, to: '/productos' },
-  { label: 'Inventario', icon: Warehouse, to: '/inventario' },
-  { label: 'Proveedores', icon: Building2, to: '/proveedores' },
-  { label: 'Compras', icon: ClipboardList, to: '/compras' },
-  { label: 'Logística', icon: Truck, to: '/logistica' },
-  { label: 'Finanzas', icon: DollarSign, to: '/finanzas' },
-  { label: 'Usuarios', icon: Users, to: '/usuarios' },
-]
 
 const ROLE_LABELS: Record<string, string> = {
   director: 'Director General',
@@ -36,6 +18,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
   const [open, setOpen] = useState(true)
+
+  const userRoles = user?.roles ?? []
+
+  // Solo mostrar en el menú las rutas a las que el usuario tiene acceso
+  const visibleNav = NAV_ITEMS.filter(item =>
+    item.roles.some(r => userRoles.includes(r))
+  )
 
   function handleLogout() {
     logout()
@@ -65,9 +54,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </button>
         </div>
 
-        {/* Nav items */}
+        {/* Nav items — filtrado por rol */}
         <nav className="flex-1 overflow-y-auto py-3 space-y-0.5 px-2">
-          {NAV.map(({ label, icon: Icon, to }) => (
+          {visibleNav.map(({ label, icon: Icon, to }) => (
             <NavLink
               key={to}
               to={to}
@@ -96,8 +85,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
             {open && (
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium text-white truncate">{user?.name}</div>
-                <div className="text-xs text-gray-400">
-                  {user?.roles?.map(r => ROLE_LABELS[r] ?? r).join(' · ')}
+                <div className="text-xs text-gray-400 truncate">
+                  {userRoles.map(r => ROLE_LABELS[r] ?? r).join(' · ')}
                 </div>
               </div>
             )}
