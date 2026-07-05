@@ -27,6 +27,8 @@ function RequireAuth({ path, children }: { path: string; children: React.ReactNo
 /** Pantalla de acceso denegado */
 function AccesoDenegado() {
   const { user } = useAuthStore()
+  // Si no hay sesión activa, redirigir al login directamente
+  if (!user) return <Navigate to="/login" replace />
   return (
     <Layout>
       <div className="flex flex-col items-center justify-center h-full gap-4 text-center">
@@ -36,9 +38,7 @@ function AccesoDenegado() {
         <h1 className="text-2xl font-bold text-gray-900">Acceso denegado</h1>
         <p className="text-gray-500 max-w-sm">
           Tu perfil no tiene permisos para ver este módulo.
-          {user && (
-            <> Tus roles actuales: <strong>{user.roles.join(', ')}</strong>.</>
-          )}
+          {' '}Tus roles: <strong>{user.roles.join(', ')}</strong>.
         </p>
         <a href="/" className="btn-primary">← Ir al Dashboard</a>
       </div>

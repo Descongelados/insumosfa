@@ -22,9 +22,10 @@ export const ROUTE_ROLES: Record<string, Role[]> = {
 }
 
 /** Devuelve true si alguno de los roles del usuario da acceso a la ruta */
-export function canAccess(userRoles: Role[], path: string): boolean {
+export function canAccess(userRoles: Role[] | undefined | null, path: string): boolean {
+  if (!userRoles?.length) return false // sin roles → sin acceso
   const allowed = ROUTE_ROLES[path]
-  if (!allowed) return true // ruta sin restricción declarada: acceso libre
+  if (!allowed) return true            // ruta sin restricción declarada: acceso libre
   return userRoles.some(r => allowed.includes(r))
 }
 

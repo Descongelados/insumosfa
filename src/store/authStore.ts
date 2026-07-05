@@ -16,7 +16,14 @@ export const useAuthStore = create<AuthState>((set) => ({
   user: (() => {
     try {
       const raw = localStorage.getItem('erp_user')
-      return raw ? (JSON.parse(raw) as AuthUser) : null
+      if (!raw) return null
+      const parsed = JSON.parse(raw) as AuthUser & { role?: string }
+      // Migración: formato antiguo tenía role (string), ahora es roles (array)
+      if (!parsed.roles) {
+        parsed.roles = parsed.role ? [parsed.role as import('../types').Role] : []
+        localStorage.setItem('erp_user', JSON.stringify(parsed))
+      }
+      return parsed as AuthUser
     } catch { return null }
   })(),
 
