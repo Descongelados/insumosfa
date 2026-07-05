@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { useClientsStore } from '../store/clientsStore'
 import { useProductsStore } from '../store/productsStore'
 import { useSalesOrdersStore } from '../store/salesOrdersStore'
@@ -15,16 +16,34 @@ import {
   DollarSign, Truck, BarChart2
 } from 'lucide-react'
 
-const MONTH_DATA = [
-  { mes: 'Feb', ventas: 142000, compras: 88000 },
-  { mes: 'Mar', ventas: 168000, compras: 95000 },
-  { mes: 'Abr', ventas: 155000, compras: 102000 },
-  { mes: 'May', ventas: 193000, compras: 115000 },
-  { mes: 'Jun', ventas: 210000, compras: 128000 },
-  { mes: 'Jul', ventas: 237000, compras: 141000 },
-]
-
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6']
+
+// Helper: get "YYYY-MM" string from a date string (ISO or YYYY-MM-DD)
+function monthKey(dateStr: string) {
+  return dateStr?.slice(0, 7) ?? ''
+}
+
+// Build last-6-months labels
+function lastSixMonths() {
+  const months: string[] = []
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date()
+    d.setDate(1)
+    d.setMonth(d.getMonth() - i)
+    months.push(d.toISOString().slice(0, 7))
+  }
+  return months
+}
+
+const MONTH_SHORT: Record<string, string> = {
+  '01': 'Ene', '02': 'Feb', '03': 'Mar', '04': 'Abr',
+  '05': 'May', '06': 'Jun', '07': 'Jul', '08': 'Ago',
+  '09': 'Sep', '10': 'Oct', '11': 'Nov', '12': 'Dic',
+}
+function fmt(ym: string) {
+  const [, mm] = ym.split('-')
+  return MONTH_SHORT[mm] ?? ym
+}
 
 export function DashboardPage() {
   const { clients } = useClientsStore()
@@ -43,6 +62,29 @@ export function DashboardPage() {
     const prod = products.find(p => p.productId === inv.productId)
     return a + (inv.cantidadDisponible * (prod?.costoPromedio ?? 0))
   }, 0)
+
+  // Real monthly chart data from orders + OC
+  const monthlyData = useMemo(() => {
+    const keys = lastSixMonths()
+    const ventaMap: Record<string, number> = {}
+    const compraMap: Record<string, number> = {}
+    keys.forEach(k => { ventaMap[k] = 0; compraMap[k] = 0 })
+
+    orders.forEach(o => {
+      const k = monthKey(o.fechaPedido)
+      if (k in ventaMap) ventaMap[k] += o.total
+    })
+    ordenesCompra.forEach(oc => {
+      const k = monthKey(oc.fecha)
+      if (k in compraMap) compraMap[k] += oc.monto
+    })
+
+    return keys.map(k => ({
+      mes: fmt(k),
+      ventas: Math.round(ventaMap[k]),
+      compras: Math.round(compraMap[k]),
+    }))
+  }, [orders, ordenesCompra])
 
   const prospectosPorEstatus = ['nuevo','contactado','calificado','cotizado','ganado','perdido'].map(s => ({
     name: s.charAt(0).toUpperCase() + s.slice(1),
@@ -83,15 +125,16 @@ export function DashboardPage() {
         <StatCard icon={<Truck size={22} />} color="bg-orange-100 text-orange-600"
           label="OC Activas" value={String(ordenesCompra.filter(o=>['emitida','confirmada'].includes(o.estatus)).length)} sub={`${ordenesCompra.length} total`} />
         <StatCard icon={<BarChart2 size={22} />} color="bg-indigo-100 text-indigo-600"
-          label="Pedidos en Proceso" value={String(orders.filter(o=>!['cerrado','entregado'].includes(o.estatus)).length)} sub={`${orders.filter(o=>o.estatus==='entregado').length} entregados`} />
+          label="Pedidos en Proceso" value={String(orders.filter(o=>!['cerrado','entregado','facturado'].includes(o.estatus)).length)} sub={`${orders.filter(o=>o.estatus==='entregado').length} entregados`} />
       </div>
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="card">
-          <h3 className="font-semibold text-gray-900 mb-4">Ventas vs Compras (Mensual)</h3>
+          <h3 className="font-semibold text-gray-900 mb-1">Ventas vs Compras (últimos 6 meses)</h3>
+          <p className="text-xs text-gray-400 mb-4">Datos reales de pedidos y órdenes de compra registradas</p>
           <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={MONTH_DATA} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+            <BarChart data={monthlyData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
               <XAxis dataKey="mes" tick={{ fontSize: 12 }} />
               <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
               <Tooltip formatter={(v: number) => v.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })} />
@@ -104,27 +147,35 @@ export function DashboardPage() {
 
         <div className="card">
           <h3 className="font-semibold text-gray-900 mb-4">Pipeline de Prospectos</h3>
-          <ResponsiveContainer width="100%" height={220}>
-            <PieChart>
-              <Pie data={prospectosPorEstatus} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
-                {prospectosPorEstatus.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-              </Pie>
-              <Legend />
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
+          {prospectosPorEstatus.length === 0 ? (
+            <div className="flex items-center justify-center h-[220px] text-gray-400 text-sm">Sin prospectos registrados.</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={220}>
+              <PieChart>
+                <Pie data={prospectosPorEstatus} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
+                  {prospectosPorEstatus.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                </Pie>
+                <Legend />
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
         </div>
 
         <div className="card">
           <h3 className="font-semibold text-gray-900 mb-4">Productos por Categoría</h3>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={catData} layout="vertical" margin={{ left: 40 }}>
-              <XAxis type="number" tick={{ fontSize: 11 }} />
-              <YAxis type="category" dataKey="cat" tick={{ fontSize: 12 }} width={90} />
-              <Tooltip />
-              <Bar dataKey="qty" name="SKUs" fill="#8b5cf6" radius={[0,4,4,0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          {catData.length === 0 ? (
+            <div className="flex items-center justify-center h-[200px] text-gray-400 text-sm">Sin productos registrados.</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={catData} layout="vertical" margin={{ left: 40 }}>
+                <XAxis type="number" tick={{ fontSize: 11 }} />
+                <YAxis type="category" dataKey="cat" tick={{ fontSize: 12 }} width={90} />
+                <Tooltip />
+                <Bar dataKey="qty" name="SKUs" fill="#8b5cf6" radius={[0,4,4,0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </div>
 
         <div className="card">

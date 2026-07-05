@@ -17,9 +17,11 @@ interface FinanceState {
   addFacturaVenta: (f: Omit<FacturaVenta, 'facturaId' | 'folio'>) => void
   updateFacturaVenta: (id: string, data: Partial<FacturaVenta>) => void
   addPagoCliente: (p: Omit<PagoCliente, 'pagoId'>) => void
-  addFacturaProveedor: (f: Omit<FacturaProveedor, 'facturaProvId' | 'folio'>) => void
+  addFacturaProveedor: (f: Omit<FacturaProveedor, 'facturaProvId' | 'folio'>) => FacturaProveedor
   addPagoProveedor: (p: Omit<PagoProveedor, 'pagoId'>) => void
   updateBanco: (id: string, data: Partial<Banco>) => void
+  addBanco: (b: Omit<Banco, 'bancoId'>) => void
+  deleteBanco: (id: string) => void
 }
 
 export const useFinanceStore = create<FinanceState>()(
@@ -59,6 +61,7 @@ export const useFinanceStore = create<FinanceState>()(
         const n = get().fpCounter
         const f: FacturaProveedor = { ...data, facturaProvId: `fp${Date.now()}`, folio: `FPROV-${String(n).padStart(4, '0')}` }
         set((s) => ({ facturasProveedor: [f, ...s.facturasProveedor], fpCounter: s.fpCounter + 1 }))
+        return f
       },
 
       addPagoProveedor(data) {
@@ -75,6 +78,15 @@ export const useFinanceStore = create<FinanceState>()(
 
       updateBanco(id, data) {
         set((s) => ({ bancos: s.bancos.map((b) => (b.bancoId === id ? { ...b, ...data } : b)) }))
+      },
+
+      addBanco(data) {
+        const b: Banco = { ...data, bancoId: `bnk${Date.now()}` }
+        set((s) => ({ bancos: [...s.bancos, b] }))
+      },
+
+      deleteBanco(id) {
+        set((s) => ({ bancos: s.bancos.filter((b) => b.bancoId !== id) }))
       },
     }),
     { name: 'erp_finance' }
