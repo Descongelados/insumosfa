@@ -1,41 +1,49 @@
 import { create } from 'zustand'
-import type { Transportista, Embarque } from '../types'
-import { SEED_TRANSPORTISTAS, SEED_EMBARQUES } from '../data/seed'
-
-let embCounter = SEED_EMBARQUES.length + 1
+import { persist } from 'zustand/middleware'
+import type { Embarque, Transportista, EmbarqueEstatus } from '../types'
+import { SEED_EMBARQUES, SEED_TRANSPORTISTAS } from '../data/seed'
 
 interface LogisticsState {
-  transportistas: Transportista[]
   embarques: Embarque[]
+  transportistas: Transportista[]
+  embCounter: number
+  addEmbarque: (e: Omit<Embarque, 'embarqueId' | 'folio'>) => void
+  updateEmbarque: (id: string, data: Partial<Embarque>) => void
   addTransportista: (t: Omit<Transportista, 'transportistaId'>) => void
   updateTransportista: (id: string, data: Partial<Transportista>) => void
   deleteTransportista: (id: string) => void
-  addEmbarque: (e: Omit<Embarque, 'embarqueId' | 'folio'>) => void
-  updateEmbarque: (id: string, data: Partial<Embarque>) => void
 }
 
-export const useLogisticsStore = create<LogisticsState>((set) => ({
-  transportistas: SEED_TRANSPORTISTAS,
-  embarques: SEED_EMBARQUES,
-
-  addTransportista(data) {
-    set((s) => ({ transportistas: [...s.transportistas, { ...data, transportistaId: `t${Date.now()}` }] }))
-  },
-  updateTransportista(id, data) {
-    set((s) => ({ transportistas: s.transportistas.map((t) => t.transportistaId === id ? { ...t, ...data } : t) }))
-  },
-  deleteTransportista(id) {
-    set((s) => ({ transportistas: s.transportistas.filter((t) => t.transportistaId !== id) }))
-  },
-  addEmbarque(data) {
-    const emb: Embarque = {
-      ...data,
-      embarqueId: `em${Date.now()}`,
-      folio: `EMB-${String(embCounter++).padStart(4, '0')}`,
-    }
-    set((s) => ({ embarques: [emb, ...s.embarques] }))
-  },
-  updateEmbarque(id, data) {
-    set((s) => ({ embarques: s.embarques.map((e) => (e.embarqueId === id ? { ...e, ...data } : e)) }))
-  },
-}))
+export const useLogisticsStore = create<LogisticsState>()(
+  persist(
+    (set, get) => ({
+      embarques: SEED_EMBARQUES,
+      transportistas: SEED_TRANSPORTISTAS,
+      embCounter: SEED_EMBARQUES.length + 1,
+      addEmbarque(data) {
+        const n = get().embCounter
+        const embarque: Embarque = {
+          ...data,
+          embarqueId: `em${Date.now()}`,
+          folio: `EMB-${String(n).padStart(4, '0')}`,
+          notas: data.notas ?? '',
+        }
+        set((s) => ({ embarques: [embarque, ...s.embarques], embCounter: s.embCounter + 1 }))
+      },
+      updateEmbarque(id, data) {
+        set((s) => ({ embarques: s.embarques.map((e) => (e.embarqueId === id ? { ...e, ...data } : e)) }))
+      },
+      addTransportista(data) {
+        const t: Transportista = { ...data, transportistaId: `t${Date.now()}` }
+        set((s) => ({ transportistas: [...s.transportistas, t] }))
+      },
+      updateTransportista(id, data) {
+        set((s) => ({ transportistas: s.transportistas.map((t) => (t.transportistaId === id ? { ...t, ...data } : t)) }))
+      },
+      deleteTransportista(id) {
+        set((s) => ({ transportistas: s.transportistas.filter((t) => t.transportistaId !== id) }))
+      },
+    }),
+    { name: 'erp_logistics' }
+  )
+)
