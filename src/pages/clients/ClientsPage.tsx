@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import { useClientsStore } from '../../store/clientsStore'
+import { useAuthStore } from '../../store/authStore'
+import { hasRole } from '../../store/usersStore'
 import { DataTable } from '../../components/ui/DataTable'
 import { SearchBar } from '../../components/ui/SearchBar'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { Modal } from '../../components/ui/Modal'
 import { Currency } from '../../components/ui/Currency'
 import type { Client } from '../../types'
-import { Plus, Edit2, Users } from 'lucide-react'
+import { Plus, Edit2, Trash2, Users, AlertCircle } from 'lucide-react'
 
 const REGIMENES = [
   '601 - General de Ley Personas Morales',
@@ -23,12 +25,20 @@ const BLANK: Omit<Client, 'clientId' | 'fechaAlta'> = {
   direccionFiscal: '', correo: '', telefono: '', limiteCredito: 0, estatus: 'activo',
 }
 
+// Roles que pueden eliminar clientes
+const DELETE_ROLES = ['director', 'administracion'] as const
+
 export function ClientsPage() {
-  const { clients, addClient, updateClient } = useClientsStore()
+  const { clients, addClient, updateClient, deleteClient } = useClientsStore()
+  const { user: me } = useAuthStore()
+
+  const canDelete = me ? hasRole(me, ...DELETE_ROLES) : false
+
   const [q, setQ] = useState('')
-  const [modal, setModal] = useState<'new' | 'edit' | null>(null)
+  const [modal, setModal] = useState<'new' | 'edit' | 'confirm_delete' | null>(null)
   const [form, setForm] = useState(BLANK)
   const [editId, setEditId] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Client | null>(null)
 
   const filtered = clients.filter((c) =>
     [c.razonSocial, c.rfc, c.correo].join(' ').toLowerCase().includes(q.toLowerCase())
@@ -39,11 +49,18 @@ export function ClientsPage() {
     const { clientId, fechaAlta, ...rest } = c
     setForm(rest); setEditId(c.clientId); setModal('edit')
   }
+  function openDelete(c: Client) { setDeleteTarget(c); setModal('confirm_delete') }
 
   function handleSave() {
     if (editId) updateClient(editId, form)
     else addClient(form)
     setModal(null)
+  }
+
+  function handleDelete() {
+    if (deleteTarget) deleteClient(deleteTarget.clientId)
+    setModal(null)
+    setDeleteTarget(null)
   }
 
   const F = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -77,17 +94,26 @@ export function ClientsPage() {
             { key: 'estatus', header: 'Estatus', render: (c) => <StatusBadge status={c.estatus} /> },
             { key: 'fechaAlta', header: 'Alta' },
             {
-              key: 'acciones', header: '', render: (c) => (
-                <button className="btn btn-secondary btn-sm" onClick={() => openEdit(c)}>
-                  <Edit2 size={13} /> Editar
-                </button>
-              )
+              key: 'acciones', header: '',
+              render: (c) => (
+                <div className="flex gap-1">
+                  <button className="btn btn-secondary btn-sm" onClick={() => openEdit(c)}>
+                    <Edit2 size={13} /> Editar
+                  </button>
+                  {canDelete && (
+                    <button className="btn btn-danger btn-sm" onClick={() => openDelete(c)} title="Eliminar cliente">
+                      <Trash2 size={13} />
+                    </button>
+                  )}
+                </div>
+              ),
             },
           ]}
         />
       </div>
 
-      {modal && (
+      {/* ── Modal: Nuevo / Editar Cliente ─────────────────────────────── */}
+      {(modal === 'new' || modal === 'edit') && (
         <Modal
           title={modal === 'new' ? 'Nuevo Cliente' : 'Editar Cliente'}
           onClose={() => setModal(null)}
@@ -135,6 +161,36 @@ export function ClientsPage() {
                 <option value="activo">Activo</option>
                 <option value="inactivo">Inactivo</option>
               </select>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Modal: Confirmar eliminación ──────────────────────────────── */}
+      {modal === 'confirm_delete' && deleteTarget && (
+        <Modal
+          title="Eliminar cliente"
+          onClose={() => setModal(null)}
+          footer={
+            <>
+              <button className="btn-secondary" onClick={() => setModal(null)}>Cancelar</button>
+              <button className="btn-danger" onClick={handleDelete}>
+                <Trash2 size={14} /> Eliminar definitivamente
+              </button>
+            </>
+          }
+        >
+          <div className="space-y-3 text-sm text-gray-700">
+            <p>¿Estás seguro de que deseas eliminar al cliente:</p>
+            <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-1">
+              <div className="font-semibold text-gray-900">{deleteTarget.razonSocial}</div>
+              <div className="text-gray-500">RFC: {deleteTarget.rfc}</div>
+              <div className="text-gray-500">{deleteTarget.correo}</div>
+              <div className="mt-1"><StatusBadge status={deleteTarget.estatus} /></div>
+            </div>
+            <div className="flex items-start gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800">
+              <AlertCircle size={15} className="flex-shrink-0 mt-0.5" />
+              <span>Se eliminarán también sus contactos asociados. Esta acción no se puede deshacer.</span>
             </div>
           </div>
         </Modal>

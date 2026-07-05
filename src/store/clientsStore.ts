@@ -7,6 +7,7 @@ interface ClientsState {
   contactos: ContactoCliente[]
   addClient: (c: Omit<Client, 'clientId' | 'fechaAlta'>) => void
   updateClient: (id: string, data: Partial<Client>) => void
+  deleteClient: (id: string) => void
   addContacto: (c: Omit<ContactoCliente, 'contactoId'>) => void
   removeContacto: (id: string) => void
 }
@@ -20,6 +21,13 @@ export const useClientsStore = create<ClientsState>((set) => ({
   },
   updateClient(id, data) {
     set((s) => ({ clients: s.clients.map((c) => (c.clientId === id ? { ...c, ...data } : c)) }))
+  },
+  deleteClient(id) {
+    set((s) => ({
+      clients: s.clients.filter((c) => c.clientId !== id),
+      // Eliminar también los contactos asociados
+      contactos: s.contactos.filter((c) => c.clienteId !== id),
+    }))
   },
   addContacto(data) {
     const contacto: ContactoCliente = { ...data, contactoId: `cc${Date.now()}` }
