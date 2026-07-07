@@ -45,7 +45,9 @@ export const useUsersStore = create<UsersState>()((set, get) => ({
     set({ loading: true })
     try {
       const { data, error } = await supabase.rpc('erp_get_users')
-      if (!error && data) {
+      if (error) {
+        console.error('erp_get_users error:', error.message)
+      } else if (data) {
         set({ users: (data as DbRow[]).map(toUser) })
       }
     } finally {
