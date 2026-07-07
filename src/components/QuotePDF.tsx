@@ -165,14 +165,14 @@ export const QuotePDF = forwardRef<HTMLDivElement, Props>(({ quote, client, prod
         <div style={{ fontWeight: 700, fontSize: 12, color: '#374151', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
           Términos y Condiciones
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 24px', fontSize: 11, color: '#6b7280' }}>
-          <Cond label="Moneda" value="Pesos Mexicanos (MXN)" />
-          <Cond label="Forma de pago" value="Transferencia / Cheque" />
-          <Cond label="Condiciones" value={client?.limiteCredito && client.limiteCredito > 0 ? 'Crédito según convenio' : 'Contado'} />
-          <Cond label="Vigencia" value={quote.vigencia ? `Hasta ${formatDate(quote.vigencia)}` : '15 días naturales'} />
-          <Cond label="Entrega" value="Sujeta a disponibilidad de inventario" />
-          <Cond label="Precios" value="No incluyen flete, salvo acuerdo" />
-        </div>
+        <ul style={{ paddingLeft: 18, margin: 0, fontSize: 11, color: '#6b7280', lineHeight: 2.2 }}>
+          <li>Precios + IVA</li>
+          <li>Moneda: Peso Mexicano (MXN)</li>
+          <li>Precios sujetos a cambio sin previo aviso</li>
+          <li>Precios considerados para las cantidades mínimas señaladas</li>
+          <li>Tiempo de entrega: 12 a 15 días</li>
+          <li>Forma de pago: Por definir</li>
+        </ul>
       </div>
 
       {/* ── FIRMA ──────────────────────────────────────────────────────── */}
