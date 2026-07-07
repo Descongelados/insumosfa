@@ -15,7 +15,7 @@ import type { FacturaVenta, SalesOrder, Banco } from '../../types'
 import {
   DollarSign, CreditCard, Building, Eye,
   CheckCircle, Clock, FileText, Plus,
-  Edit2, Trash2,
+  Edit2, Trash2, History, PlusCircle,
 } from 'lucide-react'
 
 const MXN = (v: number) => v.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })
@@ -37,43 +37,35 @@ export function FinancePage() {
 
   const canManageBancos = me ? hasRole(me, 'director', 'administracion') : false
 
-  // Main tabs
   const [tab, setTab] = useState<'cxc' | 'cxp' | 'bancos'>('cxc')
-  // CxC sub-tabs
   const [cxcTab, setCxcTab] = useState<'cobrar' | 'pagadas'>('cobrar')
 
-  // Payment / invoice modals
   type ModalType =
-    | 'pago_cli' | 'pago_prov'
+    | 'pago_cli'
+    | 'pago_prov'
     | 'recibo'
-    | 'new_fp'          // nueva factura proveedor
+    | 'historial'
+    | 'new_fp'
     | 'new_banco' | 'edit_banco' | 'del_banco'
     | null
   const [modal, setModal] = useState<ModalType>(null)
 
-  // CxC
   const [selFv, setSelFv] = useState<string>('')
   const [selRecibo, setSelRecibo] = useState<FacturaVenta | null>(null)
+  const [esAbono, setEsAbono] = useState(false)
 
-  // CxP
   const [selFp, setSelFp] = useState<string>('')
-
-  // Shared payment form
   const [pagoForm, setPagoForm] = useState({ monto: 0, formaPago: 'Transferencia', referencia: '' })
 
-  // Nueva factura proveedor
   const BLANK_FP = { supplierId: '', fecha: new Date().toISOString().split('T')[0], fechaVencimiento: '', monto: 0, notas: '' }
   const [fpForm, setFpForm] = useState(BLANK_FP)
 
-  // Banco CRUD
   const BLANK_BANCO: Omit<Banco, 'bancoId'> = { banco: '', cuenta: '', saldo: 0, moneda: 'MXN', activo: true }
   const [bancoForm, setBancoForm] = useState(BLANK_BANCO)
   const [selBanco, setSelBanco] = useState<Banco | null>(null)
 
-  // ── Derived data ────────────────────────────────────────────────────────────
   const porCobrar = facturasVenta.filter(f => f.saldoPendiente > 0)
   const pagadas = facturasVenta.filter(f => f.saldoPendiente === 0 && f.estatus === 'pagada')
-
   const cxcPendiente = porCobrar.reduce((a, f) => a + f.saldoPendiente, 0)
   const cxcVencida = facturasVenta.filter(f => f.estatus === 'vencida').reduce((a, f) => a + f.saldoPendiente, 0)
   const cxpPendiente = facturasProveedor.filter(f => f.saldoPendiente > 0).reduce((a, f) => a + f.saldoPendiente, 0)
@@ -84,10 +76,21 @@ export function FinancePage() {
     return orders.find(o => o.pedidoId === pedidoId)
   }
 
-  // ── Cobro cliente ────────────────────────────────────────────────────────────
+  function getPagos(facturaId: string) {
+    return pagosClientes.filter(p => p.facturaId === facturaId)
+  }
+
   function openCobro(fv: FacturaVenta) {
     setSelFv(fv.facturaId)
+    setEsAbono(false)
     setPagoForm({ monto: fv.saldoPendiente, formaPago: 'Transferencia', referencia: '' })
+    setModal('pago_cli')
+  }
+
+  function openAbono(fv: FacturaVenta) {
+    setSelFv(fv.facturaId)
+    setEsAbono(true)
+    setPagoForm({ monto: 0, formaPago: 'Transferencia', referencia: '' })
     setModal('pago_cli')
   }
 
@@ -95,15 +98,14 @@ export function FinancePage() {
     const fv = facturasVenta.find(f => f.facturaId === selFv)
     if (!fv) return
     if (pagoForm.monto <= 0) { toast.error('El monto debe ser mayor a cero.'); return }
+    if (pagoForm.monto > fv.saldoPendiente) { toast.error(`El monto no puede superar el saldo pendiente (${MXN(fv.saldoPendiente)}).`); return }
     addPagoCliente({ facturaId: selFv, clienteId: fv.clienteId, fecha: new Date().toISOString().split('T')[0], ...pagoForm })
-    toast.success(`Cobro registrado: ${MXN(pagoForm.monto)}. Factura actualizada.`)
+    toast.success(`${esAbono ? 'Abono' : 'Cobro'} registrado: ${MXN(pagoForm.monto)}.`)
     setModal(null)
     setPagoForm({ monto: 0, formaPago: 'Transferencia', referencia: '' })
-    const remaining = fv.saldoPendiente - pagoForm.monto
-    if (remaining <= 0) setCxcTab('pagadas')
+    if (fv.saldoPendiente - pagoForm.monto <= 0) setCxcTab('pagadas')
   }
 
-  // ── Pago proveedor ───────────────────────────────────────────────────────────
   function handlePagoProveedor() {
     const fp = facturasProveedor.find(f => f.facturaProvId === selFp)
     if (!fp) return
@@ -114,7 +116,6 @@ export function FinancePage() {
     setPagoForm({ monto: 0, formaPago: 'Transferencia', referencia: '' })
   }
 
-  // ── Nueva Factura Proveedor ──────────────────────────────────────────────────
   function handleSaveFP() {
     if (!fpForm.supplierId) { toast.error('Selecciona un proveedor.'); return }
     if (fpForm.monto <= 0) { toast.error('El monto debe ser mayor a cero.'); return }
@@ -136,17 +137,16 @@ export function FinancePage() {
     setFpForm(BLANK_FP)
   }
 
-  // ── Recibo viewer ────────────────────────────────────────────────────────────
   function openRecibo(fv: FacturaVenta) { setSelRecibo(fv); setModal('recibo') }
+  function openHistorial(fv: FacturaVenta) { setSelRecibo(fv); setModal('historial') }
 
-  // ── Banco handlers ───────────────────────────────────────────────────────────
   function openNewBanco() { setBancoForm(BLANK_BANCO); setSelBanco(null); setModal('new_banco') }
   function openEditBanco(b: Banco) { const { bancoId, ...rest } = b; void bancoId; setBancoForm(rest); setSelBanco(b); setModal('edit_banco') }
   function openDelBanco(b: Banco) { setSelBanco(b); setModal('del_banco') }
 
   function handleSaveBanco() {
     if (!bancoForm.banco.trim()) { toast.error('Nombre del banco requerido.'); return }
-    if (!bancoForm.cuenta.trim()) { toast.error('Número de cuenta requerido.'); return }
+    if (!bancoForm.cuenta.trim()) { toast.error('Numero de cuenta requerido.'); return }
     if (selBanco) {
       updateBanco(selBanco.bancoId, bancoForm)
       toast.success(`Cuenta ${selBanco.banco} actualizada.`)
@@ -162,13 +162,12 @@ export function FinancePage() {
     setModal(null); setSelBanco(null)
   }
 
-  // ── CxC table columns ────────────────────────────────────────────────────────
   function cxcColumns(showCobrar: boolean) {
     return [
       { key: 'folio', header: 'Factura', render: (f: FacturaVenta) => <span className="font-mono font-semibold text-blue-700">{f.folio}</span> },
       { key: 'pedido', header: 'Pedido', render: (f: FacturaVenta) => {
         const o = getOrder(f.pedidoId)
-        return o ? <span className="font-mono text-xs text-gray-600">{o.folio}</span> : <span className="text-gray-400">—</span>
+        return o ? <span className="font-mono text-xs text-gray-600">{o.folio}</span> : <span className="text-gray-400">-</span>
       }},
       { key: 'cliente', header: 'Cliente', render: (f: FacturaVenta) => clients.find(c => c.clientId === f.clienteId)?.razonSocial ?? '-' },
       { key: 'fecha', header: 'Fecha' },
@@ -180,29 +179,41 @@ export function FinancePage() {
         </span>
       )},
       { key: 'estatus', header: 'Estatus', render: (f: FacturaVenta) => <StatusBadge status={f.estatus} /> },
-      { key: 'acc', header: '', render: (f: FacturaVenta) => (
-        <div className="flex gap-1">
-          <button className="btn btn-secondary btn-sm" onClick={() => openRecibo(f)} title="Ver recibo/factura">
-            <Eye size={13} /> Recibo
-          </button>
-          {showCobrar && f.saldoPendiente > 0 && (
-            <button className="btn btn-success btn-sm" onClick={() => openCobro(f)}>
-              <CheckCircle size={13} /> Cobrar
+      { key: 'acc', header: '', render: (f: FacturaVenta) => {
+        const pagos = getPagos(f.facturaId)
+        return (
+          <div className="flex gap-1 flex-wrap justify-end">
+            <button className="btn btn-secondary btn-sm" onClick={() => openRecibo(f)} title="Ver recibo">
+              <Eye size={13} /> Recibo
             </button>
-          )}
-        </div>
-      )},
+            {pagos.length > 0 && (
+              <button className="btn btn-secondary btn-sm" onClick={() => openHistorial(f)} title="Ver historial de abonos">
+                <History size={13} />
+                <span className="ml-1 text-xs font-bold text-indigo-600">{pagos.length}</span>
+              </button>
+            )}
+            {showCobrar && f.saldoPendiente > 0 && (
+              <button className="btn btn-warning btn-sm" onClick={() => openAbono(f)} title="Registrar abono parcial">
+                <PlusCircle size={13} /> Abonar
+              </button>
+            )}
+            {showCobrar && f.saldoPendiente > 0 && (
+              <button className="btn btn-success btn-sm" onClick={() => openCobro(f)} title="Cobrar saldo completo">
+                <CheckCircle size={13} /> Cobrar
+              </button>
+            )}
+          </div>
+        )
+      }},
     ]
   }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="page-header">
         <h1 className="page-title flex items-center gap-2"><DollarSign size={24} /> Finanzas</h1>
       </div>
 
-      {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="card-sm text-center">
           <div className="text-xl font-bold text-green-700">{MXN(cxcPendiente)}</div>
@@ -222,7 +233,6 @@ export function FinancePage() {
         </div>
       </div>
 
-      {/* Main tabs */}
       <div className="flex gap-2">
         <button className={`btn ${tab === 'cxc' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('cxc')}>
           <CreditCard size={15} /> CxC
@@ -237,17 +247,13 @@ export function FinancePage() {
         </button>
       </div>
 
-      {/* ── CXC ─────────────────────────────────────────────────────────────── */}
       {tab === 'cxc' && (
         <div className="space-y-4">
-          {/* CxC sub-tabs */}
           <div className="flex gap-2 border-b border-gray-200 pb-0">
             <button
               onClick={() => setCxcTab('cobrar')}
               className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                cxcTab === 'cobrar'
-                  ? 'border-blue-600 text-blue-700'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                cxcTab === 'cobrar' ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
               <Clock size={15} />
@@ -261,9 +267,7 @@ export function FinancePage() {
             <button
               onClick={() => setCxcTab('pagadas')}
               className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                cxcTab === 'pagadas'
-                  ? 'border-green-600 text-green-700'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                cxcTab === 'pagadas' ? 'border-green-600 text-green-700' : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
               <CheckCircle size={15} />
@@ -276,27 +280,19 @@ export function FinancePage() {
             </button>
           </div>
 
-          {/* Por Cobrar */}
           {cxcTab === 'cobrar' && (
             <div className="card space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-semibold text-gray-900">Facturas por Cobrar</h3>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    Generadas automáticamente al marcar un pedido como <strong>Facturado</strong>
-                  </p>
-                </div>
-                {porCobrar.length > 0 && (
-                  <button className="btn-primary" onClick={() => openCobro(porCobrar[0])}>
-                    <CheckCircle size={15} /> Registrar Cobro
-                  </button>
-                )}
+              <div>
+                <h3 className="font-semibold text-gray-900">Facturas por Cobrar</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Usa <strong>Abonar</strong> para pagos parciales o <strong>Cobrar</strong> para liquidar el saldo completo.
+                  El icono <History size={11} className="inline" /> muestra el historial de abonos.
+                </p>
               </div>
               {porCobrar.length === 0 ? (
                 <div className="text-center py-10 text-gray-400">
                   <Clock size={32} className="mx-auto mb-3 opacity-40" />
                   <p className="text-sm">No hay facturas pendientes de cobro.</p>
-                  <p className="text-xs mt-1">Cuando un pedido se marque como <strong>Facturado</strong> aparecerá aquí.</p>
                 </div>
               ) : (
                 <DataTable data={porCobrar} rowKey={(f) => f.facturaId} columns={cxcColumns(true)} />
@@ -304,7 +300,6 @@ export function FinancePage() {
             </div>
           )}
 
-          {/* Pagadas */}
           {cxcTab === 'pagadas' && (
             <div className="card space-y-4">
               <div className="flex items-center gap-3">
@@ -312,14 +307,14 @@ export function FinancePage() {
                 <div>
                   <h3 className="font-semibold text-gray-900">Facturas Pagadas</h3>
                   <p className="text-xs text-gray-500 mt-0.5">
-                    {pagadas.length} factura(s) cobradas · {MXN(pagadas.reduce((a, f) => a + f.total, 0))} en total
+                    {pagadas.length} factura(s) cobradas &middot; {MXN(pagadas.reduce((a, f) => a + f.total, 0))} en total
                   </p>
                 </div>
               </div>
               {pagadas.length === 0 ? (
                 <div className="text-center py-10 text-gray-400">
                   <CheckCircle size={32} className="mx-auto mb-3 opacity-40" />
-                  <p className="text-sm">Aún no hay facturas pagadas.</p>
+                  <p className="text-sm">Aun no hay facturas pagadas.</p>
                 </div>
               ) : (
                 <DataTable data={pagadas} rowKey={(f) => f.facturaId} columns={cxcColumns(false)} />
@@ -329,7 +324,6 @@ export function FinancePage() {
         </div>
       )}
 
-      {/* ── CXP ─────────────────────────────────────────────────────────────── */}
       {tab === 'cxp' && (
         <div className="card space-y-4">
           <div className="flex items-center justify-between">
@@ -345,7 +339,6 @@ export function FinancePage() {
             <div className="text-center py-10 text-gray-400">
               <FileText size={32} className="mx-auto mb-3 opacity-40" />
               <p className="text-sm">No hay facturas de proveedor registradas.</p>
-              <p className="text-xs mt-1">Usa el botón <strong>"Registrar Factura Proveedor"</strong> para capturar una.</p>
             </div>
           ) : (
             <DataTable
@@ -368,9 +361,7 @@ export function FinancePage() {
                     setSelFp(f.facturaProvId)
                     setPagoForm({ monto: f.saldoPendiente, formaPago: 'Transferencia', referencia: '' })
                     setModal('pago_prov')
-                  }}>
-                    Pagar
-                  </button>
+                  }}>Pagar</button>
                 ) : <span className="text-xs text-green-600 font-semibold">Pagado</span> },
               ]}
             />
@@ -378,7 +369,6 @@ export function FinancePage() {
         </div>
       )}
 
-      {/* ── BANCOS ──────────────────────────────────────────────────────────── */}
       {tab === 'bancos' && (
         <div className="card space-y-4">
           <div className="flex items-center justify-between">
@@ -411,12 +401,8 @@ export function FinancePage() {
                     </div>
                     {canManageBancos && (
                       <div className="flex gap-1 ml-2">
-                        <button className="btn btn-secondary btn-sm" onClick={() => openEditBanco(b)} title="Editar">
-                          <Edit2 size={13} />
-                        </button>
-                        <button className="btn btn-danger btn-sm" onClick={() => openDelBanco(b)} title="Eliminar">
-                          <Trash2 size={13} />
-                        </button>
+                        <button className="btn btn-secondary btn-sm" onClick={() => openEditBanco(b)}><Edit2 size={13} /></button>
+                        <button className="btn btn-danger btn-sm" onClick={() => openDelBanco(b)}><Trash2 size={13} /></button>
                       </div>
                     )}
                   </div>
@@ -424,7 +410,6 @@ export function FinancePage() {
               ))}
             </div>
           )}
-          {/* Saldo total */}
           {bancos.length > 0 && (
             <div className="flex justify-end pt-2 border-t border-gray-200">
               <div className="text-sm text-gray-500">
@@ -435,23 +420,40 @@ export function FinancePage() {
         </div>
       )}
 
-      {/* ══ MODALES ══════════════════════════════════════════════════════════ */}
-
-      {/* ── Registrar Cobro ──────────────────────────────────────────────── */}
+      {/* MODAL: Cobro / Abono */}
       {modal === 'pago_cli' && (
-        <Modal title="Registrar Cobro" onClose={() => setModal(null)}
-          footer={<><button className="btn-secondary" onClick={() => setModal(null)}>Cancelar</button><button className="btn-primary" onClick={handlePagoCliente}><CheckCircle size={14} /> Registrar Cobro</button></>}
+        <Modal
+          title={esAbono ? 'Registrar Abono' : 'Registrar Cobro'}
+          onClose={() => setModal(null)}
+          footer={
+            <>
+              <button className="btn-secondary" onClick={() => setModal(null)}>Cancelar</button>
+              <button className="btn-primary" onClick={handlePagoCliente}>
+                {esAbono ? <><PlusCircle size={14} /> Registrar Abono</> : <><CheckCircle size={14} /> Registrar Cobro</>}
+              </button>
+            </>
+          }
         >
           <div className="space-y-4">
             {(() => {
               const fv = facturasVenta.find(f => f.facturaId === selFv)
               const o = getOrder(fv?.pedidoId)
               const cli = clients.find(c => c.clientId === fv?.clienteId)
+              const totalAbonado = fv ? getPagos(fv.facturaId).reduce((a, p) => a + p.monto, 0) : 0
               return fv ? (
                 <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm space-y-1">
-                  <div className="font-semibold text-blue-800">{fv.folio} {o ? `— Pedido ${o.folio}` : ''}</div>
+                  <div className="font-semibold text-blue-800">{fv.folio}{o ? ` - Pedido ${o.folio}` : ''}</div>
                   <div className="text-blue-700">{cli?.razonSocial}</div>
-                  <div className="text-blue-600">Total: {MXN(fv.total)} · Saldo: <strong>{MXN(fv.saldoPendiente)}</strong></div>
+                  <div className="text-blue-600 flex gap-4 flex-wrap">
+                    <span>Total: {MXN(fv.total)}</span>
+                    {totalAbonado > 0 && <span>Abonado: <strong className="text-green-700">{MXN(totalAbonado)}</strong></span>}
+                    <span>Saldo: <strong>{MXN(fv.saldoPendiente)}</strong></span>
+                  </div>
+                  {esAbono && (
+                    <div className="text-xs text-indigo-600 font-medium pt-1">
+                      Ingresa el monto del abono parcial (maximo {MXN(fv.saldoPendiente)})
+                    </div>
+                  )}
                 </div>
               ) : null
             })()}
@@ -460,17 +462,17 @@ export function FinancePage() {
               <select className="select" value={selFv} onChange={(e) => {
                 setSelFv(e.target.value)
                 const fv = facturasVenta.find(f => f.facturaId === e.target.value)
-                if (fv) setPagoForm(p => ({ ...p, monto: fv.saldoPendiente }))
+                if (fv) setPagoForm(p => ({ ...p, monto: esAbono ? 0 : fv.saldoPendiente }))
               }}>
                 {porCobrar.map((f) => (
                   <option key={f.facturaId} value={f.facturaId}>
-                    {f.folio} — {clients.find(c => c.clientId === f.clienteId)?.razonSocial} ({MXN(f.saldoPendiente)})
+                    {f.folio} - {clients.find(c => c.clientId === f.clienteId)?.razonSocial} ({MXN(f.saldoPendiente)})
                   </option>
                 ))}
               </select>
             </div>
             <div className="form-group">
-              <label className="label">Monto a cobrar</label>
+              <label className="label">{esAbono ? 'Monto del abono' : 'Monto a cobrar'}</label>
               <input type="number" className="input" value={pagoForm.monto} min={0} step="0.01"
                 onChange={(e) => setPagoForm(f => ({ ...f, monto: Number(e.target.value) }))} />
             </div>
@@ -481,7 +483,7 @@ export function FinancePage() {
               </select>
             </div>
             <div className="form-group">
-              <label className="label">Referencia / Número de transacción</label>
+              <label className="label">Referencia / Numero de transaccion</label>
               <input className="input" value={pagoForm.referencia} placeholder="TRF-20240101-001"
                 onChange={(e) => setPagoForm(f => ({ ...f, referencia: e.target.value }))} />
             </div>
@@ -489,7 +491,133 @@ export function FinancePage() {
         </Modal>
       )}
 
-      {/* ── Registrar Pago Proveedor ─────────────────────────────────────── */}
+      {/* MODAL: Historial de Abonos */}
+      {modal === 'historial' && selRecibo && (() => {
+        const fv = selRecibo
+        const cli = clients.find(c => c.clientId === fv.clienteId)
+        const pagos = getPagos(fv.facturaId)
+        const totalAbonado = pagos.reduce((a, p) => a + p.monto, 0)
+        return (
+          <Modal
+            title={`Historial de Abonos \u2014 ${fv.folio}`}
+            onClose={() => setModal(null)}
+            size="lg"
+            footer={
+              <div className="flex gap-2">
+                <button className="btn-secondary" onClick={() => setModal(null)}>Cerrar</button>
+                {fv.saldoPendiente > 0 && (
+                  <button className="btn btn-warning" onClick={() => { setModal(null); openAbono(fv) }}>
+                    <PlusCircle size={14} /> Nuevo Abono
+                  </button>
+                )}
+                {fv.saldoPendiente > 0 && (
+                  <button className="btn-primary" onClick={() => { setModal(null); openCobro(fv) }}>
+                    <CheckCircle size={14} /> Cobrar Saldo
+                  </button>
+                )}
+              </div>
+            }
+          >
+            <div className="space-y-5">
+              <div className="grid grid-cols-2 gap-3 p-4 bg-gray-50 rounded-xl border border-gray-200 text-sm">
+                <div>
+                  <div className="text-xs text-gray-500 font-semibold uppercase mb-1">Factura</div>
+                  <div className="font-mono font-bold text-blue-700 text-base">{fv.folio}</div>
+                  <div className="text-gray-600 mt-1">{cli?.razonSocial ?? '-'}</div>
+                  {cli?.rfc && <div className="text-gray-400 text-xs">RFC: {cli.rfc}</div>}
+                </div>
+                <div className="text-right space-y-1">
+                  <div className="flex justify-between"><span className="text-gray-500">Fecha:</span><span className="font-medium">{fv.fecha}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Vencimiento:</span><span className="font-medium">{fv.fechaVencimiento}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Total factura:</span><span className="font-semibold">{MXN(fv.total)}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Total abonado:</span><span className="font-semibold text-green-700">{MXN(totalAbonado)}</span></div>
+                  <div className="flex justify-between border-t border-gray-200 pt-1">
+                    <span className="text-gray-700 font-semibold">Saldo pendiente:</span>
+                    <span className={`font-bold text-base ${fv.saldoPendiente > 0 ? 'text-red-600' : 'text-green-600'}`}>{MXN(fv.saldoPendiente)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {fv.total > 0 && (
+                <div>
+                  <div className="flex justify-between text-xs text-gray-500 mb-1">
+                    <span>Progreso de cobro</span>
+                    <span>{Math.round((totalAbonado / fv.total) * 100)}%</span>
+                  </div>
+                  <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-green-500 rounded-full transition-all"
+                      style={{ width: `${Math.min(100, (totalAbonado / fv.total) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <div className="text-xs font-semibold text-gray-500 uppercase mb-3 flex items-center gap-2">
+                  <History size={13} /> Detalle de Abonos ({pagos.length})
+                </div>
+                {pagos.length === 0 ? (
+                  <div className="text-center py-8 text-gray-400 text-sm">No hay abonos registrados.</div>
+                ) : (
+                  <div className="border border-gray-200 rounded-xl overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50 border-b border-gray-200">
+                        <tr>
+                          <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase">#</th>
+                          <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase">Fecha</th>
+                          <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase">Forma de Pago</th>
+                          <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase">Referencia</th>
+                          <th className="text-right px-4 py-2 text-xs font-semibold text-gray-500 uppercase">Monto</th>
+                          <th className="text-right px-4 py-2 text-xs font-semibold text-gray-500 uppercase">Saldo tras abono</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pagos.map((p, idx) => {
+                          const saldoAcum = Math.max(0, fv.total - pagos.slice(0, idx + 1).reduce((a, x) => a + x.monto, 0))
+                          return (
+                            <tr key={p.pagoId} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
+                              <td className="px-4 py-3 text-gray-400 text-xs">{idx + 1}</td>
+                              <td className="px-4 py-3 font-medium">{p.fecha}</td>
+                              <td className="px-4 py-3">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-xs font-medium">
+                                  {p.formaPago}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-gray-500 text-xs font-mono">
+                                {p.referencia || <span className="text-gray-300">&mdash;</span>}
+                              </td>
+                              <td className="px-4 py-3 text-right font-semibold text-green-700">{MXN(p.monto)}</td>
+                              <td className={`px-4 py-3 text-right font-medium ${saldoAcum > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                                {MXN(saldoAcum)}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                      <tfoot className="bg-gray-50 border-t-2 border-gray-200">
+                        <tr>
+                          <td colSpan={4} className="px-4 py-2 text-sm font-semibold text-gray-700">Total abonado</td>
+                          <td className="px-4 py-2 text-right font-bold text-green-700">{MXN(totalAbonado)}</td>
+                          <td className="px-4 py-2 text-right font-bold text-red-600">{MXN(fv.saldoPendiente)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {fv.saldoPendiente === 0 && (
+                <div className="flex items-center justify-center gap-2 p-3 bg-green-50 border border-green-200 rounded-xl text-green-700 text-sm font-semibold">
+                  <CheckCircle size={16} /> FACTURA LIQUIDADA COMPLETAMENTE
+                </div>
+              )}
+            </div>
+          </Modal>
+        )
+      })()}
+
+      {/* MODAL: Pago Proveedor */}
       {modal === 'pago_prov' && (
         <Modal title="Registrar Pago a Proveedor" onClose={() => setModal(null)}
           footer={<><button className="btn-secondary" onClick={() => setModal(null)}>Cancelar</button><button className="btn-primary" onClick={handlePagoProveedor}>Registrar Pago</button></>}
@@ -504,7 +632,7 @@ export function FinancePage() {
               }}>
                 {facturasProveedor.filter(f => f.saldoPendiente > 0).map((f) => (
                   <option key={f.facturaProvId} value={f.facturaProvId}>
-                    {f.folio} — {suppliers.find(s => s.supplierId === f.supplierId)?.razonSocial} ({MXN(f.saldoPendiente)})
+                    {f.folio} - {suppliers.find(s => s.supplierId === f.supplierId)?.razonSocial} ({MXN(f.saldoPendiente)})
                   </option>
                 ))}
               </select>
@@ -529,7 +657,7 @@ export function FinancePage() {
         </Modal>
       )}
 
-      {/* ── Nueva Factura Proveedor ──────────────────────────────────────── */}
+      {/* MODAL: Nueva Factura Proveedor */}
       {modal === 'new_fp' && (
         <Modal title="Registrar Factura de Proveedor" onClose={() => setModal(null)}
           footer={<><button className="btn-secondary" onClick={() => setModal(null)}>Cancelar</button><button className="btn-primary" onClick={handleSaveFP}><Plus size={14} /> Registrar</button></>}
@@ -560,7 +688,7 @@ export function FinancePage() {
                 onChange={(e) => setFpForm(f => ({ ...f, monto: Number(e.target.value) }))} />
               {fpForm.monto > 0 && (
                 <p className="text-xs text-gray-400 mt-1">
-                  Subtotal: {MXN(fpForm.monto / 1.16)} · IVA 16%: {MXN(fpForm.monto - fpForm.monto / 1.16)}
+                  Subtotal: {MXN(fpForm.monto / 1.16)} &middot; IVA 16%: {MXN(fpForm.monto - fpForm.monto / 1.16)}
                 </p>
               )}
             </div>
@@ -568,21 +696,21 @@ export function FinancePage() {
         </Modal>
       )}
 
-      {/* ── Banco: Nueva / Editar ────────────────────────────────────────── */}
+      {/* MODAL: Banco Nueva / Editar */}
       {(modal === 'new_banco' || modal === 'edit_banco') && (
         <Modal
-          title={modal === 'new_banco' ? 'Nueva Cuenta Bancaria' : `Editar — ${selBanco?.banco}`}
+          title={modal === 'new_banco' ? 'Nueva Cuenta Bancaria' : `Editar - ${selBanco?.banco}`}
           onClose={() => setModal(null)}
           footer={<><button className="btn-secondary" onClick={() => setModal(null)}>Cancelar</button><button className="btn-primary" onClick={handleSaveBanco}>Guardar</button></>}
         >
           <div className="space-y-4">
             <div className="form-group">
-              <label className="label">Banco / Institución *</label>
+              <label className="label">Banco / Institucion *</label>
               <input className="input" value={bancoForm.banco} onChange={(e) => setBancoForm(f => ({ ...f, banco: e.target.value }))} placeholder="BBVA, Santander, Banorte..." />
             </div>
             <div className="form-grid">
               <div className="form-group">
-                <label className="label">Número de Cuenta *</label>
+                <label className="label">Numero de Cuenta *</label>
                 <input className="input" value={bancoForm.cuenta} onChange={(e) => setBancoForm(f => ({ ...f, cuenta: e.target.value }))} placeholder="0123456789" />
               </div>
               <div className="form-group">
@@ -602,27 +730,37 @@ export function FinancePage() {
         </Modal>
       )}
 
-      {/* ── Banco: Confirmar Eliminar ────────────────────────────────────── */}
+      {/* MODAL: Banco Eliminar */}
       {modal === 'del_banco' && selBanco && (
         <Modal title="Eliminar cuenta bancaria" onClose={() => setModal(null)}
           footer={<><button className="btn-secondary" onClick={() => setModal(null)}>Cancelar</button><button className="btn-danger" onClick={handleDeleteBanco}><Trash2 size={14} /> Eliminar</button></>}
         >
           <p className="text-sm text-gray-700">
-            ¿Eliminar la cuenta <strong>{selBanco.banco}</strong> — {selBanco.cuenta}? Esta acción no se puede deshacer.
+            Eliminar la cuenta <strong>{selBanco.banco}</strong> - {selBanco.cuenta}? Esta accion no se puede deshacer.
           </p>
         </Modal>
       )}
 
-      {/* ── Ver Recibo / Factura ─────────────────────────────────────────── */}
+      {/* MODAL: Ver Recibo */}
       {modal === 'recibo' && selRecibo && (() => {
         const order = getOrder(selRecibo.pedidoId)
         const client = clients.find(c => c.clientId === selRecibo.clienteId)
-        const pagos = pagosClientes.filter(p => p.facturaId === selRecibo.facturaId)
+        const pagos = getPagos(selRecibo.facturaId)
         return (
-          <Modal title={`Recibo — ${selRecibo.folio}`} onClose={() => setModal(null)} size="lg"
+          <Modal title={`Recibo - ${selRecibo.folio}`} onClose={() => setModal(null)} size="lg"
             footer={
               <div className="flex gap-2">
                 <button className="btn-secondary" onClick={() => setModal(null)}>Cerrar</button>
+                {pagos.length > 0 && (
+                  <button className="btn-secondary" onClick={() => openHistorial(selRecibo)}>
+                    <History size={14} /> Ver Historial
+                  </button>
+                )}
+                {selRecibo.saldoPendiente > 0 && (
+                  <button className="btn btn-warning" onClick={() => { setModal(null); openAbono(selRecibo) }}>
+                    <PlusCircle size={14} /> Abonar
+                  </button>
+                )}
                 {selRecibo.saldoPendiente > 0 && (
                   <button className="btn-primary" onClick={() => { setModal(null); openCobro(selRecibo) }}>
                     <CheckCircle size={14} /> Cobrar
@@ -632,7 +770,6 @@ export function FinancePage() {
             }
           >
             <div className="space-y-5">
-              {/* Header recibo */}
               <div className="flex justify-between items-start p-4 bg-gray-50 rounded-xl border border-gray-200">
                 <div>
                   <div className="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-1">InsumosFa ERP</div>
@@ -650,15 +787,13 @@ export function FinancePage() {
                 </div>
               </div>
 
-              {/* Cliente */}
               <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl text-sm">
                 <div className="text-xs text-gray-500 font-semibold uppercase mb-1">Cliente</div>
-                <div className="font-semibold text-gray-900">{client?.razonSocial ?? '—'}</div>
+                <div className="font-semibold text-gray-900">{client?.razonSocial ?? '-'}</div>
                 {client?.rfc && <div className="text-gray-500">RFC: {client.rfc}</div>}
                 {client?.correo && <div className="text-gray-500">{client.correo}</div>}
               </div>
 
-              {/* Partidas del pedido */}
               {order && order.items.length > 0 && (
                 <div>
                   <div className="text-xs font-semibold text-gray-500 uppercase mb-2 flex items-center gap-1">
@@ -667,15 +802,15 @@ export function FinancePage() {
                   <div className="table-wrapper">
                     <table className="table">
                       <thead>
-                        <tr><th>SKU</th><th>Descripción</th><th>Cant</th><th>Precio</th><th>Importe</th></tr>
+                        <tr><th>SKU</th><th>Descripcion</th><th>Cant</th><th>Precio</th><th>Importe</th></tr>
                       </thead>
                       <tbody>
                         {order.items.map(it => {
                           const prod = products.find(p => p.productId === it.productId)
                           return (
                             <tr key={it.detalleId}>
-                              <td className="font-mono text-xs text-blue-700">{prod?.sku ?? '—'}</td>
-                              <td>{prod?.descripcion ?? '—'}</td>
+                              <td className="font-mono text-xs text-blue-700">{prod?.sku ?? '-'}</td>
+                              <td>{prod?.descripcion ?? '-'}</td>
                               <td>{it.cantidad}</td>
                               <td><Currency value={it.precio} /></td>
                               <td className="font-semibold"><Currency value={it.cantidad * it.precio * (1 - it.descuento / 100)} /></td>
@@ -688,15 +823,10 @@ export function FinancePage() {
                 </div>
               )}
 
-              {/* Totales */}
               <div className="flex justify-end">
                 <div className="min-w-[240px] space-y-1 text-sm">
-                  <div className="flex justify-between text-gray-600">
-                    <span>Subtotal</span><span>{MXN(selRecibo.subtotal)}</span>
-                  </div>
-                  <div className="flex justify-between text-gray-600">
-                    <span>IVA (16%)</span><span>{MXN(selRecibo.impuestos)}</span>
-                  </div>
+                  <div className="flex justify-between text-gray-600"><span>Subtotal</span><span>{MXN(selRecibo.subtotal)}</span></div>
+                  <div className="flex justify-between text-gray-600"><span>IVA (16%)</span><span>{MXN(selRecibo.impuestos)}</span></div>
                   <div className="flex justify-between font-bold text-base text-gray-900 pt-1 border-t border-gray-200">
                     <span>Total</span><span>{MXN(selRecibo.total)}</span>
                   </div>
@@ -713,19 +843,23 @@ export function FinancePage() {
                 </div>
               </div>
 
-              {/* Historial de pagos */}
               {pagos.length > 0 && (
                 <div>
-                  <div className="text-xs font-semibold text-gray-500 uppercase mb-2">Pagos Registrados</div>
+                  <div className="text-xs font-semibold text-gray-500 uppercase mb-2 flex items-center gap-2">
+                    <History size={12} /> Abonos Registrados ({pagos.length})
+                  </div>
                   <div className="space-y-2">
-                    {pagos.map(p => (
+                    {pagos.map((p, idx) => (
                       <div key={p.pagoId} className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg text-sm">
-                        <div>
-                          <span className="font-semibold text-green-800">{MXN(p.monto)}</span>
-                          <span className="text-green-600 ml-2">· {p.formaPago}</span>
-                          {p.referencia && <span className="text-green-600 ml-2">· Ref: {p.referencia}</span>}
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs text-gray-400 font-medium">{idx + 1}</span>
+                          <div>
+                            <span className="font-semibold text-green-800">{MXN(p.monto)}</span>
+                            <span className="text-green-600 ml-2 text-xs">&middot; {p.formaPago}</span>
+                            {p.referencia && <span className="text-green-600 ml-2 text-xs font-mono">&middot; {p.referencia}</span>}
+                          </div>
                         </div>
-                        <div className="text-green-600 text-xs">{p.fecha}</div>
+                        <div className="text-green-600 text-xs font-medium">{p.fecha}</div>
                       </div>
                     ))}
                   </div>
