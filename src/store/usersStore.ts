@@ -55,15 +55,13 @@ export const useUsersStore = create<UsersState>()((set, get) => ({
 
   async addUser(userData, password) {
     const roles = userData.roles.length ? userData.roles : (['ventas'] as Role[])
-    const { data, error } = await supabase.rpc('erp_create_user', {
+    const { error } = await supabase.rpc('erp_create_user', {
       p_email: userData.email,
       p_name: userData.name,
       p_roles: roles,
       p_password: password,
     })
-    if (!error && data && (data as DbRow[]).length > 0) {
-      set(s => ({ users: [...s.users, toUser((data as DbRow[])[0])] }))
-    }
+    if (!error) await get().loadUsers()
   },
 
   async updateUser(userId, data) {
@@ -76,9 +74,7 @@ export const useUsersStore = create<UsersState>()((set, get) => ({
       p_name: updated.name,
       p_roles: updated.roles,
     })
-    if (!error) {
-      set(s => ({ users: s.users.map(u => u.userId === userId ? { ...u, ...data } : u) }))
-    }
+    if (!error) await get().loadUsers()
   },
 
   async deleteUser(userId) {
