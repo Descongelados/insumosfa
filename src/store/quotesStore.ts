@@ -28,6 +28,7 @@ interface QuotesState {
   quotes: Quote[]
   loading: boolean
   loadQuotes: () => Promise<void>
+  subscribeRealtime: () => () => void
   addQuote: (q: Omit<Quote, 'cotizacionId' | 'folio'>) => Promise<Quote>
   updateQuote: (id: string, data: Partial<Quote>) => Promise<void>
   deleteQuote: (id: string) => Promise<void>
@@ -44,6 +45,16 @@ export const useQuotesStore = create<QuotesState>()((set, get) => ({
     } finally {
       set({ loading: false })
     }
+  },
+
+  subscribeRealtime() {
+    const channel = supabase
+      .channel('erp_quotes_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_quotes' }, () => {
+        void get().loadQuotes()
+      })
+      .subscribe()
+    return () => { void supabase.removeChannel(channel) }
   },
 
   async addQuote(data) {
