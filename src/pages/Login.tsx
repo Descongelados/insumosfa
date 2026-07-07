@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
-import { Lock, Mail, AlertCircle } from 'lucide-react'
+import { Lock, Mail, CircleAlert as AlertCircle } from 'lucide-react'
 
 export function LoginPage() {
   const { login } = useAuthStore()
@@ -9,10 +9,14 @@ export function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    const result = login(email, password)
+    setSubmitting(true)
+    setError('')
+    const result = await login(email, password)
+    setSubmitting(false)
     if (result.ok) {
       navigate('/')
     } else {
@@ -23,7 +27,6 @@ export function LoginPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 to-blue-900 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8">
-        {/* Logo */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-blue-600 mb-4">
             <span className="text-white font-bold text-2xl">IF</span>
@@ -49,7 +52,7 @@ export function LoginPage() {
                 className="input pl-9"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="usuario@insumosfa.com"
+                placeholder="usuario@empresa.com"
                 required
               />
             </div>
@@ -70,20 +73,14 @@ export function LoginPage() {
             </div>
           </div>
 
-          <button type="submit" className="btn-primary w-full justify-center py-2.5">
-            Iniciar Sesión
+          <button
+            type="submit"
+            className="btn-primary w-full justify-center py-2.5"
+            disabled={submitting}
+          >
+            {submitting ? 'Verificando…' : 'Iniciar Sesión'}
           </button>
         </form>
-
-        {/* Demo credentials */}
-        <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-          <p className="text-xs font-semibold text-gray-600 mb-2">Credenciales demo:</p>
-          <div className="space-y-1 text-xs text-gray-500">
-            <div><span className="font-medium">Director:</span> admin@insumosfa.com / admin123</div>
-            <div><span className="font-medium">Ventas:</span> carlos@insumosfa.com / ventas123</div>
-            <div><span className="font-medium">Compras:</span> maria@insumosfa.com / compras123</div>
-          </div>
-        </div>
       </div>
     </div>
   )

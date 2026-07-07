@@ -1,93 +1,104 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
 import type { User, Role } from '../types'
-import { SEED_USERS } from '../data/seed'
+import { supabase } from '../lib/supabase'
 
-// Contraseñas en memoria — también se persisten en localStorage bajo 'erp_passwords'
-export let passwordMap: Record<string, string> = (() => {
-  try {
-    const raw = localStorage.getItem('erp_passwords')
-    if (raw) return JSON.parse(raw) as Record<string, string>
-  } catch { /* ignore */ }
+interface DbRow {
+  id: string
+  email: string
+  name: string
+  roles: string[]
+  active: boolean
+  created_at: string
+}
+
+function toUser(r: DbRow): User {
   return {
-    'admin@insumosfa.com': 'admin123',
-    'carlos@insumosfa.com': 'ventas123',
-    'maria@insumosfa.com': 'compras123',
-    'pedro@insumosfa.com': 'almacen123',
-    'laura@insumosfa.com': 'admin123',
+    userId: r.id,
+    email: r.email,
+    name: r.name,
+    roles: r.roles as Role[],
+    active: r.active,
+    createdAt: r.created_at.split('T')[0],
   }
-})()
-
-function savePasswordMap() {
-  try { localStorage.setItem('erp_passwords', JSON.stringify(passwordMap)) } catch { /* ignore */ }
 }
 
 interface UsersState {
   users: User[]
-  addUser: (u: Omit<User, 'userId' | 'createdAt'>, password: string) => void
-  updateUser: (userId: string, data: Partial<User>) => void
-  deleteUser: (userId: string) => void
-  toggleUser: (userId: string) => void
-  changePassword: (userId: string, newPassword: string) => void
+  loading: boolean
+  loadUsers: () => Promise<void>
+  addUser: (u: Omit<User, 'userId' | 'createdAt'>, password: string) => Promise<void>
+  updateUser: (userId: string, data: Partial<User>) => Promise<void>
+  deleteUser: (userId: string) => Promise<void>
+  toggleUser: (userId: string) => Promise<void>
+  changePassword: (userId: string, newPassword: string) => Promise<void>
 }
 
-/** Devuelve true si el usuario tiene al menos uno de los roles indicados */
 export function hasRole(user: { roles: Role[] }, ...check: Role[]): boolean {
   return check.some(r => user.roles.includes(r))
 }
 
-export const useUsersStore = create<UsersState>()(
-  persist(
-    (set, get) => ({
-      users: SEED_USERS,
+export const useUsersStore = create<UsersState>()((set, get) => ({
+  users: [],
+  loading: false,
 
-      addUser(data, password) {
-        const safeData = { ...data, roles: data.roles.length ? data.roles : ['ventas' as Role] }
-        const user: User = {
-          ...safeData,
-          userId: `u${Date.now()}`,
-          createdAt: new Date().toISOString().split('T')[0],
-        }
-        passwordMap[user.email] = password
-        savePasswordMap()
-        set((s) => ({ users: [...s.users, user] }))
-      },
+  async loadUsers() {
+    set({ loading: true })
+    try {
+      const { data, error } = await supabase.rpc('erp_get_users')
+      if (!error && data) {
+        set({ users: (data as DbRow[]).map(toUser) })
+      }
+    } finally {
+      set({ loading: false })
+    }
+  },
 
-      updateUser(userId, data) {
-        set((s) => {
-          const prev = s.users.find(u => u.userId === userId)
-          if (data.email && prev && data.email !== prev.email) {
-            passwordMap[data.email] = passwordMap[prev.email] ?? ''
-            delete passwordMap[prev.email]
-            savePasswordMap()
-          }
-          return { users: s.users.map((u) => (u.userId === userId ? { ...u, ...data } : u)) }
-        })
-      },
+  async addUser(userData, password) {
+    const roles = userData.roles.length ? userData.roles : (['ventas'] as Role[])
+    const { data, error } = await supabase.rpc('erp_create_user', {
+      p_email: userData.email,
+      p_name: userData.name,
+      p_roles: roles,
+      p_password: password,
+    })
+    if (!error && data && (data as DbRow[]).length > 0) {
+      set(s => ({ users: [...s.users, toUser((data as DbRow[])[0])] }))
+    }
+  },
 
-      deleteUser(userId) {
-        set((s) => {
-          const user = s.users.find(u => u.userId === userId)
-          if (user) {
-            delete passwordMap[user.email]
-            savePasswordMap()
-          }
-          return { users: s.users.filter(u => u.userId !== userId) }
-        })
-      },
+  async updateUser(userId, data) {
+    const current = get().users.find(u => u.userId === userId)
+    if (!current) return
+    const updated = { ...current, ...data }
+    const { error } = await supabase.rpc('erp_update_user', {
+      p_id: userId,
+      p_email: updated.email,
+      p_name: updated.name,
+      p_roles: updated.roles,
+    })
+    if (!error) {
+      set(s => ({ users: s.users.map(u => u.userId === userId ? { ...u, ...data } : u) }))
+    }
+  },
 
-      toggleUser(userId) {
-        set((s) => ({ users: s.users.map((u) => (u.userId === userId ? { ...u, active: !u.active } : u)) }))
-      },
+  async deleteUser(userId) {
+    const { error } = await supabase.rpc('erp_delete_user', { p_id: userId })
+    if (!error) {
+      set(s => ({ users: s.users.filter(u => u.userId !== userId) }))
+    }
+  },
 
-      changePassword(userId, newPassword) {
-        const user = get().users.find(u => u.userId === userId)
-        if (user) {
-          passwordMap[user.email] = newPassword
-          savePasswordMap()
-        }
-      },
-    }),
-    { name: 'erp_users' }
-  )
-)
+  async toggleUser(userId) {
+    const user = get().users.find(u => u.userId === userId)
+    if (!user) return
+    const newActive = !user.active
+    const { error } = await supabase.rpc('erp_toggle_user', { p_id: userId, p_active: newActive })
+    if (!error) {
+      set(s => ({ users: s.users.map(u => u.userId === userId ? { ...u, active: newActive } : u) }))
+    }
+  },
+
+  async changePassword(userId, newPassword) {
+    await supabase.rpc('erp_change_password', { p_id: userId, p_password: newPassword })
+  },
+}))
