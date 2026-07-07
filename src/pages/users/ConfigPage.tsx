@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { useUsersStore } from '../../store/usersStore'
 import { useAuthStore } from '../../store/authStore'
 import { useConfigStore } from '../../store/configStore'
@@ -8,11 +8,7 @@ import { StatusBadge } from '../../components/ui/StatusBadge'
 import { Modal } from '../../components/ui/Modal'
 import { toast } from '../../store/toastStore'
 import type { User, Role } from '../../types'
-import {
-  Settings, Users, Building2, Plus, Edit2, Trash2,
-  ToggleLeft, ToggleRight, KeyRound, AlertCircle,
-  Upload, X, Save,
-} from 'lucide-react'
+import { Settings, Users, Building2, Plus, CreditCard as Edit2, Trash2, ToggleLeft, ToggleRight, KeyRound, CircleAlert as AlertCircle, Upload, X, Save } from 'lucide-react'
 
 // ── Roles ────────────────────────────────────────────────────────────────────
 const ROLES: Role[] = ['director', 'administracion', 'compras', 'ventas', 'operaciones', 'almacen']
@@ -59,15 +55,15 @@ function RolesSelector({ selected, onChange, disabled = false }: {
   )
 }
 
-const ADMIN_EMAIL = 'admin@insumosfa.com'
-
 export function ConfigPage() {
-  const { users, addUser, updateUser, deleteUser, toggleUser, changePassword } = useUsersStore()
+  const { users, loadUsers, addUser, updateUser, deleteUser, toggleUser, changePassword } = useUsersStore()
   const { user: me } = useAuthStore()
   const { company, updateCompany } = useConfigStore()
 
-  const isAdmin = me?.email === ADMIN_EMAIL
+  const isAdmin = me ? hasRole(me, 'director') : false
   const canEditCompany = me ? hasRole(me, 'director', 'administracion') : false
+
+  useEffect(() => { void loadUsers() }, [])
 
   // ── tabs ──────────────────────────────────────────────────────────────────
   const [tab, setTab] = useState<'empresa' | 'usuarios'>('empresa')
@@ -131,7 +127,7 @@ export function ConfigPage() {
 
   function handleSaveEdit() {
     if (!targetUser) return
-    updateUser(targetUser.userId, form)
+    void updateUser(targetUser.userId, form)
     toast.success('Usuario actualizado.')
     setModal(null)
   }
@@ -143,7 +139,7 @@ export function ConfigPage() {
     if (newForm.password !== newForm.confirm) { setNewError('Las contraseñas no coinciden.'); return }
     if (users.some(u => u.email === newForm.email)) { setNewError('Ya existe un usuario con ese nombre de usuario.'); return }
     const { password: _pw, confirm: _c, ...userData } = newForm
-    addUser(userData, newForm.password)
+    void addUser(userData, newForm.password)
     toast.success(`Usuario "${newForm.email}" creado.`)
     setModal(null)
   }
@@ -152,12 +148,12 @@ export function ConfigPage() {
     setPwdError('')
     if (pwdForm.newPwd.length < 6) { setPwdError('La contraseña debe tener al menos 6 caracteres.'); return }
     if (pwdForm.newPwd !== pwdForm.confirm) { setPwdError('Las contraseñas no coinciden.'); return }
-    if (targetUser) { changePassword(targetUser.userId, pwdForm.newPwd); toast.success('Contraseña actualizada.') }
+    if (targetUser) { void changePassword(targetUser.userId, pwdForm.newPwd); toast.success('Contraseña actualizada.') }
     setModal(null)
   }
 
   function handleDeleteUser() {
-    if (targetUser) { deleteUser(targetUser.userId); toast.success(`Usuario ${targetUser.email} eliminado.`) }
+    if (targetUser) { void deleteUser(targetUser.userId); toast.success(`Usuario ${targetUser.email} eliminado.`) }
     setModal(null)
   }
 
@@ -428,7 +424,7 @@ export function ConfigPage() {
                         </button>
                       )}
                       {canToggle(u) && (
-                        <button className="btn btn-secondary btn-sm" onClick={() => toggleUser(u.userId)} title={u.active ? 'Desactivar' : 'Activar'}>
+                        <button className="btn btn-secondary btn-sm" onClick={() => void toggleUser(u.userId)} title={u.active ? 'Desactivar' : 'Activar'}>
                           {u.active
                             ? <ToggleRight size={16} className="text-green-600" />
                             : <ToggleLeft size={16} className="text-gray-400" />}

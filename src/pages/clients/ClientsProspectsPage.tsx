@@ -11,10 +11,7 @@ import { Modal } from '../../components/ui/Modal'
 import { Currency } from '../../components/ui/Currency'
 import { toast } from '../../store/toastStore'
 import type { Client, Prospect, ProspectoEstatus } from '../../types'
-import {
-  Users, UserSearch, Plus, Edit2, Trash2,
-  UserCheck, ArrowRight, Info, AlertCircle,
-} from 'lucide-react'
+import { Users, UserSearch, Plus, CreditCard as Edit2, Trash2, UserCheck, ArrowRight, Info, CircleAlert as AlertCircle } from 'lucide-react'
 
 // ── Shared constants ─────────────────────────────────────────────────────────
 const REGIMENES = [
@@ -55,7 +52,7 @@ export function ClientsProspectsPage() {
   const [tab, setTab] = useState<'prospectos' | 'clientes'>('prospectos')
 
   // ── permissions ────────────────────────────────────────────────────────────
-  const canDeleteClient    = me ? hasRole(me, 'director', 'administracion') : false
+  const canDeleteClient    = me ? hasRole(me, 'director', 'administracion', 'ventas') : false
   const canDeleteProspect  = me ? hasRole(me, 'director', 'ventas', 'administracion') : false
   const canConvert         = me ? hasRole(me, 'director', 'ventas', 'administracion') : false
 
