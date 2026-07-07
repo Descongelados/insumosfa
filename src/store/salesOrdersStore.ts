@@ -16,7 +16,7 @@ export const useSalesOrdersStore = create<SalesOrdersState>()(
   persist(
     (set, get) => ({
       orders: SEED_SALES_ORDERS,
-      folioCounter: SEED_SALES_ORDERS.length + 1,
+      folioCounter: 1,
       addOrder(data) {
         const n = get().folioCounter
         const order: SalesOrder = {

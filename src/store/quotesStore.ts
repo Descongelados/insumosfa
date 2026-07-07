@@ -15,7 +15,7 @@ export const useQuotesStore = create<QuotesState>()(
   persist(
     (set, get) => ({
       quotes: SEED_QUOTES,
-      folioCounter: SEED_QUOTES.length + 1,
+      folioCounter: 1,
       addQuote(data) {
         const n = get().folioCounter
         const quote: Quote = {

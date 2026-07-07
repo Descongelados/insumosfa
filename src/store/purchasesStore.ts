@@ -20,7 +20,7 @@ export const usePurchasesStore = create<PurchasesState>()(
     (set, get) => ({
       solicitudes: SEED_SOLICITUDES,
       ordenesCompra: SEED_ORDENES_COMPRA,
-      ocCounter: SEED_ORDENES_COMPRA.length + 1,
+      ocCounter: 1,
       addSolicitud(data) {
         set((s) => ({ solicitudes: [...s.solicitudes, { ...data, solicitudId: `sc${Date.now()}` }] }))
       },

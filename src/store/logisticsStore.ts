@@ -19,7 +19,7 @@ export const useLogisticsStore = create<LogisticsState>()(
     (set, get) => ({
       embarques: SEED_EMBARQUES,
       transportistas: SEED_TRANSPORTISTAS,
-      embCounter: SEED_EMBARQUES.length + 1,
+      embCounter: 1,
       addEmbarque(data) {
         const n = get().embCounter
         const embarque: Embarque = {

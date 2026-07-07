@@ -32,8 +32,8 @@ export const useFinanceStore = create<FinanceState>()(
       facturasProveedor: SEED_FACTURAS_PROVEEDOR,
       pagosProveedores: SEED_PAGOS_PROVEEDORES,
       bancos: SEED_BANCOS,
-      fvCounter: SEED_FACTURAS_VENTA.length + 1,
-      fpCounter: SEED_FACTURAS_PROVEEDOR.length + 1,
+      fvCounter: 1,
+      fpCounter: 1,
 
       addFacturaVenta(data) {
         const n = get().fvCounter
