@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useEffect } from 'react'
 import { useClientsStore } from '../store/clientsStore'
 import { useProductsStore } from '../store/productsStore'
 import { useSalesOrdersStore } from '../store/salesOrdersStore'
@@ -11,10 +11,7 @@ import {
   PieChart, Pie, Cell, Legend
 } from 'recharts'
 import { Currency } from '../components/ui/Currency'
-import {
-  Users, Package, ShoppingCart, TrendingUp, AlertCircle,
-  DollarSign, Truck, BarChart2
-} from 'lucide-react'
+import { Users, Package, ShoppingCart, TrendingUp, CircleAlert as AlertCircle, DollarSign, Truck, ChartBar as BarChart2 } from 'lucide-react'
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6']
 
@@ -46,13 +43,15 @@ function fmt(ym: string) {
 }
 
 export function DashboardPage() {
-  const { clients } = useClientsStore()
-  const { products } = useProductsStore()
-  const { orders } = useSalesOrdersStore()
-  const { ordenesCompra } = usePurchasesStore()
-  const { facturasVenta, facturasProveedor, bancos } = useFinanceStore()
-  const { inventario } = useInventoryStore()
-  const { prospects } = useProspectsStore()
+  const { clients, loadClients } = useClientsStore()
+  const { products, loadProducts } = useProductsStore()
+  const { orders, loadOrders } = useSalesOrdersStore()
+  const { ordenesCompra, loadPurchases } = usePurchasesStore()
+  const { facturasVenta, facturasProveedor, bancos, loadFinance } = useFinanceStore()
+  const { inventario, loadInventory } = useInventoryStore()
+  const { prospects, loadProspects } = useProspectsStore()
+
+  useEffect(() => { void loadClients(); void loadProducts(); void loadOrders(); void loadPurchases(); void loadFinance(); void loadInventory(); void loadProspects() }, [])
 
   const totalVentas = orders.reduce((a, o) => a + o.total, 0)
   const cxcVencidas = facturasVenta.filter((f) => f.estatus === 'vencida').reduce((a, f) => a + f.saldoPendiente, 0)

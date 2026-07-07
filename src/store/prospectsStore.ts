@@ -1,56 +1,87 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
 import type { Prospect } from '../types'
-import { SEED_PROSPECTS } from '../data/seed'
+import { supabase } from '../lib/supabase'
 import { useClientsStore } from './clientsStore'
 
-/** Datos fiscales que se capturan al momento de convertir un prospecto a cliente */
 export interface DatosFiscales {
-  rfc: string
-  regimenFiscal: string
-  direccionFiscal: string
-  limiteCredito: number
+  rfc: string; regimenFiscal: string; direccionFiscal: string; limiteCredito: number
+}
+
+type DbProspect = {
+  id: string; empresa: string; contacto: string; correo: string
+  telefono: string; origen: string; estatus: string
+  valor_potencial: number; fecha_alta: string
+}
+
+function toProspect(r: DbProspect): Prospect {
+  return {
+    prospectoId: r.id, empresa: r.empresa, contacto: r.contacto,
+    correo: r.correo, telefono: r.telefono, origen: r.origen,
+    estatus: r.estatus as Prospect['estatus'],
+    valorPotencial: r.valor_potencial, fechaAlta: r.fecha_alta,
+  }
 }
 
 interface ProspectsState {
   prospects: Prospect[]
-  addProspect: (p: Omit<Prospect, 'prospectoId' | 'fechaAlta'>) => void
-  updateProspect: (id: string, data: Partial<Prospect>) => void
-  deleteProspect: (id: string) => void
-  /** Convierte un prospecto ganado en cliente y lo elimina de prospectos */
-  convertirACliente: (id: string, fiscal: DatosFiscales) => void
+  loading: boolean
+  loadProspects: () => Promise<void>
+  addProspect: (p: Omit<Prospect, 'prospectoId' | 'fechaAlta'>) => Promise<void>
+  updateProspect: (id: string, data: Partial<Prospect>) => Promise<void>
+  deleteProspect: (id: string) => Promise<void>
+  convertirACliente: (id: string, fiscal: DatosFiscales) => Promise<void>
 }
 
-export const useProspectsStore = create<ProspectsState>()(
-  persist(
-    (set, get) => ({
-      prospects: SEED_PROSPECTS,
-      addProspect(data) {
-        const p: Prospect = { ...data, prospectoId: `p${Date.now()}`, fechaAlta: new Date().toISOString().split('T')[0] }
-        set((s) => ({ prospects: [...s.prospects, p] }))
-      },
-      updateProspect(id, data) {
-        set((s) => ({ prospects: s.prospects.map((p) => (p.prospectoId === id ? { ...p, ...data } : p)) }))
-      },
-      deleteProspect(id) {
-        set((s) => ({ prospects: s.prospects.filter((p) => p.prospectoId !== id) }))
-      },
-      convertirACliente(id, fiscal) {
-        const prospect = get().prospects.find((p) => p.prospectoId === id)
-        if (!prospect) return
-        useClientsStore.getState().addClient({
-          razonSocial: prospect.empresa,
-          rfc: fiscal.rfc,
-          regimenFiscal: fiscal.regimenFiscal,
-          direccionFiscal: fiscal.direccionFiscal,
-          correo: prospect.correo,
-          telefono: prospect.telefono,
-          limiteCredito: fiscal.limiteCredito,
-          estatus: 'activo',
-        })
-        set((s) => ({ prospects: s.prospects.filter((p) => p.prospectoId !== id) }))
-      },
-    }),
-    { name: 'erp_prospects' }
-  )
-)
+export const useProspectsStore = create<ProspectsState>()((set, get) => ({
+  prospects: [], loading: false,
+
+  async loadProspects() {
+    set({ loading: true })
+    try {
+      const { data } = await supabase.from('erp_prospects').select('*').order('created_at', { ascending: false })
+      if (data) set({ prospects: (data as DbProspect[]).map(toProspect) })
+    } finally {
+      set({ loading: false })
+    }
+  },
+
+  async addProspect(data) {
+    await supabase.from('erp_prospects').insert({
+      empresa: data.empresa, contacto: data.contacto, correo: data.correo,
+      telefono: data.telefono, origen: data.origen, estatus: data.estatus,
+      valor_potencial: data.valorPotencial,
+    })
+    await get().loadProspects()
+  },
+
+  async updateProspect(id, data) {
+    const patch: Record<string, unknown> = {}
+    if (data.empresa !== undefined) patch.empresa = data.empresa
+    if (data.contacto !== undefined) patch.contacto = data.contacto
+    if (data.correo !== undefined) patch.correo = data.correo
+    if (data.telefono !== undefined) patch.telefono = data.telefono
+    if (data.origen !== undefined) patch.origen = data.origen
+    if (data.estatus !== undefined) patch.estatus = data.estatus
+    if (data.valorPotencial !== undefined) patch.valor_potencial = data.valorPotencial
+    await supabase.from('erp_prospects').update(patch).eq('id', id)
+    await get().loadProspects()
+  },
+
+  async deleteProspect(id) {
+    await supabase.from('erp_prospects').delete().eq('id', id)
+    set(s => ({ prospects: s.prospects.filter(p => p.prospectoId !== id) }))
+  },
+
+  async convertirACliente(id, fiscal) {
+    const prospect = get().prospects.find(p => p.prospectoId === id)
+    if (!prospect) return
+    await useClientsStore.getState().addClient({
+      razonSocial: prospect.empresa, rfc: fiscal.rfc,
+      regimenFiscal: fiscal.regimenFiscal, direccionFiscal: fiscal.direccionFiscal,
+      correo: prospect.correo, telefono: prospect.telefono,
+      limiteCredito: fiscal.limiteCredito, estatus: 'activo',
+    })
+    await supabase.from('erp_prospects').delete().eq('id', id)
+    await get().loadProspects()
+  },
+}))

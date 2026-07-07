@@ -1,63 +1,108 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
 import type { SalesOrder } from '../types'
-import { SEED_SALES_ORDERS } from '../data/seed'
+import { supabase } from '../lib/supabase'
 import { useFinanceStore } from './financeStore'
+
+type DbOrder = {
+  id: string; folio: string; cliente_id: string; cotizacion_id: string | null
+  fecha_pedido: string; fecha_entrega: string; estatus: string
+  items: unknown; subtotal: number; impuestos: number; total: number; notas: string
+}
+
+function toOrder(r: DbOrder): SalesOrder {
+  return {
+    pedidoId: r.id, folio: r.folio, clienteId: r.cliente_id,
+    cotizacionId: r.cotizacion_id ?? undefined,
+    fechaPedido: r.fecha_pedido, fechaEntrega: r.fecha_entrega,
+    estatus: r.estatus as SalesOrder['estatus'],
+    items: (r.items as SalesOrder['items']) ?? [],
+    subtotal: r.subtotal, impuestos: r.impuestos, total: r.total, notas: r.notas,
+  }
+}
+
+async function nextFolio(): Promise<string> {
+  const { count } = await supabase.from('erp_sales_orders').select('*', { count: 'exact', head: true })
+  return `PV-${String((count ?? 0) + 1).padStart(4, '0')}`
+}
 
 interface SalesOrdersState {
   orders: SalesOrder[]
-  folioCounter: number
-  addOrder: (o: Omit<SalesOrder, 'pedidoId' | 'folio'>) => SalesOrder
-  updateOrder: (id: string, data: Partial<SalesOrder>) => void
-  deleteOrder: (id: string) => void
+  loading: boolean
+  loadOrders: () => Promise<void>
+  addOrder: (o: Omit<SalesOrder, 'pedidoId' | 'folio'>) => Promise<SalesOrder>
+  updateOrder: (id: string, data: Partial<SalesOrder>) => Promise<void>
+  deleteOrder: (id: string) => Promise<void>
 }
 
-export const useSalesOrdersStore = create<SalesOrdersState>()(
-  persist(
-    (set, get) => ({
-      orders: SEED_SALES_ORDERS,
-      folioCounter: 1,
-      addOrder(data) {
-        const n = get().folioCounter
-        const order: SalesOrder = {
-          ...data,
-          pedidoId: `so${Date.now()}`,
-          folio: `PV-${String(n).padStart(4, '0')}`,
+export const useSalesOrdersStore = create<SalesOrdersState>()((set, get) => ({
+  orders: [], loading: false,
+
+  async loadOrders() {
+    set({ loading: true })
+    try {
+      const { data } = await supabase.from('erp_sales_orders').select('*').order('created_at', { ascending: false })
+      if (data) set({ orders: (data as DbOrder[]).map(toOrder) })
+    } finally {
+      set({ loading: false })
+    }
+  },
+
+  async addOrder(data) {
+    const folio = await nextFolio()
+    const { data: row } = await supabase
+      .from('erp_sales_orders')
+      .insert({
+        folio, cliente_id: data.clienteId, cotizacion_id: data.cotizacionId ?? null,
+        fecha_pedido: data.fechaPedido, fecha_entrega: data.fechaEntrega,
+        estatus: data.estatus, items: data.items,
+        subtotal: data.subtotal, impuestos: data.impuestos, total: data.total, notas: data.notas,
+      })
+      .select('*')
+      .maybeSingle()
+    await get().loadOrders()
+    return row ? toOrder(row as DbOrder) : { ...data, pedidoId: '', folio }
+  },
+
+  async updateOrder(id, data) {
+    const patch: Record<string, unknown> = {}
+    if (data.clienteId !== undefined) patch.cliente_id = data.clienteId
+    if (data.cotizacionId !== undefined) patch.cotizacion_id = data.cotizacionId
+    if (data.fechaPedido !== undefined) patch.fecha_pedido = data.fechaPedido
+    if (data.fechaEntrega !== undefined) patch.fecha_entrega = data.fechaEntrega
+    if (data.estatus !== undefined) patch.estatus = data.estatus
+    if (data.items !== undefined) patch.items = data.items
+    if (data.subtotal !== undefined) patch.subtotal = data.subtotal
+    if (data.impuestos !== undefined) patch.impuestos = data.impuestos
+    if (data.total !== undefined) patch.total = data.total
+    if (data.notas !== undefined) patch.notas = data.notas
+    await supabase.from('erp_sales_orders').update(patch).eq('id', id)
+
+    if (data.estatus === 'facturado') {
+      const orders = get().orders
+      const order = orders.find(o => o.pedidoId === id)
+      if (order) {
+        const { count } = await supabase
+          .from('erp_invoices_sale')
+          .select('*', { count: 'exact', head: true })
+          .eq('pedido_id', id)
+        if ((count ?? 0) === 0) {
+          const today = new Date().toISOString().split('T')[0]
+          const venc = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+          await useFinanceStore.getState().addFacturaVenta({
+            clienteId: order.clienteId, pedidoId: order.pedidoId,
+            fecha: today, fechaVencimiento: venc,
+            subtotal: order.subtotal, impuestos: order.impuestos,
+            total: order.total, saldoPendiente: order.total, estatus: 'emitida',
+          })
         }
-        set((s) => ({ orders: [order, ...s.orders], folioCounter: s.folioCounter + 1 }))
-        return order
-      },
-      updateOrder(id, data) {
-        set((s) => ({ orders: s.orders.map((o) => (o.pedidoId === id ? { ...o, ...data } : o)) }))
-        // When an order is marked as 'facturado', automatically create a FacturaVenta in Finance
-        if (data.estatus === 'facturado') {
-          const order = get().orders.find((o) => o.pedidoId === id)
-          if (order) {
-            const alreadyExists = useFinanceStore.getState().facturasVenta.some(
-              (f) => f.pedidoId === id
-            )
-            if (!alreadyExists) {
-              const today = new Date().toISOString().split('T')[0]
-              const venc = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-              useFinanceStore.getState().addFacturaVenta({
-                clienteId: order.clienteId,
-                pedidoId: order.pedidoId,
-                fecha: today,
-                fechaVencimiento: venc,
-                subtotal: order.subtotal,
-                impuestos: order.impuestos,
-                total: order.total,
-                saldoPendiente: order.total,
-                estatus: 'emitida',
-              })
-            }
-          }
-        }
-      },
-      deleteOrder(id) {
-        set((s) => ({ orders: s.orders.filter((o) => o.pedidoId !== id) }))
-      },
-    }),
-    { name: 'erp_sales_orders' }
-  )
-)
+      }
+    }
+
+    await get().loadOrders()
+  },
+
+  async deleteOrder(id) {
+    await supabase.from('erp_sales_orders').delete().eq('id', id)
+    set(s => ({ orders: s.orders.filter(o => o.pedidoId !== id) }))
+  },
+}))

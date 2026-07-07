@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { useQuotesStore } from '../../store/quotesStore'
 import { useSalesOrdersStore } from '../../store/salesOrdersStore'
@@ -59,12 +59,14 @@ function printQuoteInIframe(quote: Quote, client: Client | undefined, products: 
 }
 
 export function QuotesPage() {
-  const { quotes, addQuote, updateQuote, deleteQuote } = useQuotesStore()
+  const { quotes, loadQuotes, addQuote, updateQuote, deleteQuote } = useQuotesStore()
   const { addOrder } = useSalesOrdersStore()
-  const { clients } = useClientsStore()
-  const { products } = useProductsStore()
+  const { clients, loadClients } = useClientsStore()
+  const { products, loadProducts } = useProductsStore()
   const { user: me } = useAuthStore()
   const { company } = useConfigStore()
+
+  useEffect(() => { void loadQuotes(); void loadClients(); void loadProducts() }, [])
 
   const canDelete = me ? hasRole(me, ...DELETE_ROLES) : false
 
@@ -110,12 +112,11 @@ export function QuotesPage() {
     setForm((f) => ({ ...f, items: f.items.filter((_, i) => i !== idx) }))
   }
 
-  // ── Save new ───────────────────────────────────────────────────────────────
-  function handleSave() {
+  async function handleSave() {
     if (!form.clienteId) { toast.error('Selecciona un cliente.'); return }
     if (form.items.length === 0) { toast.error('Agrega al menos una partida.'); return }
     const { subtotal, impuestos, total } = calcTotals(form.items)
-    const quote = addQuote({ ...form, fecha: new Date().toISOString().split('T')[0], subtotal, impuestos, total, estatus: 'borrador' })
+    const quote = await addQuote({ ...form, fecha: new Date().toISOString().split('T')[0], subtotal, impuestos, total, estatus: 'borrador' })
     toast.success(`Cotización ${quote.folio} creada.`)
     setModal(null)
     setForm({ clienteId: '', vigencia: '', notas: '', items: [] })
@@ -124,8 +125,8 @@ export function QuotesPage() {
   }
 
   // ── Convert to order ───────────────────────────────────────────────────────
-  function convertirAPedido(quote: Quote) {
-    const order = addOrder({
+  async function convertirAPedido(quote: Quote) {
+    const order = await addOrder({
       clienteId: quote.clienteId,
       cotizacionId: quote.cotizacionId,
       fechaPedido: new Date().toISOString().split('T')[0],
@@ -137,7 +138,7 @@ export function QuotesPage() {
       total: quote.total,
       notas: quote.notas,
     })
-    updateQuote(quote.cotizacionId, { estatus: 'aceptada' })
+    void updateQuote(quote.cotizacionId, { estatus: 'aceptada' })
     toast.success(`Pedido ${order.folio} creado desde ${quote.folio}.`)
     setModal(null)
   }

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { usePurchasesStore } from '../../store/purchasesStore'
 import { useSuppliersStore } from '../../store/suppliersStore'
 import { useProductsStore } from '../../store/productsStore'
@@ -12,16 +12,19 @@ import { Modal } from '../../components/ui/Modal'
 import { Currency } from '../../components/ui/Currency'
 import { toast } from '../../store/toastStore'
 import type { OrdenCompra, OrdenCompraItem, OrdenCompraEstatus } from '../../types'
-import { ClipboardList, Plus, CheckCircle, Trash2 } from 'lucide-react'
+import { ClipboardList, Plus, CircleCheck as CheckCircle, Trash2 } from 'lucide-react'
 
 const OC_ESTADOS: OrdenCompraEstatus[] = ['borrador', 'emitida', 'confirmada', 'recibida', 'cerrada']
 
 export function PurchasesPage() {
-  const { solicitudes, updateSolicitud, deleteSolicitud, ordenesCompra, addOrdenCompra, updateOrdenCompra, deleteOrdenCompra } = usePurchasesStore()
-  const { suppliers } = useSuppliersStore()
-  const { products } = useProductsStore()
-  const { applyMovimiento } = useInventoryStore()
+  const { solicitudes, updateSolicitud, deleteSolicitud, ordenesCompra, loadPurchases, addOrdenCompra, updateOrdenCompra, deleteOrdenCompra } = usePurchasesStore()
+  const { suppliers, loadSuppliers } = useSuppliersStore()
+  const { products, loadProducts } = useProductsStore()
+  const { applyMovimiento, loadInventory } = useInventoryStore()
   const { user } = useAuthStore()
+
+  useEffect(() => { void loadPurchases(); void loadSuppliers(); void loadProducts(); void loadInventory() }, [])
+
   const [q, setQ] = useState('')
   const [tab, setTab] = useState<'oc' | 'sol'>('oc')
   const [modal, setModal] = useState<'new' | 'view' | 'del_oc' | 'del_sol' | null>(null)
@@ -49,10 +52,10 @@ export function PurchasesPage() {
   }
   function removeItem(idx: number) { setForm(f => ({ ...f, items: f.items.filter((_, i) => i !== idx) })) }
 
-  function handleSave() {
+  async function handleSave() {
     if (form.items.length === 0) { toast.error('Agrega al menos un producto a la OC.'); return }
     const monto = form.items.reduce((a, it) => a + it.cantidad * it.precioUnitario, 0)
-    const oc = addOrdenCompra({ ...form, fecha: new Date().toISOString().split('T')[0], monto, estatus: 'borrador' })
+    const oc = await addOrdenCompra({ ...form, fecha: new Date().toISOString().split('T')[0], monto, estatus: 'borrador' })
     toast.success(`OC ${oc.folio} creada.`)
     setModal(null)
     setForm({ supplierId: '', fechaEntregaEsperada: '', notas: '', items: [] })

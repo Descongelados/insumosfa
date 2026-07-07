@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useInventoryStore } from '../../store/inventoryStore'
 import { useProductsStore } from '../../store/productsStore'
 import { useAuthStore } from '../../store/authStore'
@@ -8,7 +8,7 @@ import { Modal } from '../../components/ui/Modal'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { toast } from '../../store/toastStore'
 import type { MovimientoTipo } from '../../types'
-import { Warehouse, PlusCircle, History } from 'lucide-react'
+import { Warehouse, CirclePlus as PlusCircle, History } from 'lucide-react'
 
 const TIPOS: MovimientoTipo[] = ['EntradaCompra', 'SalidaVenta', 'Transferencia', 'Ajuste', 'Merma', 'Devolucion']
 const TIPO_LABELS: Record<MovimientoTipo, string> = {
@@ -17,9 +17,12 @@ const TIPO_LABELS: Record<MovimientoTipo, string> = {
 }
 
 export function InventoryPage() {
-  const { inventario, kardex, applyMovimiento } = useInventoryStore()
-  const { products } = useProductsStore()
+  const { inventario, kardex, loadInventory, applyMovimiento } = useInventoryStore()
+  const { products, loadProducts } = useProductsStore()
   const { user } = useAuthStore()
+
+  useEffect(() => { void loadInventory(); void loadProducts() }, [])
+
   const [q, setQ] = useState('')
   const [view, setView] = useState<'stock' | 'kardex'>('stock')
   const [modal, setModal] = useState(false)

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useSalesOrdersStore } from '../../store/salesOrdersStore'
 import { useClientsStore } from '../../store/clientsStore'
 import { useProductsStore } from '../../store/productsStore'
@@ -11,17 +11,20 @@ import { Modal } from '../../components/ui/Modal'
 import { Currency } from '../../components/ui/Currency'
 import { toast } from '../../store/toastStore'
 import type { SalesOrder, SalesOrderItem, PedidoEstatus } from '../../types'
-import { ShoppingCart, Edit2, Plus, Trash2 } from 'lucide-react'
+import { ShoppingCart, CreditCard as Edit2, Plus, Trash2 } from 'lucide-react'
 
 // 'facturado' moves to Finance — excluded from active pipeline display
 const ESTADOS: PedidoEstatus[] = ['nuevo', 'confirmado', 'surtiendo', 'embarcado', 'entregado', 'facturado', 'cerrado']
 const ESTADOS_ACTIVOS: PedidoEstatus[] = ['nuevo', 'confirmado', 'surtiendo', 'embarcado', 'entregado', 'cerrado']
 
 export function SalesOrdersPage() {
-  const { orders, addOrder, updateOrder, deleteOrder } = useSalesOrdersStore()
-  const { clients } = useClientsStore()
-  const { products } = useProductsStore()
+  const { orders, loadOrders, addOrder, updateOrder, deleteOrder } = useSalesOrdersStore()
+  const { clients, loadClients } = useClientsStore()
+  const { products, loadProducts } = useProductsStore()
   const { user: me } = useAuthStore()
+
+  useEffect(() => { void loadOrders(); void loadClients(); void loadProducts() }, [])
+
   const [q, setQ] = useState('')
   const [modal, setModal] = useState<'edit' | 'new' | 'del' | null>(null)
   const [sel, setSel] = useState<SalesOrder | null>(null)
@@ -66,13 +69,13 @@ export function SalesOrdersPage() {
   }
   function removeItem(idx: number) { setForm(f => ({ ...f, items: f.items.filter((_, i) => i !== idx) })) }
 
-  function handleSaveNew() {
+  async function handleSaveNew() {
     if (!form.clienteId) { toast.error('Selecciona un cliente.'); return }
     if (form.items.length === 0) { toast.error('Agrega al menos una partida.'); return }
     const subtotal = form.items.reduce((a, it) => a + it.cantidad * it.precio * (1 - it.descuento / 100), 0)
     const impuestos = subtotal * 0.16
     const total = subtotal + impuestos
-    const order = addOrder({ ...form, fechaPedido: new Date().toISOString().split('T')[0], estatus: 'nuevo', subtotal, impuestos, total })
+    const order = await addOrder({ ...form, fechaPedido: new Date().toISOString().split('T')[0], estatus: 'nuevo', subtotal, impuestos, total })
     toast.success(`Pedido ${order.folio} creado.`)
     setModal(null)
     setForm({ clienteId: '', fechaEntrega: '', notas: '', items: [] })

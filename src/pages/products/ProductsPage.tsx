@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useProductsStore } from '../../store/productsStore'
 import { useAuthStore } from '../../store/authStore'
 import { hasRole } from '../../store/usersStore'
@@ -9,7 +9,7 @@ import { Modal } from '../../components/ui/Modal'
 import { Currency } from '../../components/ui/Currency'
 import { toast } from '../../store/toastStore'
 import type { Product } from '../../types'
-import { Plus, Edit2, Trash2, Package, ToggleLeft, ToggleRight, AlertCircle } from 'lucide-react'
+import { Plus, CreditCard as Edit2, Trash2, Package, ToggleLeft, ToggleRight, CircleAlert as AlertCircle } from 'lucide-react'
 
 // Roles que pueden eliminar productos
 const DELETE_ROLES = ['director', 'administracion', 'compras'] as const
@@ -23,8 +23,10 @@ const BLANK: Omit<Product, 'productId'> = {
 }
 
 export function ProductsPage() {
-  const { products, addProduct, updateProduct, deleteProduct, toggleProduct } = useProductsStore()
+  const { products, loadProducts, addProduct, updateProduct, deleteProduct, toggleProduct } = useProductsStore()
   const { user: me } = useAuthStore()
+
+  useEffect(() => { void loadProducts() }, [])
 
   const canDelete = me ? hasRole(me, ...DELETE_ROLES) : false
 

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useLogisticsStore } from '../../store/logisticsStore'
 import { useAuthStore } from '../../store/authStore'
 import { hasRole } from '../../store/usersStore'
@@ -10,7 +10,7 @@ import { StatusBadge } from '../../components/ui/StatusBadge'
 import { Modal } from '../../components/ui/Modal'
 import { Currency } from '../../components/ui/Currency'
 import type { Embarque, EmbarqueEstatus, Transportista } from '../../types'
-import { Truck, Plus, Edit2, Trash2, AlertCircle, ToggleLeft, ToggleRight } from 'lucide-react'
+import { Truck, Plus, CreditCard as Edit2, Trash2, CircleAlert as AlertCircle, ToggleLeft, ToggleRight } from 'lucide-react'
 
 // ─── constantes ────────────────────────────────────────────────────────────
 const ESTADOS: EmbarqueEstatus[] = ['solicitado', 'programado', 'recolectado', 'enTransito', 'entregado', 'cerrado']
@@ -35,12 +35,14 @@ const TRANS_MANAGE_ROLES = ['director', 'operaciones', 'almacen'] as const
 // ─── componente ────────────────────────────────────────────────────────────
 export function LogisticsPage() {
   const {
-    embarques, transportistas,
+    embarques, transportistas, loadLogistics,
     addEmbarque, updateEmbarque,
     addTransportista, updateTransportista, deleteTransportista,
   } = useLogisticsStore()
-  const { orders } = useSalesOrdersStore()
+  const { orders, loadOrders } = useSalesOrdersStore()
   const { user: me } = useAuthStore()
+
+  useEffect(() => { void loadLogistics(); void loadOrders() }, [])
 
   const canManageTrans = me ? hasRole(me, ...TRANS_MANAGE_ROLES) : false
 

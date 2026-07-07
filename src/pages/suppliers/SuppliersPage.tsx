@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useSuppliersStore } from '../../store/suppliersStore'
 import { useAuthStore } from '../../store/authStore'
 import { hasRole } from '../../store/usersStore'
@@ -8,7 +8,7 @@ import { StatusBadge } from '../../components/ui/StatusBadge'
 import { Modal } from '../../components/ui/Modal'
 import { toast } from '../../store/toastStore'
 import type { Supplier } from '../../types'
-import { Plus, Edit2, Trash2, Building2, Star, AlertCircle } from 'lucide-react'
+import { Plus, CreditCard as Edit2, Trash2, Building2, Star, CircleAlert as AlertCircle } from 'lucide-react'
 
 // Roles que pueden eliminar proveedores
 const DELETE_ROLES = ['director', 'administracion', 'compras'] as const
@@ -32,8 +32,10 @@ function ScoreBar({ value }: { value: number }) {
 }
 
 export function SuppliersPage() {
-  const { suppliers, addSupplier, updateSupplier, deleteSupplier } = useSuppliersStore()
+  const { suppliers, loadSuppliers, addSupplier, updateSupplier, deleteSupplier } = useSuppliersStore()
   const { user: me } = useAuthStore()
+
+  useEffect(() => { void loadSuppliers() }, [])
 
   const canDelete = me ? hasRole(me, ...DELETE_ROLES) : false
 

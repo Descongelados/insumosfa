@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useClientsStore } from '../../store/clientsStore'
 import { useProspectsStore } from '../../store/prospectsStore'
 import type { DatosFiscales } from '../../store/prospectsStore'
@@ -45,9 +45,11 @@ const BLANK_CLIENT: Omit<Client, 'clientId' | 'fechaAlta'> = {
 
 // ─────────────────────────────────────────────────────────────────────────────
 export function ClientsProspectsPage() {
-  const { clients, updateClient, deleteClient } = useClientsStore()
-  const { prospects, addProspect, updateProspect, deleteProspect, convertirACliente } = useProspectsStore()
+  const { clients, loadClients, updateClient, deleteClient } = useClientsStore()
+  const { prospects, loadProspects, addProspect, updateProspect, deleteProspect, convertirACliente } = useProspectsStore()
   const { user: me } = useAuthStore()
+
+  useEffect(() => { void loadClients(); void loadProspects() }, [])
 
   const [tab, setTab] = useState<'prospectos' | 'clientes'>('prospectos')
 

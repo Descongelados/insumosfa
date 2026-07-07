@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useFinanceStore } from '../../store/financeStore'
 import { useClientsStore } from '../../store/clientsStore'
 import { useSuppliersStore } from '../../store/suppliersStore'
@@ -12,11 +12,7 @@ import { Modal } from '../../components/ui/Modal'
 import { Currency } from '../../components/ui/Currency'
 import { toast } from '../../store/toastStore'
 import type { FacturaVenta, SalesOrder, Banco } from '../../types'
-import {
-  DollarSign, CreditCard, Building, Eye,
-  CheckCircle, Clock, FileText, Plus,
-  Edit2, Trash2, History, PlusCircle,
-} from 'lucide-react'
+import { DollarSign, CreditCard, Building, Eye, CircleCheck as CheckCircle, Clock, FileText, Plus, CreditCard as Edit2, Trash2, History, CirclePlus as PlusCircle } from 'lucide-react'
 
 const MXN = (v: number) => v.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })
 const FORMAS_PAGO = ['Transferencia', 'Cheque', 'Efectivo', 'Tarjeta']
@@ -24,16 +20,18 @@ const FORMAS_PAGO = ['Transferencia', 'Cheque', 'Efectivo', 'Tarjeta']
 export function FinancePage() {
   const {
     facturasVenta, pagosClientes,
-    facturasProveedor, bancos,
+    facturasProveedor, bancos, loadFinance,
     addPagoCliente, addPagoProveedor,
     addFacturaProveedor,
     addBanco, updateBanco, deleteBanco,
   } = useFinanceStore()
-  const { clients } = useClientsStore()
-  const { suppliers } = useSuppliersStore()
+  const { clients, loadClients } = useClientsStore()
+  const { suppliers, loadSuppliers } = useSuppliersStore()
   const { orders } = useSalesOrdersStore()
   const { products } = useProductsStore()
   const { user: me } = useAuthStore()
+
+  useEffect(() => { void loadFinance(); void loadClients(); void loadSuppliers() }, [])
 
   const canManageBancos = me ? hasRole(me, 'director', 'administracion') : false
 
@@ -116,13 +114,13 @@ export function FinancePage() {
     setPagoForm({ monto: 0, formaPago: 'Transferencia', referencia: '' })
   }
 
-  function handleSaveFP() {
+  async function handleSaveFP() {
     if (!fpForm.supplierId) { toast.error('Selecciona un proveedor.'); return }
     if (fpForm.monto <= 0) { toast.error('El monto debe ser mayor a cero.'); return }
     if (!fpForm.fechaVencimiento) { toast.error('Ingresa la fecha de vencimiento.'); return }
     const subtotal = fpForm.monto / 1.16
     const impuestos = fpForm.monto - subtotal
-    const fp = addFacturaProveedor({
+    const fp = await addFacturaProveedor({
       supplierId: fpForm.supplierId,
       fecha: fpForm.fecha,
       fechaVencimiento: fpForm.fechaVencimiento,

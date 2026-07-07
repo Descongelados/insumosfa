@@ -1,55 +1,92 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
 import type { Inventario, KardexMovimiento, MovimientoTipo } from '../types'
-import { SEED_INVENTARIO, SEED_KARDEX } from '../data/seed'
+import { supabase } from '../lib/supabase'
+
+type DbInv = {
+  id: string; product_id: string; cantidad_disponible: number
+  cantidad_comprometida: number; cantidad_transito: number
+}
+type DbKardex = {
+  id: string; product_id: string; fecha: string; usuario: string
+  documento_origen: string; tipo: string; cantidad: number
+  existencia_anterior: number; existencia_nueva: number; notas: string
+}
+
+function toInv(r: DbInv): Inventario {
+  return {
+    inventarioId: r.id, productId: r.product_id,
+    cantidadDisponible: r.cantidad_disponible,
+    cantidadComprometida: r.cantidad_comprometida,
+    cantidadTransito: r.cantidad_transito,
+  }
+}
+function toKardex(r: DbKardex): KardexMovimiento {
+  return {
+    movimientoId: r.id, productId: r.product_id, fecha: r.fecha,
+    usuario: r.usuario, documentoOrigen: r.documento_origen,
+    tipo: r.tipo as MovimientoTipo, cantidad: r.cantidad,
+    existenciaAnterior: r.existencia_anterior,
+    existenciaNueva: r.existencia_nueva, notas: r.notas,
+  }
+}
 
 interface InventoryState {
   inventario: Inventario[]
   kardex: KardexMovimiento[]
+  loading: boolean
+  loadInventory: () => Promise<void>
   applyMovimiento: (params: {
-    productId: string
-    tipo: MovimientoTipo
-    cantidad: number
-    documentoOrigen: string
-    usuario: string
-    notas?: string
-  }) => void
+    productId: string; tipo: MovimientoTipo; cantidad: number
+    documentoOrigen: string; usuario: string; notas?: string
+  }) => Promise<void>
   getStock: (productId: string) => number
 }
 
-export const useInventoryStore = create<InventoryState>()(
-  persist(
-    (set, get) => ({
-      inventario: SEED_INVENTARIO,
-      kardex: SEED_KARDEX,
+export const useInventoryStore = create<InventoryState>()((set, get) => ({
+  inventario: [], kardex: [], loading: false,
 
-      getStock(productId) {
-        return get().inventario.find((i) => i.productId === productId)?.cantidadDisponible ?? 0
-      },
+  getStock(productId) {
+    return get().inventario.find(i => i.productId === productId)?.cantidadDisponible ?? 0
+  },
 
-      applyMovimiento({ productId, tipo, cantidad, documentoOrigen, usuario, notas = '' }) {
-        set((s) => {
-          const inv = s.inventario.find((i) => i.productId === productId)
-          const anterior = inv?.cantidadDisponible ?? 0
-          const esEntrada = ['EntradaCompra', 'Devolucion'].includes(tipo)
-          const nueva = esEntrada ? anterior + cantidad : Math.max(0, anterior - cantidad)
+  async loadInventory() {
+    set({ loading: true })
+    try {
+      const [{ data: id }, { data: kd }] = await Promise.all([
+        supabase.from('erp_inventory').select('*'),
+        supabase.from('erp_kardex').select('*').order('created_at', { ascending: false }).limit(500),
+      ])
+      if (id) set({ inventario: (id as DbInv[]).map(toInv) })
+      if (kd) set({ kardex: (kd as DbKardex[]).map(toKardex) })
+    } finally {
+      set({ loading: false })
+    }
+  },
 
-          const movimiento: KardexMovimiento = {
-            movimientoId: `k${Date.now()}`,
-            productId, tipo, cantidad, documentoOrigen, usuario, notas,
-            fecha: new Date().toISOString().split('T')[0],
-            existenciaAnterior: anterior,
-            existenciaNueva: nueva,
-          }
+  async applyMovimiento({ productId, tipo, cantidad, documentoOrigen, usuario, notas = '' }) {
+    const existing = get().inventario.find(i => i.productId === productId)
+    const anterior = existing?.cantidadDisponible ?? 0
+    const esEntrada = ['EntradaCompra', 'Devolucion'].includes(tipo)
+    const nueva = esEntrada ? anterior + cantidad : Math.max(0, anterior - cantidad)
 
-          const updatedInv = inv
-            ? s.inventario.map((i) => i.productId === productId ? { ...i, cantidadDisponible: nueva } : i)
-            : [...s.inventario, { inventarioId: `i${Date.now()}`, productId, cantidadDisponible: nueva, cantidadComprometida: 0, cantidadTransito: 0 }]
+    if (existing) {
+      await supabase
+        .from('erp_inventory')
+        .update({ cantidad_disponible: nueva, updated_at: new Date().toISOString() })
+        .eq('product_id', productId)
+    } else {
+      await supabase.from('erp_inventory').insert({
+        product_id: productId, cantidad_disponible: nueva,
+        cantidad_comprometida: 0, cantidad_transito: 0,
+      })
+    }
 
-          return { inventario: updatedInv, kardex: [movimiento, ...s.kardex] }
-        })
-      },
-    }),
-    { name: 'erp_inventory' }
-  )
-)
+    await supabase.from('erp_kardex').insert({
+      product_id: productId, tipo, cantidad, documento_origen: documentoOrigen,
+      usuario, notas, fecha: new Date().toISOString().split('T')[0],
+      existencia_anterior: anterior, existencia_nueva: nueva,
+    })
+
+    await get().loadInventory()
+  },
+}))
