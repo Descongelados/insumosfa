@@ -6,6 +6,7 @@ import { useClientsStore } from '../../store/clientsStore'
 import { useProductsStore } from '../../store/productsStore'
 import { useAuthStore } from '../../store/authStore'
 import { hasRole } from '../../store/usersStore'
+import { useConfigStore, type CompanyInfo } from '../../store/configStore'
 import { DataTable } from '../../components/ui/DataTable'
 import { SearchBar } from '../../components/ui/SearchBar'
 import { StatusBadge } from '../../components/ui/StatusBadge'
@@ -21,9 +22,9 @@ const ESTADOS: CotizacionEstatus[] = ['borrador', 'enviada', 'aceptada', 'rechaz
 const DELETE_ROLES = ['director', 'administracion', 'ventas'] as const
 
 // ── Print via hidden iframe (no app chrome bleeds into output) ───────────────
-function printQuoteInIframe(quote: Quote, client: Client | undefined, products: Product[]) {
+function printQuoteInIframe(quote: Quote, client: Client | undefined, products: Product[], company: CompanyInfo) {
   const html = renderToStaticMarkup(
-    <QuotePDF quote={quote} client={client} products={products} />
+    <QuotePDF quote={quote} client={client} products={products} companyOverride={company} />
   )
   const doc = `<!DOCTYPE html>
 <html lang="es">
@@ -63,6 +64,7 @@ export function QuotesPage() {
   const { clients } = useClientsStore()
   const { products } = useProductsStore()
   const { user: me } = useAuthStore()
+  const { company } = useConfigStore()
 
   const canDelete = me ? hasRole(me, ...DELETE_ROLES) : false
 
@@ -149,7 +151,7 @@ export function QuotesPage() {
   // ── PDF Export (iframe print) ──────────────────────────────────────────────
   function handlePrint(quote: Quote) {
     const client = clients.find(c => c.clientId === quote.clienteId)
-    printQuoteInIframe(quote, client, products)
+    printQuoteInIframe(quote, client, products, company)
   }
 
   // ── Share helpers ──────────────────────────────────────────────────────────

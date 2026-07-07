@@ -1,16 +1,19 @@
 import { forwardRef } from 'react'
 import type { Quote, Client, Product } from '../types'
+import { useConfigStore, type CompanyInfo } from '../store/configStore'
 
 interface Props {
   quote: Quote
   client: Client | undefined
   products: Product[]
+  /** Optional override — pass when rendering outside React context (e.g. iframe print) */
+  companyOverride?: CompanyInfo
 }
 
-/** Renders a formal, print-ready quotation document.
- *  Wrap in a container with id="quote-pdf-root" for window.print() targeting.
- */
-export const QuotePDF = forwardRef<HTMLDivElement, Props>(({ quote, client, products }, ref) => {
+/** Renders a formal, print-ready quotation document. */
+export const QuotePDF = forwardRef<HTMLDivElement, Props>(({ quote, client, products, companyOverride }, ref) => {
+  const { company: storeCompany } = useConfigStore()
+  const company = companyOverride ?? storeCompany
   const mxn = (v: number) => v.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })
 
   return (
@@ -31,14 +34,27 @@ export const QuotePDF = forwardRef<HTMLDivElement, Props>(({ quote, client, prod
       {/* ── HEADER ─────────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 32, borderBottom: '3px solid #1e40af', paddingBottom: 20 }}>
         {/* Company */}
-        <div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: '#1e40af', letterSpacing: '-0.5px' }}>InsumosFa</div>
-          <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>Distribución Industrial y Comercial</div>
-          <div style={{ fontSize: 11, color: '#6b7280', marginTop: 6, lineHeight: 1.7 }}>
-            Av. Industrial 1200, Parque Norte<br />
-            Monterrey, N.L. · C.P. 64720<br />
-            Tel: (81) 8000-1234 · ventas@insumosfa.com<br />
-            RFC: IFA210301AB3
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
+          {company.logoUrl && (
+            <img
+              src={company.logoUrl}
+              alt="Logo"
+              style={{ width: 60, height: 60, objectFit: 'contain', flexShrink: 0 }}
+            />
+          )}
+          <div>
+            <div style={{ fontSize: 26, fontWeight: 800, color: '#1e40af', letterSpacing: '-0.5px' }}>
+              {company.nombre}
+            </div>
+            <div style={{ fontSize: 11, color: '#6b7280', marginTop: 6, lineHeight: 1.8 }}>
+              {company.direccion && <div>{company.direccion}</div>}
+              <div>
+                {company.telefono && `Tel: ${company.telefono}`}
+                {company.telefono && company.correo && ' · '}
+                {company.correo}
+              </div>
+              {company.rfc && <div>RFC: {company.rfc}</div>}
+            </div>
           </div>
         </div>
         {/* Folio box */}
@@ -167,8 +183,11 @@ export const QuotePDF = forwardRef<HTMLDivElement, Props>(({ quote, client, prod
 
       {/* ── FOOTER ─────────────────────────────────────────────────────── */}
       <div style={{ marginTop: 28, textAlign: 'center', fontSize: 10, color: '#9ca3af', borderTop: '1px solid #f3f4f6', paddingTop: 12 }}>
-        InsumosFa · Distribución Industrial y Comercial · ventas@insumosfa.com · (81) 8000-1234<br />
-        Este documento fue generado electrónicamente por InsumosFa ERP — {quote.folio}
+        {company.nombre}
+        {company.correo && ` · ${company.correo}`}
+        {company.telefono && ` · ${company.telefono}`}
+        <br />
+        Este documento fue generado electrónicamente por {company.nombre} ERP — {quote.folio}
       </div>
     </div>
   )

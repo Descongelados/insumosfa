@@ -15,7 +15,7 @@ import { SuppliersPage } from './pages/suppliers/SuppliersPage'
 import { PurchasesPage } from './pages/purchases/PurchasesPage'
 import { LogisticsPage } from './pages/logistics/LogisticsPage'
 import { FinancePage } from './pages/finance/FinancePage'
-import { UsersPage } from './pages/users/UsersPage'
+import { ConfigPage } from './pages/users/ConfigPage'
 
 /** Requiere autenticación Y que el usuario tenga acceso a la ruta */
 function RequireAuth({ path, children }: { path: string; children: React.ReactNode }) {
@@ -66,7 +66,7 @@ export function App() {
       <Route path="/compras" element={<RequireAuth path="/compras"><PurchasesPage /></RequireAuth>} />
       <Route path="/logistica" element={<RequireAuth path="/logistica"><LogisticsPage /></RequireAuth>} />
       <Route path="/finanzas" element={<RequireAuth path="/finanzas"><FinancePage /></RequireAuth>} />
-      <Route path="/usuarios" element={<RequireAuth path="/usuarios"><UsersPage /></RequireAuth>} />
+      <Route path="/configuracion" element={<RequireAuth path="/configuracion"><ConfigPage /></RequireAuth>} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

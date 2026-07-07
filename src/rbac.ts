@@ -18,7 +18,7 @@ export const ROUTE_ROLES: Record<string, Role[]> = {
   '/compras':     ['director', 'compras', 'operaciones', 'almacen'],
   '/logistica':   ['director', 'operaciones', 'almacen'],
   '/finanzas':    ['director', 'administracion'],
-  '/usuarios':    ['director', 'administracion', 'compras', 'ventas', 'operaciones', 'almacen'], // todos ven el módulo, pero con restricciones internas
+  '/configuracion': ['director', 'administracion', 'compras', 'ventas', 'operaciones', 'almacen'], // todos ven el módulo, pero con restricciones internas
 }
 
 /** Devuelve true si alguno de los roles del usuario da acceso a la ruta */
@@ -35,7 +35,7 @@ export function canAccess(userRoles: Role[] | undefined | null, path: string): b
  */
 import {
   LayoutDashboard, Users, UserSearch, FileText, ShoppingCart,
-  Package, Warehouse, Building2, ClipboardList, Truck, DollarSign,
+  Package, Warehouse, Building2, ClipboardList, Truck, DollarSign, Settings,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
@@ -114,9 +114,9 @@ export const NAV_ITEMS: NavItem[] = [
     roles: ['director', 'administracion'],
   },
   {
-    label: 'Usuarios',
-    icon: Users,
-    to: '/usuarios',
+    label: 'Configuración',
+    icon: Settings,
+    to: '/configuracion',
     roles: ['director', 'administracion', 'compras', 'ventas', 'operaciones', 'almacen'],
   },
 ]
