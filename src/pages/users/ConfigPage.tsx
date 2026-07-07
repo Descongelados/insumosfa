@@ -138,13 +138,13 @@ export function ConfigPage() {
 
   function handleSaveNew() {
     setNewError('')
-    if (!newForm.name || !newForm.email) { setNewError('Nombre y correo son obligatorios.'); return }
+    if (!newForm.name || !newForm.email) { setNewError('Nombre y usuario son obligatorios.'); return }
     if (newForm.password.length < 6) { setNewError('La contraseña debe tener al menos 6 caracteres.'); return }
     if (newForm.password !== newForm.confirm) { setNewError('Las contraseñas no coinciden.'); return }
-    if (users.some(u => u.email === newForm.email)) { setNewError('Ya existe un usuario con ese correo.'); return }
+    if (users.some(u => u.email === newForm.email)) { setNewError('Ya existe un usuario con ese nombre de usuario.'); return }
     const { password: _pw, confirm: _c, ...userData } = newForm
     addUser(userData, newForm.password)
-    toast.success(`Usuario ${newForm.email} creado.`)
+    toast.success(`Usuario "${newForm.email}" creado.`)
     setModal(null)
   }
 
@@ -397,7 +397,7 @@ export function ConfigPage() {
               rowKey={(u) => u.userId}
               columns={[
                 { key: 'name', header: 'Nombre' },
-                { key: 'email', header: 'Correo' },
+                { key: 'email', header: 'Usuario' },
                 {
                   key: 'roles', header: 'Roles',
                   render: (u) => (
@@ -467,8 +467,8 @@ export function ConfigPage() {
                 onChange={e => setNewForm(f => ({ ...f, name: e.target.value }))} />
             </div>
             <div className="form-group">
-              <label className="label">Correo electrónico *</label>
-              <input type="email" className="input" value={newForm.email}
+              <label className="label">Usuario *</label>
+              <input type="text" className="input" value={newForm.email} placeholder="ej. jperez"
                 onChange={e => setNewForm(f => ({ ...f, email: e.target.value }))} />
             </div>
             <div className="form-group">
@@ -502,8 +502,8 @@ export function ConfigPage() {
               <input className="input" value={form.name} onChange={F('name')} />
             </div>
             <div className="form-group">
-              <label className="label">Correo electrónico *</label>
-              <input type="email" className="input" value={form.email} onChange={F('email')} />
+              <label className="label">Usuario *</label>
+              <input type="text" className="input" value={form.email} onChange={F('email')} />
             </div>
             {isAdmin && (
               <div className="form-group">
