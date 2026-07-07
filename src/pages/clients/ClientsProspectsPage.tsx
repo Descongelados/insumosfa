@@ -403,7 +403,7 @@ export function ClientsProspectsPage() {
             <p className="text-sm text-gray-500">Completa los datos fiscales para finalizar el alta:</p>
             <div className="form-grid">
               <div className="form-group">
-                <label className="label">RFC *</label>
+                <label className="label">RFC</label>
                 <input className="input" value={fiscal.rfc} onChange={FF('rfc')} maxLength={13} placeholder="Ej. AAA010101AAA" />
               </div>
               <div className="form-group">
@@ -453,7 +453,7 @@ export function ClientsProspectsPage() {
               <input className="input" value={cForm.razonSocial} onChange={FC('razonSocial')} />
             </div>
             <div className="form-group">
-              <label className="label">RFC *</label>
+              <label className="label">RFC</label>
               <input className="input" value={cForm.rfc} onChange={FC('rfc')} maxLength={13} />
             </div>
             <div className="form-group">
