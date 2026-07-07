@@ -6,7 +6,7 @@ interface Props {
   quote: Quote
   client: Client | undefined
   products: Product[]
-  /** Optional override — pass when rendering outside React context (e.g. iframe print) */
+  /** Optional override - pass when rendering outside React context (e.g. iframe print) */
   companyOverride?: CompanyInfo
 }
 
@@ -15,6 +15,14 @@ export const QuotePDF = forwardRef<HTMLDivElement, Props>(({ quote, client, prod
   const { company: storeCompany } = useConfigStore()
   const company = companyOverride ?? storeCompany
   const mxn = (v: number) => v.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })
+
+  // Resolver datos del cliente: registrado tiene prioridad; si no, usar datos manuales
+  const nombreCliente = client?.razonSocial ?? quote.clienteNombre ?? '—'
+  const rfcCliente    = client?.rfc ?? quote.clienteRfc ?? ''
+  const correoCliente = client?.correo ?? quote.clienteCorreo ?? ''
+  const telCliente    = client?.telefono ?? quote.clienteTelefono ?? ''
+  const regimenCliente = client?.regimenFiscal ?? ''
+  const dirCliente     = client?.direccionFiscal ?? ''
 
   return (
     <div
@@ -85,15 +93,22 @@ export const QuotePDF = forwardRef<HTMLDivElement, Props>(({ quote, client, prod
           Estimado cliente
         </div>
         <div style={{ background: '#f0f4ff', border: '1px solid #c7d2fe', borderRadius: 8, padding: '14px 18px' }}>
-          <div style={{ fontSize: 16, fontWeight: 700, color: '#1e40af', marginBottom: 4 }}>
-            {client?.razonSocial ?? '—'}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: '#1e40af' }}>
+              {nombreCliente}
+            </div>
+            {!client && (
+              <span style={{ fontSize: 10, fontWeight: 600, background: '#fef3c7', color: '#92400e', padding: '1px 8px', borderRadius: 20 }}>
+                EVENTUAL
+              </span>
+            )}
           </div>
           <div style={{ color: '#374151', lineHeight: 1.8, fontSize: 12 }}>
-            {client?.rfc && <div>RFC: {client.rfc}</div>}
-            {client?.regimenFiscal && <div>{client.regimenFiscal}</div>}
-            {client?.direccionFiscal && <div>{client.direccionFiscal}</div>}
-            {client?.correo && <div>Correo: {client.correo}</div>}
-            {client?.telefono && <div>Tel: {client.telefono}</div>}
+            {rfcCliente && <div>RFC: {rfcCliente}</div>}
+            {regimenCliente && <div>{regimenCliente}</div>}
+            {dirCliente && <div>{dirCliente}</div>}
+            {correoCliente && <div>Correo: {correoCliente}</div>}
+            {telCliente && <div>Tel: {telCliente}</div>}
           </div>
         </div>
       </div>
@@ -210,12 +225,6 @@ function TotalRow({ label, value }: { label: string; value: string }) {
     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 12px', fontSize: 12, color: '#374151' }}>
       <span>{label}</span><span style={{ fontWeight: 500 }}>{value}</span>
     </div>
-  )
-}
-
-function Cond({ label, value }: { label: string; value: string }) {
-  return (
-    <div><span style={{ fontWeight: 600, color: '#374151' }}>{label}: </span>{value}</div>
   )
 }
 
