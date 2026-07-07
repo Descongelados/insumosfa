@@ -7,9 +7,8 @@ import type { Role } from './types'
  * explícitamente para que sea legible y fácil de auditar.
  */
 export const ROUTE_ROLES: Record<string, Role[]> = {
-  '/':            ['director', 'administracion', 'compras', 'ventas', 'operaciones', 'almacen'],
-  '/clientes':    ['director', 'administracion', 'ventas'],
-  '/prospectos':  ['director', 'ventas'],
+  '/':                      ['director', 'administracion', 'compras', 'ventas', 'operaciones', 'almacen'],
+  '/clientes-prospectos':   ['director', 'administracion', 'ventas'],
   '/cotizaciones':['director', 'ventas'],
   '/pedidos':     ['director', 'ventas', 'operaciones'],
   '/productos':   ['director', 'administracion', 'compras', 'ventas', 'almacen', 'operaciones'],
@@ -35,7 +34,7 @@ export function canAccess(userRoles: Role[] | undefined | null, path: string): b
  */
 import {
   LayoutDashboard, Users, UserSearch, FileText, ShoppingCart,
-  Package, Warehouse, Building2, ClipboardList, Truck, DollarSign, Settings,
+  Package, Warehouse, Building2, ClipboardList, Truck, DollarSign, Settings, UsersRound,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
@@ -54,16 +53,10 @@ export const NAV_ITEMS: NavItem[] = [
     roles: ['director', 'administracion', 'compras', 'ventas', 'operaciones', 'almacen'],
   },
   {
-    label: 'Clientes',
-    icon: Users,
-    to: '/clientes',
+    label: 'Clientes & Prospectos',
+    icon: UsersRound,
+    to: '/clientes-prospectos',
     roles: ['director', 'administracion', 'ventas'],
-  },
-  {
-    label: 'Prospectos',
-    icon: UserSearch,
-    to: '/prospectos',
-    roles: ['director', 'ventas'],
   },
   {
     label: 'Cotizaciones',

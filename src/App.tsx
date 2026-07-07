@@ -5,8 +5,7 @@ import { Layout } from './components/Layout'
 import { Toaster } from './components/ui/Toaster'
 import { LoginPage } from './pages/Login'
 import { DashboardPage } from './pages/Dashboard'
-import { ClientsPage } from './pages/clients/ClientsPage'
-import { ProspectsPage } from './pages/prospects/ProspectsPage'
+import { ClientsProspectsPage } from './pages/clients/ClientsProspectsPage'
 import { QuotesPage } from './pages/quotes/QuotesPage'
 import { SalesOrdersPage } from './pages/sales/SalesOrdersPage'
 import { ProductsPage } from './pages/products/ProductsPage'
@@ -56,8 +55,7 @@ export function App() {
       <Route path="/sin-acceso" element={<AccesoDenegado />} />
 
       <Route path="/" element={<RequireAuth path="/"><DashboardPage /></RequireAuth>} />
-      <Route path="/clientes" element={<RequireAuth path="/clientes"><ClientsPage /></RequireAuth>} />
-      <Route path="/prospectos" element={<RequireAuth path="/prospectos"><ProspectsPage /></RequireAuth>} />
+      <Route path="/clientes-prospectos" element={<RequireAuth path="/clientes-prospectos"><ClientsProspectsPage /></RequireAuth>} />
       <Route path="/cotizaciones" element={<RequireAuth path="/cotizaciones"><QuotesPage /></RequireAuth>} />
       <Route path="/pedidos" element={<RequireAuth path="/pedidos"><SalesOrdersPage /></RequireAuth>} />
       <Route path="/productos" element={<RequireAuth path="/productos"><ProductsPage /></RequireAuth>} />
