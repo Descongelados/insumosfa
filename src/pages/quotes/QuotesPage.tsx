@@ -59,14 +59,14 @@ function printQuoteInIframe(quote: Quote, client: Client | undefined, products: 
 }
 
 export function QuotesPage() {
-  const { quotes, loadQuotes, addQuote, updateQuote, deleteQuote } = useQuotesStore()
+  const { quotes, loadQuotes, subscribeRealtime, addQuote, updateQuote, deleteQuote } = useQuotesStore()
   const { addOrder } = useSalesOrdersStore()
   const { clients, loadClients } = useClientsStore()
   const { products, loadProducts } = useProductsStore()
   const { user: me } = useAuthStore()
   const { company } = useConfigStore()
 
-  useEffect(() => { void loadQuotes(); void loadClients(); void loadProducts() }, [])
+  useEffect(() => { void loadQuotes(); void loadClients(); void loadProducts(); return subscribeRealtime() }, [])
 
   const canDelete = me ? hasRole(me, ...DELETE_ROLES) : false
 
