@@ -36,7 +36,7 @@ function ClienteBadge({ qt }: { qt: Quote }) {
     </span>
   ) : (
     <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
-      <User size={11} /> Eventual
+      <User size={11} /> Sin registro
     </span>
   )
 }
@@ -381,7 +381,7 @@ export function QuotesPage() {
                       : 'border-gray-300 text-gray-600 hover:bg-gray-50'
                   }`}
                 >
-                  <User size={15} /> Eventual (sin registro)
+                  <User size={15} /> Cliente sin registro
                 </button>
               </div>
             </div>
@@ -406,7 +406,7 @@ export function QuotesPage() {
             ) : (
               <div className="space-y-3 p-3 bg-amber-50 border border-amber-200 rounded-xl">
                 <p className="text-xs text-amber-700 font-medium">
-                  Datos del cliente eventual — se guardan en la cotización y aparecen en el PDF y al compartir.
+                  Datos del cliente sin registro — se guardan en la cotización y aparecen en el PDF y al compartir.
                 </p>
                 <div className="form-grid">
                   <div className="form-group sm:col-span-2">
@@ -523,7 +523,7 @@ export function QuotesPage() {
                 <div className="overflow-y-auto max-h-[560px] bg-white p-2">
                   <QuotePDF
                     quote={buildPreviewQuote()}
-                    client={clients.find(c => c.clientId === form.clienteId)}
+                    client={form.clienteMode === 'registrado' ? clients.find(c => c.clientId === form.clienteId) : undefined}
                     products={products}
                     atiende={atiende}
                   />
