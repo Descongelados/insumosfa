@@ -91,6 +91,11 @@ export function QuotesPage() {
   const { user: me }                   = useAuthStore()
   const { company }                    = useConfigStore()
 
+  /** Nombre comercial del vendedor según el usuario logueado */
+  const atiende = me?.email?.toLowerCase().includes('ramon') || me?.name?.toLowerCase().includes('ramon')
+    ? 'Ramon Haro Fernandez'
+    : 'Wilfredo Diaz Carpio'
+
   // Carga inicial + suscripción realtime para ver cotizaciones de otros usuarios
   useEffect(() => {
     void loadQuotes()
@@ -212,7 +217,7 @@ export function QuotesPage() {
   // ── PDF ───────────────────────────────────────────────────────────────────
   function handlePrint(quote: Quote) {
     const client = clients.find(c => c.clientId === quote.clienteId)
-    printQuoteInIframe(quote, client, products, company, me?.name)
+    printQuoteInIframe(quote, client, products, company, atiende)
   }
 
   // ── share — funciona tanto para registrados como para eventuales ──────────
@@ -520,7 +525,7 @@ export function QuotesPage() {
                     quote={buildPreviewQuote()}
                     client={clients.find(c => c.clientId === form.clienteId)}
                     products={products}
-                    atiende={me?.name}
+                    atiende={atiende}
                   />
                 </div>
               </div>
@@ -616,7 +621,7 @@ export function QuotesPage() {
                 quote={selQuote}
                 client={clients.find(c => c.clientId === selQuote.clienteId)}
                 products={products}
-                atiende={me?.name}
+                atiende={atiende}
               />
             </div>
           </div>
