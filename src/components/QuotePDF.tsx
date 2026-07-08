@@ -2,245 +2,393 @@ import { forwardRef } from 'react'
 import type { Quote, Client, Product } from '../types'
 import { useConfigStore, type CompanyInfo } from '../store/configStore'
 
+// Color principal del documento (teal de la imagen)
+const TEAL = '#4a8c8c'
+const TEAL_DARK = '#3a7070'
+
 interface Props {
   quote: Quote
   client: Client | undefined
   products: Product[]
-  /** Optional override — pass when rendering outside React context (e.g. iframe print) */
+  /** Nombre del usuario que elabora la cotización */
+  atiende?: string
+  /** Optional override - pass when rendering outside React context (e.g. iframe print) */
   companyOverride?: CompanyInfo
 }
 
-/** Renders a formal, print-ready quotation document. */
-export const QuotePDF = forwardRef<HTMLDivElement, Props>(({ quote, client, products, companyOverride }, ref) => {
-  const { company: storeCompany } = useConfigStore()
-  const company = companyOverride ?? storeCompany
-  const mxn = (v: number) => v.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })
+/** Renders a formal, print-ready quotation document matching the F&A format. */
+export const QuotePDF = forwardRef<HTMLDivElement, Props>(
+  ({ quote, client, products, atiende, companyOverride }, ref) => {
+    const { company: storeCompany } = useConfigStore()
+    const company = companyOverride ?? storeCompany
 
-  return (
-    <div
-      ref={ref}
-      id="quote-pdf-root"
-      style={{
-        fontFamily: "'Segoe UI', system-ui, sans-serif",
-        fontSize: '13px',
-        color: '#1f2328',
-        background: '#fff',
-        padding: '40px 48px',
-        maxWidth: '780px',
-        margin: '0 auto',
-        lineHeight: 1.5,
-      }}
-    >
-      {/* ── HEADER ─────────────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 32, borderBottom: '3px solid #1e40af', paddingBottom: 20 }}>
-        {/* Company */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
-          {company.logoUrl && (
-            <img
-              src={company.logoUrl}
-              alt="Logo"
-              style={{ width: 60, height: 60, objectFit: 'contain', flexShrink: 0 }}
-            />
-          )}
-          <div>
-            <div style={{ fontSize: 26, fontWeight: 800, color: '#1e40af', letterSpacing: '-0.5px' }}>
-              {company.nombre}
-            </div>
-            <div style={{ fontSize: 11, color: '#6b7280', marginTop: 6, lineHeight: 1.8 }}>
-              {company.direccion && <div>{company.direccion}</div>}
-              <div>
-                {company.telefono && `Tel: ${company.telefono}`}
-                {company.telefono && company.correo && ' · '}
-                {company.correo}
-              </div>
-              {company.rfc && <div>RFC: {company.rfc}</div>}
-            </div>
-          </div>
-        </div>
-        {/* Folio box */}
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ background: '#1e40af', color: '#fff', padding: '6px 18px', borderRadius: 8, fontWeight: 700, fontSize: 16, marginBottom: 8 }}>
+    // Nombre del cliente (registrado o eventual)
+    const nombreCliente =
+      client?.razonSocial ?? quote.clienteNombre ?? '—'
+    const rfcCliente    = client?.rfc ?? quote.clienteRfc ?? ''
+    const correoCliente = client?.correo ?? quote.clienteCorreo ?? ''
+    const telCliente    = client?.telefono ?? quote.clienteTelefono ?? ''
+
+    // Vigencia en texto corto (ej: "15 días")
+    const vigenciaLabel = quote.vigencia
+      ? formatDateShort(quote.vigencia)
+      : '15 días'
+
+    return (
+      <div
+        ref={ref}
+        id="quote-pdf-root"
+        style={{
+          fontFamily: "'Segoe UI', Arial, system-ui, sans-serif",
+          fontSize: '12px',
+          color: '#1a1a1a',
+          background: '#fff',
+          padding: '28px 36px',
+          maxWidth: '800px',
+          margin: '0 auto',
+          lineHeight: 1.45,
+        }}
+      >
+
+        {/* ── HEADER BANNER ─────────────────────────────────────────────── */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr auto 1fr',
+          alignItems: 'center',
+          marginBottom: 16,
+        }}>
+          {/* Columna izquierda — vacía para balance */}
+          <div />
+
+          {/* Centro — banner teal "COTIZACIÓN" */}
+          <div style={{
+            background: TEAL,
+            color: '#fff',
+            fontWeight: 700,
+            fontSize: 20,
+            letterSpacing: 3,
+            textTransform: 'uppercase',
+            padding: '10px 60px',
+            textAlign: 'center',
+            borderRadius: 4,
+          }}>
             COTIZACIÓN
           </div>
-          <div style={{ fontSize: 22, fontWeight: 800, color: '#1e40af' }}>{quote.folio}</div>
-          <div style={{ fontSize: 11, color: '#6b7280', marginTop: 6, lineHeight: 1.8 }}>
-            <div><span style={{ fontWeight: 600 }}>Fecha:</span> {formatDate(quote.fecha)}</div>
-            <div><span style={{ fontWeight: 600 }}>Vigencia:</span> {quote.vigencia ? formatDate(quote.vigencia) : '15 días'}</div>
-            <div style={{ marginTop: 4 }}>
-              <span style={{
-                display: 'inline-block', padding: '2px 10px', borderRadius: 20,
-                background: statusColor(quote.estatus).bg, color: statusColor(quote.estatus).text,
-                fontWeight: 600, fontSize: 11
+
+          {/* Derecha — logo */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            {company.logoUrl ? (
+              <img
+                src={company.logoUrl}
+                alt="Logo"
+                style={{ width: 80, height: 80, objectFit: 'contain' }}
+              />
+            ) : (
+              <div style={{
+                width: 80, height: 80, borderRadius: '50%',
+                border: `3px solid ${TEAL}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontWeight: 900, fontSize: 22, color: TEAL, letterSpacing: -1,
               }}>
-                {quote.estatus.toUpperCase()}
-              </span>
+                {initials(company.nombre)}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── DATOS EMPRESA ─────────────────────────────────────────────── */}
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ fontWeight: 700, fontSize: 14 }}>{company.nombre}</div>
+          {company.rfc && (
+            <div style={{ fontSize: 11, color: '#333' }}>R.F.C. {company.rfc}</div>
+          )}
+          {company.direccion && (
+            <div style={{ fontSize: 11, color: '#333', textTransform: 'uppercase' }}>
+              {company.direccion}
             </div>
+          )}
+          {(company.telefono || company.correo) && (
+            <div style={{ fontSize: 11, color: '#555', marginTop: 2 }}>
+              {company.telefono && `Tel: ${company.telefono}`}
+              {company.telefono && company.correo && '  ·  '}
+              {company.correo}
+            </div>
+          )}
+        </div>
+
+        {/* ── BLOQUE ATENCIÓN + FOLIO ───────────────────────────────────── */}
+        <div style={{ display: 'flex', gap: 16, marginBottom: 18, alignItems: 'flex-start' }}>
+
+          {/* Tabla Atención a / Atiende */}
+          <div style={{ flex: 1 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <tbody>
+                <InfoRow label="Atención a:" value={nombreCliente.toUpperCase()} />
+                <InfoRow label="Atiende:"    value={(atiende ?? company.nombre).toUpperCase()} />
+                {rfcCliente    && <InfoRow label="RFC cliente:" value={rfcCliente} />}
+                {correoCliente && <InfoRow label="Correo:"      value={correoCliente} />}
+                {telCliente    && <InfoRow label="Teléfono:"    value={telCliente} />}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Tabla Fecha / Folio / Vigencia */}
+          <div style={{ flexShrink: 0, minWidth: 160 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+              <tbody>
+                <FolioRow label="Fecha:"    value={formatDateShort(quote.fecha)} />
+                <FolioRow label="Folio:"    value={quote.folio} bold />
+                <FolioRow label="Vigencia:" value={vigenciaLabel} />
+              </tbody>
+            </table>
           </div>
         </div>
-      </div>
 
-      {/* ── CLIENTE ────────────────────────────────────────────────────── */}
-      <div style={{ marginBottom: 28 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>
-          Estimado cliente
+        {/* ── TEXTO INTRO ──────────────────────────────────────────────── */}
+        <div style={{ marginBottom: 16, fontSize: 12 }}>
+          <span style={{ fontWeight: 700 }}>Estimado Cliente:</span>
+          <br />
+          Sirva la presente para enviarle un afectuoso saludo y, a su vez,
+          proporcionarle el precio del producto que nos solicitó y que a continuación le presentamos:
         </div>
-        <div style={{ background: '#f0f4ff', border: '1px solid #c7d2fe', borderRadius: 8, padding: '14px 18px' }}>
-          <div style={{ fontSize: 16, fontWeight: 700, color: '#1e40af', marginBottom: 4 }}>
-            {client?.razonSocial ?? '—'}
+
+        {/* ── TABLA DE PRODUCTOS ───────────────────────────────────────── */}
+        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 16, fontSize: 11 }}>
+          <thead>
+            <tr style={{ background: TEAL, color: '#fff' }}>
+              <Th align="left"  w="28%">Descripción</Th>
+              <Th align="center" w="8%">Unidad</Th>
+              <Th align="center" w="18%">Especificaciones</Th>
+              <Th align="center" w="15%">Presentación</Th>
+              <Th align="center" w="10%">Papel</Th>
+              <Th align="right"  w="10%">Cantidades mínimas</Th>
+              <Th align="right"  w="11%">Precio Unitario</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {quote.items.map((it, idx) => {
+              const prod     = products.find(p => p.productId === it.productId)
+              const rowBg    = idx % 2 === 0 ? '#ffffff' : '#f5f5f5'
+              return (
+                <tr key={it.detalleId} style={{ background: rowBg }}>
+                  <td style={tdStyle('left')}>
+                    <span style={{ fontWeight: 600, fontSize: 11 }}>
+                      {prod?.descripcion ?? '—'}
+                    </span>
+                    {it.descuento > 0 && (
+                      <span style={{ marginLeft: 6, color: '#059669', fontSize: 10, fontWeight: 600 }}>
+                        -{it.descuento}%
+                      </span>
+                    )}
+                  </td>
+                  <td style={tdStyle('center')}>{prod?.unidadMedida ?? ''}</td>
+                  {/* Especificaciones: usando campo marca como especificación */}
+                  <td style={{ ...tdStyle('center'), fontSize: 10 }}>
+                    {prod?.marca ?? ''}
+                  </td>
+                  {/* Presentación: usando categoría del producto */}
+                  <td style={{ ...tdStyle('center'), fontSize: 10 }}>
+                    {prod?.categoria ?? ''}
+                  </td>
+                  {/* Papel: vacío por defecto — campo libre */}
+                  <td style={tdStyle('center')}></td>
+                  <td style={tdStyle('right')}>
+                    {it.cantidad.toLocaleString('es-MX', { minimumFractionDigits: 3, maximumFractionDigits: 3 })}
+                  </td>
+                  <td style={{ ...tdStyle('right'), fontWeight: 600 }}>
+                    {fmtMXN(it.precio)}
+                  </td>
+                </tr>
+              )
+            })}
+            {/* Fila de totales */}
+            <tr style={{ background: '#f0f0f0' }}>
+              <td colSpan={5} style={{ ...tdStyle('right'), fontSize: 11, paddingRight: 12 }}>
+                Subtotal:
+              </td>
+              <td colSpan={2} style={{ ...tdStyle('right'), fontWeight: 600 }}>
+                {fmtMXN(quote.subtotal)}
+              </td>
+            </tr>
+            <tr style={{ background: '#f0f0f0' }}>
+              <td colSpan={5} style={{ ...tdStyle('right'), fontSize: 11, paddingRight: 12 }}>
+                IVA (16%):
+              </td>
+              <td colSpan={2} style={{ ...tdStyle('right'), fontWeight: 600 }}>
+                {fmtMXN(quote.impuestos)}
+              </td>
+            </tr>
+            <tr style={{ background: TEAL }}>
+              <td colSpan={5} style={{ ...tdStyle('right'), color: '#fff', fontWeight: 700, paddingRight: 12 }}>
+                TOTAL:
+              </td>
+              <td colSpan={2} style={{ ...tdStyle('right'), color: '#fff', fontWeight: 700, fontSize: 13 }}>
+                {fmtMXN(quote.total)}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        {/* ── FORMA DE ENVÍO ────────────────────────────────────────────── */}
+        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 20, fontSize: 11 }}>
+          <tbody>
+            <tr>
+              <td style={{
+                background: TEAL, color: '#fff', fontWeight: 600,
+                padding: '5px 12px', width: '16%', textAlign: 'center',
+              }}>
+                Forma de envío:
+              </td>
+              <EnvioCell label="Granel" />
+              <EnvioCell label="" />
+              <EnvioCell label="Unitizado" />
+              <td style={{ ...envioTd, textAlign: 'center', fontWeight: 600 }}>x</td>
+              <EnvioCell label="Entarimado" />
+            </tr>
+          </tbody>
+        </table>
+
+        {/* ── NOTAS ─────────────────────────────────────────────────────── */}
+        {quote.notas && (
+          <div style={{ marginBottom: 16, padding: '8px 12px', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 4, fontSize: 11 }}>
+            <span style={{ fontWeight: 700 }}>Notas: </span>{quote.notas}
           </div>
-          <div style={{ color: '#374151', lineHeight: 1.8, fontSize: 12 }}>
-            {client?.rfc && <div>RFC: {client.rfc}</div>}
-            {client?.regimenFiscal && <div>{client.regimenFiscal}</div>}
-            {client?.direccionFiscal && <div>{client.direccionFiscal}</div>}
-            {client?.correo && <div>Correo: {client.correo}</div>}
-            {client?.telefono && <div>Tel: {client.telefono}</div>}
-          </div>
+        )}
+
+        {/* ── TÉRMINOS Y CONDICIONES ────────────────────────────────────── */}
+        <div style={{ marginBottom: 20, fontSize: 11 }}>
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>Términos y condiciones:</div>
+          <ul style={{ paddingLeft: 14, margin: 0, lineHeight: 2 }}>
+            <li>Precios + IVA,</li>
+            <li>Moneda: MXN,</li>
+            <li>
+              <strong>Precios LAB en <em>{company.direccion?.split(',')[0] ?? company.nombre}</em></strong>
+            </li>
+            <li>
+              Forma de Pago:{' '}
+              <strong>50 % Anticipo 50 % contra entrega.</strong>
+            </li>
+            <li>Precios sujetos a cambio sin previo aviso,</li>
+            <li>Precios considerados para las cantidades mínimas señaladas,</li>
+            <li>Tiempo de entrega: 1 - 2 Días</li>
+          </ul>
+        </div>
+
+        {/* ── FOOTER ────────────────────────────────────────────────────── */}
+        <div style={{
+          marginTop: 24, textAlign: 'center', fontSize: 10,
+          color: '#888', borderTop: '1px solid #e5e7eb', paddingTop: 10,
+        }}>
+          {company.nombre}
+          {company.correo    && ` · ${company.correo}`}
+          {company.telefono  && ` · ${company.telefono}`}
+          <br />
+          Documento generado electrónicamente — {quote.folio}
         </div>
       </div>
-
-      {/* ── INTRO ──────────────────────────────────────────────────────── */}
-      <div style={{ marginBottom: 20, fontSize: 12, color: '#374151' }}>
-        Por medio de la presente, tenemos el agrado de presentarle nuestra cotización de los siguientes productos y servicios, sujeta a los términos y condiciones indicados al final del documento.
-      </div>
-
-      {/* ── TABLA DE PARTIDAS ──────────────────────────────────────────── */}
-      <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 20, fontSize: 12 }}>
-        <thead>
-          <tr style={{ background: '#1e40af', color: '#fff' }}>
-            <th style={th}>#</th>
-            <th style={{ ...th, textAlign: 'left' }}>SKU</th>
-            <th style={{ ...th, textAlign: 'left', width: '38%' }}>Descripción</th>
-            <th style={{ ...th, textAlign: 'right' }}>U/M</th>
-            <th style={{ ...th, textAlign: 'right' }}>Cant.</th>
-            <th style={{ ...th, textAlign: 'right' }}>Precio Unit.</th>
-            <th style={{ ...th, textAlign: 'right' }}>Desc.</th>
-            <th style={{ ...th, textAlign: 'right' }}>Importe</th>
-          </tr>
-        </thead>
-        <tbody>
-          {quote.items.map((it, idx) => {
-            const prod = products.find(p => p.productId === it.productId)
-            const importe = it.cantidad * it.precio * (1 - it.descuento / 100)
-            const rowBg = idx % 2 === 0 ? '#ffffff' : '#f8fafc'
-            return (
-              <tr key={it.detalleId} style={{ background: rowBg }}>
-                <td style={{ ...td, textAlign: 'center', color: '#6b7280' }}>{idx + 1}</td>
-                <td style={{ ...td, fontFamily: 'monospace', fontSize: 11, color: '#1e40af', fontWeight: 600 }}>{prod?.sku ?? '—'}</td>
-                <td style={{ ...td }}>{prod?.descripcion ?? '—'}</td>
-                <td style={{ ...td, textAlign: 'right', color: '#6b7280' }}>{prod?.unidadMedida ?? ''}</td>
-                <td style={{ ...td, textAlign: 'right' }}>{it.cantidad.toLocaleString()}</td>
-                <td style={{ ...td, textAlign: 'right' }}>{mxn(it.precio)}</td>
-                <td style={{ ...td, textAlign: 'right', color: it.descuento > 0 ? '#059669' : '#9ca3af' }}>
-                  {it.descuento > 0 ? `${it.descuento}%` : '—'}
-                </td>
-                <td style={{ ...td, textAlign: 'right', fontWeight: 600 }}>{mxn(importe)}</td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-
-      {/* ── TOTALES ────────────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 28 }}>
-        <div style={{ minWidth: 260 }}>
-          <TotalRow label="Subtotal" value={mxn(quote.subtotal)} />
-          <TotalRow label="IVA (16%)" value={mxn(quote.impuestos)} />
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: '#1e40af', color: '#fff', borderRadius: 6, fontWeight: 700, fontSize: 15 }}>
-            <span>TOTAL</span>
-            <span>{mxn(quote.total)}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* ── NOTAS ──────────────────────────────────────────────────────── */}
-      {quote.notas && (
-        <div style={{ marginBottom: 24, padding: '10px 14px', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 6, fontSize: 12 }}>
-          <div style={{ fontWeight: 600, marginBottom: 4, color: '#92400e' }}>Notas:</div>
-          <div style={{ color: '#374151' }}>{quote.notas}</div>
-        </div>
-      )}
-
-      {/* ── CONDICIONES ────────────────────────────────────────────────── */}
-      <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: 16, marginBottom: 24 }}>
-        <div style={{ fontWeight: 700, fontSize: 12, color: '#374151', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-          Términos y Condiciones
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 24px', fontSize: 11, color: '#6b7280' }}>
-          <Cond label="Moneda" value="Pesos Mexicanos (MXN)" />
-          <Cond label="Forma de pago" value="Transferencia / Cheque" />
-          <Cond label="Condiciones" value={client?.limiteCredito && client.limiteCredito > 0 ? 'Crédito según convenio' : 'Contado'} />
-          <Cond label="Vigencia" value={quote.vigencia ? `Hasta ${formatDate(quote.vigencia)}` : '15 días naturales'} />
-          <Cond label="Entrega" value="Sujeta a disponibilidad de inventario" />
-          <Cond label="Precios" value="No incluyen flete, salvo acuerdo" />
-        </div>
-      </div>
-
-      {/* ── FIRMA ──────────────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 40, gap: 32 }}>
-        <SigBox label="Elaboró — InsumosFa" />
-        <SigBox label="Aceptado por — Cliente" />
-      </div>
-
-      {/* ── FOOTER ─────────────────────────────────────────────────────── */}
-      <div style={{ marginTop: 28, textAlign: 'center', fontSize: 10, color: '#9ca3af', borderTop: '1px solid #f3f4f6', paddingTop: 12 }}>
-        {company.nombre}
-        {company.correo && ` · ${company.correo}`}
-        {company.telefono && ` · ${company.telefono}`}
-        <br />
-        Este documento fue generado electrónicamente por {company.nombre} ERP — {quote.folio}
-      </div>
-    </div>
-  )
-})
+    )
+  }
+)
 
 QuotePDF.displayName = 'QuotePDF'
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
+// ── Sub-componentes ───────────────────────────────────────────────────────────
 
-const th: React.CSSProperties = {
-  padding: '8px 10px', fontWeight: 600, fontSize: 11,
-  textTransform: 'uppercase', letterSpacing: 0.3,
-}
-const td: React.CSSProperties = {
-  padding: '7px 10px', borderBottom: '1px solid #e5e7eb',
-}
-
-function TotalRow({ label, value }: { label: string; value: string }) {
+function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 12px', fontSize: 12, color: '#374151' }}>
-      <span>{label}</span><span style={{ fontWeight: 500 }}>{value}</span>
-    </div>
+    <tr>
+      <td style={{
+        background: TEAL, color: '#fff', fontWeight: 600,
+        padding: '5px 12px', fontSize: 11, width: '36%',
+        border: '1px solid #fff', textAlign: 'right',
+      }}>
+        {label}
+      </td>
+      <td style={{
+        padding: '5px 12px', fontSize: 12, fontWeight: 700,
+        border: `1px solid ${TEAL}`, background: '#f9f9f9',
+      }}>
+        {value}
+      </td>
+    </tr>
   )
 }
 
-function Cond({ label, value }: { label: string; value: string }) {
+function FolioRow({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
   return (
-    <div><span style={{ fontWeight: 600, color: '#374151' }}>{label}: </span>{value}</div>
+    <tr>
+      <td style={{
+        background: TEAL, color: '#fff', fontWeight: 600,
+        padding: '4px 10px', fontSize: 11,
+        border: '1px solid #fff', textAlign: 'right', width: '45%',
+      }}>
+        {label}
+      </td>
+      <td style={{
+        padding: '4px 10px', fontSize: 11,
+        fontWeight: bold ? 700 : 400,
+        fontStyle: bold ? 'italic' : 'normal',
+        border: `1px solid ${TEAL}`, background: '#f9f9f9',
+        color: bold ? TEAL_DARK : '#1a1a1a',
+      }}>
+        {value}
+      </td>
+    </tr>
   )
 }
 
-function SigBox({ label }: { label: string }) {
+function Th({ children, align, w }: { children: React.ReactNode; align: string; w?: string }) {
   return (
-    <div style={{ flex: 1, textAlign: 'center' }}>
-      <div style={{ borderBottom: '1px solid #374151', marginBottom: 6, height: 40 }} />
-      <div style={{ fontSize: 11, color: '#6b7280' }}>{label}</div>
-    </div>
+    <th style={{
+      padding: '7px 8px', fontWeight: 700, fontSize: 11,
+      textAlign: align as React.CSSProperties['textAlign'],
+      borderRight: '1px solid rgba(255,255,255,0.3)',
+      width: w,
+    }}>
+      {children}
+    </th>
   )
 }
 
-function formatDate(iso: string) {
+const envioTd: React.CSSProperties = {
+  border: `1px solid ${TEAL}`, padding: '5px 10px',
+  fontSize: 11, textAlign: 'center', background: '#f9f9f9',
+}
+
+function EnvioCell({ label }: { label: string }) {
+  return (
+    <td style={{ ...envioTd, fontWeight: label ? 600 : 400 }}>{label}</td>
+  )
+}
+
+// ── Utils ─────────────────────────────────────────────────────────────────────
+
+function tdStyle(align: 'left' | 'center' | 'right'): React.CSSProperties {
+  return {
+    padding: '6px 8px',
+    borderBottom: '1px solid #e0e0e0',
+    borderRight: '1px solid #e8e8e8',
+    textAlign: align,
+    verticalAlign: 'middle',
+  }
+}
+
+function fmtMXN(v: number) {
+  return v.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })
+}
+
+function formatDateShort(iso: string) {
   try {
-    return new Date(iso + 'T12:00:00').toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' })
+    const d = new Date(iso + 'T12:00:00')
+    return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`
   } catch { return iso }
 }
 
-function statusColor(s: string): { bg: string; text: string } {
-  const map: Record<string, { bg: string; text: string }> = {
-    borrador: { bg: '#f3f4f6', text: '#374151' },
-    enviada:  { bg: '#dbeafe', text: '#1e40af' },
-    aceptada: { bg: '#d1fae5', text: '#065f46' },
-    rechazada:{ bg: '#fee2e2', text: '#991b1b' },
-    vencida:  { bg: '#fef3c7', text: '#92400e' },
-  }
-  return map[s] ?? { bg: '#f3f4f6', text: '#374151' }
+function initials(name: string) {
+  return name
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(w => w[0].toUpperCase())
+    .join('')
 }

@@ -42,9 +42,9 @@ function ClienteBadge({ qt }: { qt: Quote }) {
 }
 
 // ── Print via hidden iframe ───────────────────────────────────────────────────
-function printQuoteInIframe(quote: Quote, client: Client | undefined, products: Product[], company: CompanyInfo) {
+function printQuoteInIframe(quote: Quote, client: Client | undefined, products: Product[], company: CompanyInfo, atiende?: string) {
   const html = renderToStaticMarkup(
-    <QuotePDF quote={quote} client={client} products={products} companyOverride={company} />
+    <QuotePDF quote={quote} client={client} products={products} companyOverride={company} atiende={atiende} />
   )
   const doc = `<!DOCTYPE html>
 <html lang="es">
@@ -212,7 +212,7 @@ export function QuotesPage() {
   // ── PDF ───────────────────────────────────────────────────────────────────
   function handlePrint(quote: Quote) {
     const client = clients.find(c => c.clientId === quote.clienteId)
-    printQuoteInIframe(quote, client, products, company)
+    printQuoteInIframe(quote, client, products, company, me?.name)
   }
 
   // ── share — funciona tanto para registrados como para eventuales ──────────
@@ -520,6 +520,7 @@ export function QuotesPage() {
                     quote={buildPreviewQuote()}
                     client={clients.find(c => c.clientId === form.clienteId)}
                     products={products}
+                    atiende={me?.name}
                   />
                 </div>
               </div>
@@ -615,6 +616,7 @@ export function QuotesPage() {
                 quote={selQuote}
                 client={clients.find(c => c.clientId === selQuote.clienteId)}
                 products={products}
+                atiende={me?.name}
               />
             </div>
           </div>
