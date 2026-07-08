@@ -20,18 +20,26 @@ const FORMAS_PAGO = ['Transferencia', 'Cheque', 'Efectivo', 'Tarjeta']
 export function FinancePage() {
   const {
     facturasVenta, pagosClientes,
-    facturasProveedor, bancos, loadFinance,
+    facturasProveedor, bancos, loadFinance, subscribeRealtime: subFinance,
     addPagoCliente, addPagoProveedor,
     addFacturaProveedor,
     addBanco, updateBanco, deleteBanco,
   } = useFinanceStore()
-  const { clients, loadClients } = useClientsStore()
-  const { suppliers, loadSuppliers } = useSuppliersStore()
+  const { clients, loadClients, subscribeRealtime: subClients } = useClientsStore()
+  const { suppliers, loadSuppliers, subscribeRealtime: subSuppliers } = useSuppliersStore()
   const { orders } = useSalesOrdersStore()
   const { products } = useProductsStore()
   const { user: me } = useAuthStore()
 
-  useEffect(() => { void loadFinance(); void loadClients(); void loadSuppliers() }, [])
+  useEffect(() => {
+    void loadFinance()
+    void loadClients()
+    void loadSuppliers()
+    const u1 = subFinance()
+    const u2 = subClients()
+    const u3 = subSuppliers()
+    return () => { u1(); u2(); u3() }
+  }, [])
 
   const canManageBancos = me ? hasRole(me, 'director', 'administracion') : false
 

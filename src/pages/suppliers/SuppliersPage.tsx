@@ -32,10 +32,13 @@ function ScoreBar({ value }: { value: number }) {
 }
 
 export function SuppliersPage() {
-  const { suppliers, loadSuppliers, addSupplier, updateSupplier, deleteSupplier } = useSuppliersStore()
+  const { suppliers, loadSuppliers, subscribeRealtime, addSupplier, updateSupplier, deleteSupplier } = useSuppliersStore()
   const { user: me } = useAuthStore()
 
-  useEffect(() => { void loadSuppliers() }, [])
+  useEffect(() => {
+    void loadSuppliers()
+    return subscribeRealtime()
+  }, [])
 
   const canDelete = me ? hasRole(me, ...DELETE_ROLES) : false
 

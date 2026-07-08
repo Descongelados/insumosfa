@@ -70,6 +70,7 @@ interface FinanceState {
   bancos: Banco[]
   loading: boolean
   loadFinance: () => Promise<void>
+  subscribeRealtime: () => () => void
   addFacturaVenta: (f: Omit<FacturaVenta, 'facturaId' | 'folio'>) => Promise<void>
   updateFacturaVenta: (id: string, data: Partial<FacturaVenta>) => Promise<void>
   addPagoCliente: (p: Omit<PagoCliente, 'pagoId'>) => Promise<void>
@@ -84,6 +85,18 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
   facturasVenta: [], pagosClientes: [],
   facturasProveedor: [], pagosProveedores: [],
   bancos: [], loading: false,
+
+  subscribeRealtime() {
+    const ch = supabase
+      .channel('erp_finance_rt')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_invoices_sale' }, () => { void get().loadFinance() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_payments_client' }, () => { void get().loadFinance() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_invoices_supplier' }, () => { void get().loadFinance() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_payments_supplier' }, () => { void get().loadFinance() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_banks' }, () => { void get().loadFinance() })
+      .subscribe()
+    return () => { void supabase.removeChannel(ch) }
+  },
 
   async loadFinance() {
     set({ loading: true })

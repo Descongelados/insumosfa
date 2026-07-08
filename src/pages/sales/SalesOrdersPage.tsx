@@ -18,12 +18,20 @@ const ESTADOS: PedidoEstatus[] = ['nuevo', 'confirmado', 'surtiendo', 'embarcado
 const ESTADOS_ACTIVOS: PedidoEstatus[] = ['nuevo', 'confirmado', 'surtiendo', 'embarcado', 'entregado', 'cerrado']
 
 export function SalesOrdersPage() {
-  const { orders, loadOrders, addOrder, updateOrder, deleteOrder } = useSalesOrdersStore()
-  const { clients, loadClients } = useClientsStore()
-  const { products, loadProducts } = useProductsStore()
+  const { orders, loadOrders, subscribeRealtime: subOrders, addOrder, updateOrder, deleteOrder } = useSalesOrdersStore()
+  const { clients, loadClients, subscribeRealtime: subClients } = useClientsStore()
+  const { products, loadProducts, subscribeRealtime: subProducts } = useProductsStore()
   const { user: me } = useAuthStore()
 
-  useEffect(() => { void loadOrders(); void loadClients(); void loadProducts() }, [])
+  useEffect(() => {
+    void loadOrders()
+    void loadClients()
+    void loadProducts()
+    const u1 = subOrders()
+    const u2 = subClients()
+    const u3 = subProducts()
+    return () => { u1(); u2(); u3() }
+  }, [])
 
   const [q, setQ] = useState('')
   const [modal, setModal] = useState<'edit' | 'new' | 'del' | null>(null)

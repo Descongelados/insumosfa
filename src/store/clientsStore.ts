@@ -32,6 +32,7 @@ interface ClientsState {
   contactos: ContactoCliente[]
   loading: boolean
   loadClients: () => Promise<void>
+  subscribeRealtime: () => () => void
   addClient: (c: Omit<Client, 'clientId' | 'fechaAlta'>) => Promise<string>
   updateClient: (id: string, data: Partial<Client>) => Promise<void>
   deleteClient: (id: string) => Promise<void>
@@ -41,6 +42,15 @@ interface ClientsState {
 
 export const useClientsStore = create<ClientsState>()((set, get) => ({
   clients: [], contactos: [], loading: false,
+
+  subscribeRealtime() {
+    const ch = supabase
+      .channel('erp_clients_rt')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_clients' }, () => { void get().loadClients() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_client_contacts' }, () => { void get().loadClients() })
+      .subscribe()
+    return () => { void supabase.removeChannel(ch) }
+  },
 
   async loadClients() {
     set({ loading: true })

@@ -23,10 +23,13 @@ const BLANK: Omit<Product, 'productId'> = {
 }
 
 export function ProductsPage() {
-  const { products, loadProducts, addProduct, updateProduct, deleteProduct, toggleProduct } = useProductsStore()
+  const { products, loadProducts, subscribeRealtime, addProduct, updateProduct, deleteProduct, toggleProduct } = useProductsStore()
   const { user: me } = useAuthStore()
 
-  useEffect(() => { void loadProducts() }, [])
+  useEffect(() => {
+    void loadProducts()
+    return subscribeRealtime()
+  }, [])
 
   const canDelete = me ? hasRole(me, ...DELETE_ROLES) : false
 

@@ -17,13 +17,23 @@ import { ClipboardList, Plus, CircleCheck as CheckCircle, Trash2 } from 'lucide-
 const OC_ESTADOS: OrdenCompraEstatus[] = ['borrador', 'emitida', 'confirmada', 'recibida', 'cerrada']
 
 export function PurchasesPage() {
-  const { solicitudes, updateSolicitud, deleteSolicitud, ordenesCompra, loadPurchases, addOrdenCompra, updateOrdenCompra, deleteOrdenCompra } = usePurchasesStore()
-  const { suppliers, loadSuppliers } = useSuppliersStore()
-  const { products, loadProducts } = useProductsStore()
-  const { applyMovimiento, loadInventory } = useInventoryStore()
+  const { solicitudes, updateSolicitud, deleteSolicitud, ordenesCompra, loadPurchases, subscribeRealtime: subPurchases, addOrdenCompra, updateOrdenCompra, deleteOrdenCompra } = usePurchasesStore()
+  const { suppliers, loadSuppliers, subscribeRealtime: subSuppliers } = useSuppliersStore()
+  const { products, loadProducts, subscribeRealtime: subProducts } = useProductsStore()
+  const { applyMovimiento, loadInventory, subscribeRealtime: subInventory } = useInventoryStore()
   const { user } = useAuthStore()
 
-  useEffect(() => { void loadPurchases(); void loadSuppliers(); void loadProducts(); void loadInventory() }, [])
+  useEffect(() => {
+    void loadPurchases()
+    void loadSuppliers()
+    void loadProducts()
+    void loadInventory()
+    const u1 = subPurchases()
+    const u2 = subSuppliers()
+    const u3 = subProducts()
+    const u4 = subInventory()
+    return () => { u1(); u2(); u3(); u4() }
+  }, [])
 
   const [q, setQ] = useState('')
   const [tab, setTab] = useState<'oc' | 'sol'>('oc')

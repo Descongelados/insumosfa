@@ -35,6 +35,7 @@ interface InventoryState {
   kardex: KardexMovimiento[]
   loading: boolean
   loadInventory: () => Promise<void>
+  subscribeRealtime: () => () => void
   applyMovimiento: (params: {
     productId: string; tipo: MovimientoTipo; cantidad: number
     documentoOrigen: string; usuario: string; notas?: string
@@ -44,6 +45,15 @@ interface InventoryState {
 
 export const useInventoryStore = create<InventoryState>()((set, get) => ({
   inventario: [], kardex: [], loading: false,
+
+  subscribeRealtime() {
+    const ch = supabase
+      .channel('erp_inventory_rt')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_inventory' }, () => { void get().loadInventory() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_kardex' }, () => { void get().loadInventory() })
+      .subscribe()
+    return () => { void supabase.removeChannel(ch) }
+  },
 
   getStock(productId) {
     return get().inventario.find(i => i.productId === productId)?.cantidadDisponible ?? 0

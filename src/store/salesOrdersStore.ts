@@ -29,6 +29,7 @@ interface SalesOrdersState {
   orders: SalesOrder[]
   loading: boolean
   loadOrders: () => Promise<void>
+  subscribeRealtime: () => () => void
   addOrder: (o: Omit<SalesOrder, 'pedidoId' | 'folio'>) => Promise<SalesOrder>
   updateOrder: (id: string, data: Partial<SalesOrder>) => Promise<void>
   deleteOrder: (id: string) => Promise<void>
@@ -36,6 +37,14 @@ interface SalesOrdersState {
 
 export const useSalesOrdersStore = create<SalesOrdersState>()((set, get) => ({
   orders: [], loading: false,
+
+  subscribeRealtime() {
+    const ch = supabase
+      .channel('erp_sales_orders_rt')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_sales_orders' }, () => { void get().loadOrders() })
+      .subscribe()
+    return () => { void supabase.removeChannel(ch) }
+  },
 
   async loadOrders() {
     set({ loading: true })

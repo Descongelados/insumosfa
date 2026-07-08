@@ -26,6 +26,7 @@ interface ProspectsState {
   prospects: Prospect[]
   loading: boolean
   loadProspects: () => Promise<void>
+  subscribeRealtime: () => () => void
   addProspect: (p: Omit<Prospect, 'prospectoId' | 'fechaAlta'>) => Promise<void>
   updateProspect: (id: string, data: Partial<Prospect>) => Promise<void>
   deleteProspect: (id: string) => Promise<void>
@@ -34,6 +35,14 @@ interface ProspectsState {
 
 export const useProspectsStore = create<ProspectsState>()((set, get) => ({
   prospects: [], loading: false,
+
+  subscribeRealtime() {
+    const ch = supabase
+      .channel('erp_prospects_rt')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_prospects' }, () => { void get().loadProspects() })
+      .subscribe()
+    return () => { void supabase.removeChannel(ch) }
+  },
 
   async loadProspects() {
     set({ loading: true })

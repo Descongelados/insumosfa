@@ -32,6 +32,7 @@ interface LogisticsState {
   transportistas: Transportista[]
   loading: boolean
   loadLogistics: () => Promise<void>
+  subscribeRealtime: () => () => void
   addEmbarque: (e: Omit<Embarque, 'embarqueId' | 'folio'>) => Promise<void>
   updateEmbarque: (id: string, data: Partial<Embarque>) => Promise<void>
   addTransportista: (t: Omit<Transportista, 'transportistaId'>) => Promise<void>
@@ -41,6 +42,15 @@ interface LogisticsState {
 
 export const useLogisticsStore = create<LogisticsState>()((set, get) => ({
   embarques: [], transportistas: [], loading: false,
+
+  subscribeRealtime() {
+    const ch = supabase
+      .channel('erp_logistics_rt')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_shipments' }, () => { void get().loadLogistics() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_carriers' }, () => { void get().loadLogistics() })
+      .subscribe()
+    return () => { void supabase.removeChannel(ch) }
+  },
 
   async loadLogistics() {
     set({ loading: true })

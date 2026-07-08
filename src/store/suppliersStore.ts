@@ -23,6 +23,7 @@ interface SuppliersState {
   suppliers: Supplier[]
   loading: boolean
   loadSuppliers: () => Promise<void>
+  subscribeRealtime: () => () => void
   addSupplier: (s: Omit<Supplier, 'supplierId'>) => Promise<void>
   updateSupplier: (id: string, data: Partial<Supplier>) => Promise<void>
   deleteSupplier: (id: string) => Promise<void>
@@ -30,6 +31,14 @@ interface SuppliersState {
 
 export const useSuppliersStore = create<SuppliersState>()((set, get) => ({
   suppliers: [], loading: false,
+
+  subscribeRealtime() {
+    const ch = supabase
+      .channel('erp_suppliers_rt')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_suppliers' }, () => { void get().loadSuppliers() })
+      .subscribe()
+    return () => { void supabase.removeChannel(ch) }
+  },
 
   async loadSuppliers() {
     set({ loading: true })

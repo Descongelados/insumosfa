@@ -34,6 +34,7 @@ interface PurchasesState {
   ordenesCompra: OrdenCompra[]
   loading: boolean
   loadPurchases: () => Promise<void>
+  subscribeRealtime: () => () => void
   addSolicitud: (s: Omit<SolicitudCompra, 'solicitudId'>) => Promise<void>
   updateSolicitud: (id: string, data: Partial<SolicitudCompra>) => Promise<void>
   deleteSolicitud: (id: string) => Promise<void>
@@ -44,6 +45,15 @@ interface PurchasesState {
 
 export const usePurchasesStore = create<PurchasesState>()((set, get) => ({
   solicitudes: [], ordenesCompra: [], loading: false,
+
+  subscribeRealtime() {
+    const ch = supabase
+      .channel('erp_purchases_rt')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_purchase_requests' }, () => { void get().loadPurchases() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_purchase_orders' }, () => { void get().loadPurchases() })
+      .subscribe()
+    return () => { void supabase.removeChannel(ch) }
+  },
 
   async loadPurchases() {
     set({ loading: true })

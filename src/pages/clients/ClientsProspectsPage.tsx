@@ -45,11 +45,17 @@ const BLANK_CLIENT: Omit<Client, 'clientId' | 'fechaAlta'> = {
 
 // ─────────────────────────────────────────────────────────────────────────────
 export function ClientsProspectsPage() {
-  const { clients, loadClients, updateClient, deleteClient } = useClientsStore()
-  const { prospects, loadProspects, addProspect, updateProspect, deleteProspect, convertirACliente } = useProspectsStore()
+  const { clients, loadClients, subscribeRealtime: subClients, updateClient, deleteClient } = useClientsStore()
+  const { prospects, loadProspects, subscribeRealtime: subProspects, addProspect, updateProspect, deleteProspect, convertirACliente } = useProspectsStore()
   const { user: me } = useAuthStore()
 
-  useEffect(() => { void loadClients(); void loadProspects() }, [])
+  useEffect(() => {
+    void loadClients()
+    void loadProspects()
+    const u1 = subClients()
+    const u2 = subProspects()
+    return () => { u1(); u2() }
+  }, [])
 
   const [tab, setTab] = useState<'prospectos' | 'clientes'>('prospectos')
 

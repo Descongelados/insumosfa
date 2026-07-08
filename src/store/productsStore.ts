@@ -20,6 +20,7 @@ interface ProductsState {
   products: Product[]
   loading: boolean
   loadProducts: () => Promise<void>
+  subscribeRealtime: () => () => void
   addProduct: (p: Omit<Product, 'productId'>) => Promise<void>
   updateProduct: (id: string, data: Partial<Product>) => Promise<void>
   deleteProduct: (id: string) => Promise<void>
@@ -28,6 +29,14 @@ interface ProductsState {
 
 export const useProductsStore = create<ProductsState>()((set, get) => ({
   products: [], loading: false,
+
+  subscribeRealtime() {
+    const ch = supabase
+      .channel('erp_products_rt')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_products' }, () => { void get().loadProducts() })
+      .subscribe()
+    return () => { void supabase.removeChannel(ch) }
+  },
 
   async loadProducts() {
     set({ loading: true })

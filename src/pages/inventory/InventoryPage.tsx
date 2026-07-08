@@ -17,11 +17,17 @@ const TIPO_LABELS: Record<MovimientoTipo, string> = {
 }
 
 export function InventoryPage() {
-  const { inventario, kardex, loadInventory, applyMovimiento } = useInventoryStore()
-  const { products, loadProducts } = useProductsStore()
+  const { inventario, kardex, loadInventory, subscribeRealtime: subInventory, applyMovimiento } = useInventoryStore()
+  const { products, loadProducts, subscribeRealtime: subProducts } = useProductsStore()
   const { user } = useAuthStore()
 
-  useEffect(() => { void loadInventory(); void loadProducts() }, [])
+  useEffect(() => {
+    void loadInventory()
+    void loadProducts()
+    const u1 = subInventory()
+    const u2 = subProducts()
+    return () => { u1(); u2() }
+  }, [])
 
   const [q, setQ] = useState('')
   const [view, setView] = useState<'stock' | 'kardex'>('stock')

@@ -35,14 +35,20 @@ const TRANS_MANAGE_ROLES = ['director', 'operaciones', 'almacen'] as const
 // ─── componente ────────────────────────────────────────────────────────────
 export function LogisticsPage() {
   const {
-    embarques, transportistas, loadLogistics,
+    embarques, transportistas, loadLogistics, subscribeRealtime: subLogistics,
     addEmbarque, updateEmbarque,
     addTransportista, updateTransportista, deleteTransportista,
   } = useLogisticsStore()
-  const { orders, loadOrders } = useSalesOrdersStore()
+  const { orders, loadOrders, subscribeRealtime: subOrders } = useSalesOrdersStore()
   const { user: me } = useAuthStore()
 
-  useEffect(() => { void loadLogistics(); void loadOrders() }, [])
+  useEffect(() => {
+    void loadLogistics()
+    void loadOrders()
+    const u1 = subLogistics()
+    const u2 = subOrders()
+    return () => { u1(); u2() }
+  }, [])
 
   const canManageTrans = me ? hasRole(me, ...TRANS_MANAGE_ROLES) : false
 
