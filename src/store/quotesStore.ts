@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Quote } from '../types'
+import type { Quote, QuoteItem } from '../types'
 import { supabase } from '../lib/supabase'
 
 // Columnas que existen siempre en erp_quotes
@@ -14,7 +14,25 @@ type DbQuote = DbQuoteBase & {
   cliente_correo?: string; cliente_telefono?: string
 }
 
+/**
+ * Normaliza un item crudo del JSONB.
+ * Supabase JS puede entregar las claves dentro del JSONB en snake_case
+ * (product_id, detalle_id) si el cliente aplicó transformación, o en
+ * camelCase si no lo hizo. Soportamos ambos formatos.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function normalizeItem(raw: any): QuoteItem {
+  return {
+    detalleId: raw.detalleId ?? raw.detalle_id ?? '',
+    productId:  raw.productId  ?? raw.product_id  ?? '',
+    cantidad:   raw.cantidad   ?? 0,
+    precio:     raw.precio     ?? 0,
+    descuento:  raw.descuento  ?? 0,
+  }
+}
+
 function toQuote(r: DbQuote): Quote {
+  const rawItems = Array.isArray(r.items) ? r.items : []
   return {
     cotizacionId: r.id, folio: r.folio, clienteId: r.cliente_id ?? '',
     clienteNombre:   r.cliente_nombre   || undefined,
@@ -24,7 +42,8 @@ function toQuote(r: DbQuote): Quote {
     fecha: r.fecha, vigencia: r.vigencia ?? '',
     subtotal: r.subtotal, impuestos: r.impuestos, total: r.total,
     estatus: r.estatus as Quote['estatus'],
-    items: (r.items as Quote['items']) ?? [],
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    items: rawItems.map((it: any) => normalizeItem(it)),
     notas: r.notas ?? '',
   }
 }
@@ -73,6 +92,9 @@ export const useQuotesStore = create<QuotesState>()((set, get) => ({
   async addQuote(data) {
     const folio = await nextFolio('COT', 'erp_quotes')
 
+    // Serializar items explícitamente para preservar claves camelCase en JSONB
+    const itemsJson = JSON.parse(JSON.stringify(data.items)) as QuoteItem[]
+
     // Intentar insertar con las columnas de cliente eventual (post-migración)
     const { data: row, error } = await supabase
       .from('erp_quotes')
@@ -84,12 +106,12 @@ export const useQuotesStore = create<QuotesState>()((set, get) => ({
         cliente_correo:   data.clienteCorreo     ?? '',
         cliente_telefono: data.clienteTelefono   ?? '',
         fecha:            data.fecha,
-        vigencia:         data.vigencia          ?? '',
+        vigencia:         data.vigencia || null,
         subtotal:         data.subtotal,
         impuestos:        data.impuestos,
         total:            data.total,
         estatus:          data.estatus,
-        items:            data.items,
+        items:            itemsJson,
         notas:            data.notas             ?? '',
       })
       .select('*')
@@ -103,12 +125,12 @@ export const useQuotesStore = create<QuotesState>()((set, get) => ({
           folio,
           cliente_id: data.clienteId ?? '',
           fecha:      data.fecha,
-          vigencia:   data.vigencia  ?? '',
+          vigencia:   data.vigencia || null,
           subtotal:   data.subtotal,
           impuestos:  data.impuestos,
           total:      data.total,
           estatus:    data.estatus,
-          items:      data.items,
+          items:      itemsJson,
           notas:      data.notas ?? '',
         })
         .select('*')
@@ -127,12 +149,12 @@ export const useQuotesStore = create<QuotesState>()((set, get) => ({
           clienteTelefono: data.clienteTelefono || undefined,
         }
       }
-      // Último recurso: devolver objeto en memoria
-      return { ...data, cotizacionId: '', folio }
+      // Último recurso: devolver objeto en memoria con items normalizados
+      return { ...data, items: itemsJson, cotizacionId: '', folio }
     }
 
     await get().loadQuotes()
-    return row ? toQuote(row as DbQuote) : { ...data, cotizacionId: '', folio }
+    return row ? toQuote(row as DbQuote) : { ...data, items: itemsJson, cotizacionId: '', folio }
   },
 
   async updateQuote(id, data) {
@@ -143,12 +165,12 @@ export const useQuotesStore = create<QuotesState>()((set, get) => ({
     if (data.clienteCorreo    !== undefined) patch.cliente_correo   = data.clienteCorreo
     if (data.clienteTelefono  !== undefined) patch.cliente_telefono = data.clienteTelefono
     if (data.fecha     !== undefined) patch.fecha      = data.fecha
-    if (data.vigencia  !== undefined) patch.vigencia   = data.vigencia
+    if (data.vigencia  !== undefined) patch.vigencia   = data.vigencia || null
     if (data.subtotal  !== undefined) patch.subtotal   = data.subtotal
     if (data.impuestos !== undefined) patch.impuestos  = data.impuestos
     if (data.total     !== undefined) patch.total      = data.total
     if (data.estatus   !== undefined) patch.estatus    = data.estatus
-    if (data.items     !== undefined) patch.items      = data.items
+    if (data.items     !== undefined) patch.items      = JSON.parse(JSON.stringify(data.items))
     if (data.notas     !== undefined) patch.notas      = data.notas
     await supabase.from('erp_quotes').update(patch).eq('id', id)
     await get().loadQuotes()
