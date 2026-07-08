@@ -21,7 +21,7 @@ const TAX = 0.16
 const ESTADOS: CotizacionEstatus[] = ['borrador', 'enviada', 'aceptada', 'rechazada', 'vencida']
 const DELETE_ROLES = ['director', 'administracion', 'ventas'] as const
 
-// ── Print via hidden iframe (no app chrome bleeds into output) ───────────────
+// ── Print via hidden iframe ───────────────────────────────────────────────────
 function printQuoteInIframe(quote: Quote, client: Client | undefined, products: Product[], company: CompanyInfo) {
   const html = renderToStaticMarkup(
     <QuotePDF quote={quote} client={client} products={products} companyOverride={company} />
@@ -49,13 +49,20 @@ function printQuoteInIframe(quote: Quote, client: Client | undefined, products: 
   win.document.write(doc)
   win.document.close()
 
-  // Wait for resources to load before printing
   win.onload = () => {
     win.focus()
     win.print()
-    // Remove after a short delay to let the print dialog open
     setTimeout(() => document.body.removeChild(iframe), 1000)
   }
+}
+
+// ── Form blank state ──────────────────────────────────────────────────────────
+const BLANK_FORM = {
+  clienteId: '',
+  vigencia: '',
+  notas: '',
+  items: [] as QuoteItem[],
+  previewOpen: false,
 }
 
 export function QuotesPage() {
@@ -74,7 +81,7 @@ export function QuotesPage() {
   const [modal, setModal] = useState<'new' | 'preview' | 'del' | null>(null)
   const [selQuote, setSelQuote] = useState<Quote | null>(null)
   const [delTarget, setDelTarget] = useState<Quote | null>(null)
-  const [form, setForm] = useState({ clienteId: '', vigencia: '', notas: '', items: [] as QuoteItem[] })
+  const [form, setForm] = useState(BLANK_FORM)
 
   // Share panel state
   const [shareOpen, setShareOpen] = useState(false)
@@ -112,14 +119,42 @@ export function QuotesPage() {
     setForm((f) => ({ ...f, items: f.items.filter((_, i) => i !== idx) }))
   }
 
+  /** Construye un Quote provisional con los datos actuales del form para el preview */
+  function buildPreviewQuote(): Quote {
+    const { subtotal, impuestos, total } = calcTotals(form.items)
+    return {
+      cotizacionId: 'preview',
+      folio: 'PREV-0000',
+      clienteId: form.clienteId,
+      vigencia: form.vigencia,
+      notas: form.notas,
+      items: form.items,
+      fecha: new Date().toISOString().split('T')[0],
+      subtotal,
+      impuestos,
+      total,
+      estatus: 'borrador',
+    } as Quote
+  }
+
   async function handleSave() {
     if (!form.clienteId) { toast.error('Selecciona un cliente.'); return }
     if (form.items.length === 0) { toast.error('Agrega al menos una partida.'); return }
     const { subtotal, impuestos, total } = calcTotals(form.items)
-    const quote = await addQuote({ ...form, fecha: new Date().toISOString().split('T')[0], subtotal, impuestos, total, estatus: 'borrador' })
+    const quote = await addQuote({
+      clienteId: form.clienteId,
+      vigencia: form.vigencia,
+      notas: form.notas,
+      items: form.items,
+      fecha: new Date().toISOString().split('T')[0],
+      subtotal,
+      impuestos,
+      total,
+      estatus: 'borrador',
+    })
     toast.success(`Cotización ${quote.folio} creada.`)
     setModal(null)
-    setForm({ clienteId: '', vigencia: '', notas: '', items: [] })
+    setForm(BLANK_FORM)
     setSelQuote(quote)
     setModal('preview')
   }
@@ -149,7 +184,7 @@ export function QuotesPage() {
     setModal(null); setDelTarget(null)
   }
 
-  // ── PDF Export (iframe print) ──────────────────────────────────────────────
+  // ── PDF Export ─────────────────────────────────────────────────────────────
   function handlePrint(quote: Quote) {
     const client = clients.find(c => c.clientId === quote.clienteId)
     printQuoteInIframe(quote, client, products, company)
@@ -160,7 +195,7 @@ export function QuotesPage() {
     const client = clients.find(c => c.clientId === quote.clienteId)
     const mxn = (v: number) => v.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })
     const lines = [
-      `📋 Cotización ${quote.folio}`,
+      `Cotización ${quote.folio}`,
       `Cliente: ${client?.razonSocial ?? '—'}`,
       `Fecha: ${quote.fecha}${quote.vigencia ? `  ·  Vigente hasta: ${quote.vigencia}` : ''}`,
       ``,
@@ -196,14 +231,10 @@ export function QuotesPage() {
     const client = clients.find(c => c.clientId === quote.clienteId)
     if ('share' in navigator) {
       try {
-        await navigator.share({
-          title: `Cotización ${quote.folio} — ${client?.razonSocial ?? ''}`,
-          text,
-        })
+        await navigator.share({ title: `Cotización ${quote.folio} — ${client?.razonSocial ?? ''}`, text })
         setShareOpen(false)
       } catch { /* user cancelled */ }
     } else {
-      // Fallback: copy
       await handleCopyText(quote)
       setShareOpen(false)
     }
@@ -220,7 +251,7 @@ export function QuotesPage() {
           <p className="page-subtitle">{quotes.length} cotizaciones registradas</p>
         </div>
         <button className="btn-primary" onClick={() => {
-          setForm({ clienteId: clients[0]?.clientId ?? '', vigencia: '', notas: '', items: [] })
+          setForm({ ...BLANK_FORM, clienteId: clients[0]?.clientId ?? '' })
           setModal('new')
         }}>
           <Plus size={16} /> Nueva Cotización
@@ -272,6 +303,13 @@ export function QuotesPage() {
           footer={
             <>
               <button className="btn-secondary" onClick={() => setModal(null)}>Cancelar</button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setForm(f => ({ ...f, previewOpen: !f.previewOpen }))}
+              >
+                <Eye size={14} /> {form.previewOpen ? 'Ocultar preview' : 'Vista previa'}
+              </button>
               <button className="btn-primary" onClick={handleSave}>Guardar y Ver Cotización</button>
             </>
           }
@@ -345,6 +383,25 @@ export function QuotesPage() {
               <label className="label">Notas</label>
               <textarea className="textarea" rows={2} value={form.notas} onChange={(e) => setForm(f => ({ ...f, notas: e.target.value }))} />
             </div>
+
+            {/* ── Panel de Vista Previa ──────────────────────────────────── */}
+            {form.previewOpen && (
+              <div className="mt-4 border border-gray-200 rounded-xl overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-2 bg-gray-100 border-b border-gray-200">
+                  <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide flex items-center gap-1.5">
+                    <Eye size={13} /> Vista previa — borrador
+                  </span>
+                  <span className="text-xs text-gray-400 italic">No guardada · El folio se asignará al guardar</span>
+                </div>
+                <div className="overflow-y-auto max-h-[560px] bg-white p-2">
+                  <QuotePDF
+                    quote={buildPreviewQuote()}
+                    client={clients.find(c => c.clientId === form.clienteId)}
+                    products={products}
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </Modal>
       )}
@@ -357,7 +414,6 @@ export function QuotesPage() {
         >
           {/* Toolbar */}
           <div className="flex items-center justify-between px-4 py-3 bg-gray-900 text-white flex-shrink-0 gap-3 flex-wrap">
-            {/* Left: folio + status */}
             <div className="flex items-center gap-3 min-w-0">
               <FileText size={18} className="flex-shrink-0 text-blue-400" />
               <span className="font-semibold truncate text-sm">
@@ -366,9 +422,7 @@ export function QuotesPage() {
               <StatusBadge status={selQuote.estatus} />
             </div>
 
-            {/* Right: actions */}
             <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
-              {/* Change status */}
               <select
                 className="text-xs bg-gray-700 text-white border border-gray-600 rounded-lg px-2 py-1.5"
                 value={selQuote.estatus}
@@ -380,22 +434,16 @@ export function QuotesPage() {
                 {ESTADOS.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
               </select>
 
-              {/* Convert to order */}
               {(selQuote.estatus === 'borrador' || selQuote.estatus === 'enviada') && (
                 <button className="btn btn-success btn-sm" onClick={() => convertirAPedido(selQuote)}>
                   <ArrowRight size={13} /> Crear Pedido
                 </button>
               )}
 
-              {/* ── Compartir dropdown ─────────────────────────── */}
               <div className="relative" ref={shareRef}>
-                <button
-                  className="btn btn-secondary btn-sm"
-                  onClick={() => setShareOpen(o => !o)}
-                >
+                <button className="btn btn-secondary btn-sm" onClick={() => setShareOpen(o => !o)}>
                   <Share2 size={13} /> Compartir
                 </button>
-
                 {shareOpen && (
                   <div
                     className="absolute right-0 top-full mt-1 w-52 bg-white text-gray-900 rounded-xl shadow-2xl border border-gray-200 z-10 overflow-hidden"
@@ -404,8 +452,6 @@ export function QuotesPage() {
                     <div className="px-3 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100">
                       Compartir cotización
                     </div>
-
-                    {/* Copy as text */}
                     <button
                       className="flex items-center gap-3 w-full px-4 py-3 text-sm hover:bg-gray-50 text-left transition-colors"
                       onClick={() => { handleCopyText(selQuote); setShareOpen(false) }}
@@ -413,28 +459,18 @@ export function QuotesPage() {
                       {copied ? <Check size={15} className="text-green-600" /> : <Copy size={15} className="text-gray-500" />}
                       <span>{copied ? 'Copiado' : 'Copiar como texto'}</span>
                     </button>
-
-                    {/* Native share / WhatsApp */}
                     <button
                       className="flex items-center gap-3 w-full px-4 py-3 text-sm hover:bg-gray-50 text-left transition-colors border-t border-gray-100"
                       onClick={() => handleNativeShare(selQuote)}
                     >
                       <Share2 size={15} className="text-blue-500" />
-                      <span>
-                        {'share' in navigator
-                          ? 'Compartir (WhatsApp, Email…)'
-                          : 'Copiar al portapapeles'}
-                      </span>
+                      <span>{'share' in navigator ? 'Compartir (WhatsApp, Email…)' : 'Copiar al portapapeles'}</span>
                     </button>
                   </div>
                 )}
               </div>
 
-              {/* ── Descargar / Imprimir PDF ───────────────────── */}
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={() => { handlePrint(selQuote); setShareOpen(false) }}
-              >
+              <button className="btn btn-primary btn-sm" onClick={() => { handlePrint(selQuote); setShareOpen(false) }}>
                 <Download size={13} /> Descargar PDF
               </button>
 
@@ -447,11 +483,7 @@ export function QuotesPage() {
             </div>
           </div>
 
-          {/* Scrollable document area */}
-          <div
-            className="flex-1 overflow-y-auto p-4 md:p-8"
-            onClick={() => setShareOpen(false)}
-          >
+          <div className="flex-1 overflow-y-auto p-4 md:p-8" onClick={() => setShareOpen(false)}>
             <div className="shadow-2xl rounded-xl overflow-hidden">
               <QuotePDF
                 quote={selQuote}
