@@ -2,25 +2,30 @@ import { create } from 'zustand'
 import type { Quote } from '../types'
 import { supabase } from '../lib/supabase'
 
-type DbQuote = {
+// Columnas que existen siempre en erp_quotes
+type DbQuoteBase = {
   id: string; folio: string; cliente_id: string
-  cliente_nombre: string; cliente_rfc: string; cliente_correo: string; cliente_telefono: string
   fecha: string; vigencia: string; subtotal: number; impuestos: number; total: number
   estatus: string; items: unknown; notas: string
+}
+// Columnas opcionales (agregadas por migración 20260708)
+type DbQuote = DbQuoteBase & {
+  cliente_nombre?: string; cliente_rfc?: string
+  cliente_correo?: string; cliente_telefono?: string
 }
 
 function toQuote(r: DbQuote): Quote {
   return {
-    cotizacionId: r.id, folio: r.folio, clienteId: r.cliente_id,
+    cotizacionId: r.id, folio: r.folio, clienteId: r.cliente_id ?? '',
     clienteNombre:   r.cliente_nombre   || undefined,
     clienteRfc:      r.cliente_rfc      || undefined,
     clienteCorreo:   r.cliente_correo   || undefined,
     clienteTelefono: r.cliente_telefono || undefined,
-    fecha: r.fecha, vigencia: r.vigencia, subtotal: r.subtotal,
-    impuestos: r.impuestos, total: r.total,
+    fecha: r.fecha, vigencia: r.vigencia ?? '',
+    subtotal: r.subtotal, impuestos: r.impuestos, total: r.total,
     estatus: r.estatus as Quote['estatus'],
     items: (r.items as Quote['items']) ?? [],
-    notas: r.notas,
+    notas: r.notas ?? '',
   }
 }
 
@@ -45,7 +50,10 @@ export const useQuotesStore = create<QuotesState>()((set, get) => ({
   async loadQuotes() {
     set({ loading: true })
     try {
-      const { data } = await supabase.from('erp_quotes').select('*').order('created_at', { ascending: false })
+      const { data } = await supabase
+        .from('erp_quotes')
+        .select('*')
+        .order('created_at', { ascending: false })
       if (data) set({ quotes: (data as DbQuote[]).map(toQuote) })
     } finally {
       set({ loading: false })
@@ -64,21 +72,65 @@ export const useQuotesStore = create<QuotesState>()((set, get) => ({
 
   async addQuote(data) {
     const folio = await nextFolio('COT', 'erp_quotes')
-    const { data: row } = await supabase
+
+    // Intentar insertar con las columnas de cliente eventual (post-migración)
+    const { data: row, error } = await supabase
       .from('erp_quotes')
       .insert({
         folio,
-        cliente_id:       data.clienteId,
-        cliente_nombre:   data.clienteNombre   ?? '',
-        cliente_rfc:      data.clienteRfc      ?? '',
-        cliente_correo:   data.clienteCorreo   ?? '',
-        cliente_telefono: data.clienteTelefono ?? '',
-        fecha: data.fecha, vigencia: data.vigencia,
-        subtotal: data.subtotal, impuestos: data.impuestos, total: data.total,
-        estatus: data.estatus, items: data.items, notas: data.notas,
+        cliente_id:       data.clienteId        ?? '',
+        cliente_nombre:   data.clienteNombre     ?? '',
+        cliente_rfc:      data.clienteRfc        ?? '',
+        cliente_correo:   data.clienteCorreo     ?? '',
+        cliente_telefono: data.clienteTelefono   ?? '',
+        fecha:            data.fecha,
+        vigencia:         data.vigencia          ?? '',
+        subtotal:         data.subtotal,
+        impuestos:        data.impuestos,
+        total:            data.total,
+        estatus:          data.estatus,
+        items:            data.items,
+        notas:            data.notas             ?? '',
       })
       .select('*')
       .maybeSingle()
+
+    if (error) {
+      // Fallback: insertar sin las columnas eventuales (migración no aplicada aún)
+      const { data: row2 } = await supabase
+        .from('erp_quotes')
+        .insert({
+          folio,
+          cliente_id: data.clienteId ?? '',
+          fecha:      data.fecha,
+          vigencia:   data.vigencia  ?? '',
+          subtotal:   data.subtotal,
+          impuestos:  data.impuestos,
+          total:      data.total,
+          estatus:    data.estatus,
+          items:      data.items,
+          notas:      data.notas ?? '',
+        })
+        .select('*')
+        .maybeSingle()
+
+      await get().loadQuotes()
+
+      if (row2) {
+        // Enriquecer con los datos eventuales que no se guardaron en BD
+        const base = toQuote(row2 as DbQuote)
+        return {
+          ...base,
+          clienteNombre:   data.clienteNombre   || undefined,
+          clienteRfc:      data.clienteRfc      || undefined,
+          clienteCorreo:   data.clienteCorreo   || undefined,
+          clienteTelefono: data.clienteTelefono || undefined,
+        }
+      }
+      // Último recurso: devolver objeto en memoria
+      return { ...data, cotizacionId: '', folio }
+    }
+
     await get().loadQuotes()
     return row ? toQuote(row as DbQuote) : { ...data, cotizacionId: '', folio }
   },
