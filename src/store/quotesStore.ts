@@ -6,8 +6,6 @@ type DbQuote = {
   id: string; folio: string; cliente_id: string; fecha: string
   vigencia: string; subtotal: number; impuestos: number; total: number
   estatus: string; items: unknown; notas: string
-  cliente_nombre: string; cliente_rfc: string
-  cliente_correo: string; cliente_telefono: string
 }
 
 function toQuote(r: DbQuote): Quote {
@@ -18,10 +16,6 @@ function toQuote(r: DbQuote): Quote {
     estatus: r.estatus as Quote['estatus'],
     items: (r.items as Quote['items']) ?? [],
     notas: r.notas,
-    clienteNombre: r.cliente_nombre ?? '',
-    clienteRfc: r.cliente_rfc ?? '',
-    clienteCorreo: r.cliente_correo ?? '',
-    clienteTelefono: r.cliente_telefono ?? '',
   }
 }
 
@@ -34,7 +28,6 @@ interface QuotesState {
   quotes: Quote[]
   loading: boolean
   loadQuotes: () => Promise<void>
-  subscribeRealtime: () => () => void
   addQuote: (q: Omit<Quote, 'cotizacionId' | 'folio'>) => Promise<Quote>
   updateQuote: (id: string, data: Partial<Quote>) => Promise<void>
   deleteQuote: (id: string) => Promise<void>
@@ -53,16 +46,6 @@ export const useQuotesStore = create<QuotesState>()((set, get) => ({
     }
   },
 
-  subscribeRealtime() {
-    const channel = supabase
-      .channel('erp_quotes_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_quotes' }, () => {
-        void get().loadQuotes()
-      })
-      .subscribe()
-    return () => { void supabase.removeChannel(channel) }
-  },
-
   async addQuote(data) {
     const folio = await nextFolio('COT', 'erp_quotes')
     const { data: row } = await supabase
@@ -72,10 +55,6 @@ export const useQuotesStore = create<QuotesState>()((set, get) => ({
         vigencia: data.vigencia, subtotal: data.subtotal,
         impuestos: data.impuestos, total: data.total,
         estatus: data.estatus, items: data.items, notas: data.notas,
-        cliente_nombre: data.clienteNombre ?? '',
-        cliente_rfc: data.clienteRfc ?? '',
-        cliente_correo: data.clienteCorreo ?? '',
-        cliente_telefono: data.clienteTelefono ?? '',
       })
       .select('*')
       .maybeSingle()
@@ -94,10 +73,6 @@ export const useQuotesStore = create<QuotesState>()((set, get) => ({
     if (data.estatus !== undefined) patch.estatus = data.estatus
     if (data.items !== undefined) patch.items = data.items
     if (data.notas !== undefined) patch.notas = data.notas
-    if (data.clienteNombre !== undefined) patch.cliente_nombre = data.clienteNombre
-    if (data.clienteRfc !== undefined) patch.cliente_rfc = data.clienteRfc
-    if (data.clienteCorreo !== undefined) patch.cliente_correo = data.clienteCorreo
-    if (data.clienteTelefono !== undefined) patch.cliente_telefono = data.clienteTelefono
     await supabase.from('erp_quotes').update(patch).eq('id', id)
     await get().loadQuotes()
   },

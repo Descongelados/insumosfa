@@ -6,7 +6,7 @@ interface Props {
   quote: Quote
   client: Client | undefined
   products: Product[]
-  /** Optional override - pass when rendering outside React context (e.g. iframe print) */
+  /** Optional override — pass when rendering outside React context (e.g. iframe print) */
   companyOverride?: CompanyInfo
 }
 
@@ -15,14 +15,6 @@ export const QuotePDF = forwardRef<HTMLDivElement, Props>(({ quote, client, prod
   const { company: storeCompany } = useConfigStore()
   const company = companyOverride ?? storeCompany
   const mxn = (v: number) => v.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })
-
-  // Resolver datos del cliente: registrado tiene prioridad; si no, usar datos manuales
-  const nombreCliente = client?.razonSocial ?? quote.clienteNombre ?? '—'
-  const rfcCliente    = client?.rfc ?? quote.clienteRfc ?? ''
-  const correoCliente = client?.correo ?? quote.clienteCorreo ?? ''
-  const telCliente    = client?.telefono ?? quote.clienteTelefono ?? ''
-  const regimenCliente = client?.regimenFiscal ?? ''
-  const dirCliente     = client?.direccionFiscal ?? ''
 
   return (
     <div
@@ -93,22 +85,15 @@ export const QuotePDF = forwardRef<HTMLDivElement, Props>(({ quote, client, prod
           Estimado cliente
         </div>
         <div style={{ background: '#f0f4ff', border: '1px solid #c7d2fe', borderRadius: 8, padding: '14px 18px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: '#1e40af' }}>
-              {nombreCliente}
-            </div>
-            {!client && (
-              <span style={{ fontSize: 10, fontWeight: 600, background: '#fef3c7', color: '#92400e', padding: '1px 8px', borderRadius: 20 }}>
-                EVENTUAL
-              </span>
-            )}
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#1e40af', marginBottom: 4 }}>
+            {client?.razonSocial ?? '—'}
           </div>
           <div style={{ color: '#374151', lineHeight: 1.8, fontSize: 12 }}>
-            {rfcCliente && <div>RFC: {rfcCliente}</div>}
-            {regimenCliente && <div>{regimenCliente}</div>}
-            {dirCliente && <div>{dirCliente}</div>}
-            {correoCliente && <div>Correo: {correoCliente}</div>}
-            {telCliente && <div>Tel: {telCliente}</div>}
+            {client?.rfc && <div>RFC: {client.rfc}</div>}
+            {client?.regimenFiscal && <div>{client.regimenFiscal}</div>}
+            {client?.direccionFiscal && <div>{client.direccionFiscal}</div>}
+            {client?.correo && <div>Correo: {client.correo}</div>}
+            {client?.telefono && <div>Tel: {client.telefono}</div>}
           </div>
         </div>
       </div>
@@ -180,14 +165,14 @@ export const QuotePDF = forwardRef<HTMLDivElement, Props>(({ quote, client, prod
         <div style={{ fontWeight: 700, fontSize: 12, color: '#374151', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
           Términos y Condiciones
         </div>
-        <ul style={{ paddingLeft: 18, margin: 0, fontSize: 11, color: '#6b7280', lineHeight: 2.2 }}>
-          <li>Precios + IVA</li>
-          <li>Moneda: Peso Mexicano (MXN)</li>
-          <li>Precios sujetos a cambio sin previo aviso</li>
-          <li>Precios considerados para las cantidades mínimas señaladas</li>
-          <li>Tiempo de entrega: 12 a 15 días</li>
-          <li>Forma de pago: Por definir</li>
-        </ul>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 24px', fontSize: 11, color: '#6b7280' }}>
+          <Cond label="Moneda" value="Pesos Mexicanos (MXN)" />
+          <Cond label="Forma de pago" value="Transferencia / Cheque" />
+          <Cond label="Condiciones" value={client?.limiteCredito && client.limiteCredito > 0 ? 'Crédito según convenio' : 'Contado'} />
+          <Cond label="Vigencia" value={quote.vigencia ? `Hasta ${formatDate(quote.vigencia)}` : '15 días naturales'} />
+          <Cond label="Entrega" value="Sujeta a disponibilidad de inventario" />
+          <Cond label="Precios" value="No incluyen flete, salvo acuerdo" />
+        </div>
       </div>
 
       {/* ── FIRMA ──────────────────────────────────────────────────────── */}
@@ -225,6 +210,12 @@ function TotalRow({ label, value }: { label: string; value: string }) {
     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 12px', fontSize: 12, color: '#374151' }}>
       <span>{label}</span><span style={{ fontWeight: 500 }}>{value}</span>
     </div>
+  )
+}
+
+function Cond({ label, value }: { label: string; value: string }) {
+  return (
+    <div><span style={{ fontWeight: 600, color: '#374151' }}>{label}: </span>{value}</div>
   )
 }
 

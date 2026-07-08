@@ -1,4 +1,4 @@
-// ── Auth & Security ──────────────────────────────────────────────────────
+// ─── Auth & Security ───────────────────────────────────────────────────────
 export type Role = 'director' | 'administracion' | 'compras' | 'ventas' | 'operaciones' | 'almacen'
 
 export interface User {
@@ -14,7 +14,7 @@ export interface AuthUser extends User {
   token: string
 }
 
-// ── Clients ──────────────────────────────────────────────────────────────
+// ─── Clients ───────────────────────────────────────────────────────────────
 export interface Client {
   clientId: string
   razonSocial: string
@@ -37,7 +37,7 @@ export interface ContactoCliente {
   telefono: string
 }
 
-// ── Prospects ────────────────────────────────────────────────────────────
+// ─── Prospects ─────────────────────────────────────────────────────────────
 export type ProspectoEstatus = 'nuevo' | 'contactado' | 'calificado' | 'cotizado' | 'ganado' | 'perdido'
 
 export interface Prospect {
@@ -52,7 +52,7 @@ export interface Prospect {
   fechaAlta: string
 }
 
-// ── Products ─────────────────────────────────────────────────────────────
+// ─── Products ──────────────────────────────────────────────────────────────
 export interface Product {
   productId: string
   sku: string
@@ -65,7 +65,7 @@ export interface Product {
   activo: boolean
 }
 
-// ── Inventory ────────────────────────────────────────────────────────────
+// ─── Inventory ─────────────────────────────────────────────────────────────
 export type MovimientoTipo = 'EntradaCompra' | 'SalidaVenta' | 'Transferencia' | 'Ajuste' | 'Merma' | 'Devolucion'
 
 export interface Inventario {
@@ -89,7 +89,7 @@ export interface KardexMovimiento {
   notas: string
 }
 
-// ── Suppliers ────────────────────────────────────────────────────────────
+// ─── Suppliers ─────────────────────────────────────────────────────────────
 export interface Supplier {
   supplierId: string
   razonSocial: string
@@ -105,7 +105,7 @@ export interface Supplier {
   activo: boolean
 }
 
-// ── Quotes ───────────────────────────────────────────────────────────────
+// ─── Quotes ────────────────────────────────────────────────────────────────
 export type CotizacionEstatus = 'borrador' | 'enviada' | 'aceptada' | 'rechazada' | 'vencida'
 
 export interface QuoteItem {
@@ -119,13 +119,7 @@ export interface QuoteItem {
 export interface Quote {
   cotizacionId: string
   folio: string
-  /** ID del cliente registrado. Vacío si es cliente eventual. */
   clienteId: string
-  /** Datos manuales para clientes no registrados */
-  clienteNombre?: string
-  clienteRfc?: string
-  clienteCorreo?: string
-  clienteTelefono?: string
   fecha: string
   vigencia: string
   subtotal: number
@@ -136,7 +130,7 @@ export interface Quote {
   notas: string
 }
 
-// ── Sales Orders ─────────────────────────────────────────────────────────
+// ─── Sales Orders ──────────────────────────────────────────────────────────
 export type PedidoEstatus = 'nuevo' | 'confirmado' | 'surtiendo' | 'embarcado' | 'entregado' | 'facturado' | 'cerrado'
 
 export interface SalesOrderItem {
@@ -162,7 +156,7 @@ export interface SalesOrder {
   notas: string
 }
 
-// ── Purchases ────────────────────────────────────────────────────────────
+// ─── Purchases ─────────────────────────────────────────────────────────────
 export type SolicitudEstatus = 'creada' | 'enRevision' | 'aprobada' | 'rechazada'
 export type OrdenCompraEstatus = 'borrador' | 'emitida' | 'confirmada' | 'recibida' | 'cerrada'
 
@@ -196,7 +190,7 @@ export interface OrdenCompra {
   notas: string
 }
 
-// ── Logistics ────────────────────────────────────────────────────────────
+// ─── Logistics ─────────────────────────────────────────────────────────────
 export type EmbarqueEstatus = 'solicitado' | 'programado' | 'recolectado' | 'enTransito' | 'entregado' | 'cerrado'
 
 export interface Transportista {
@@ -222,7 +216,7 @@ export interface Embarque {
   notas: string
 }
 
-// ── Finance ──────────────────────────────────────────────────────────────
+// ─── Finance ───────────────────────────────────────────────────────────────
 export type FacturaVentaEstatus = 'emitida' | 'parcial' | 'pagada' | 'vencida' | 'cancelada'
 export type FacturaProveedorEstatus = 'recibida' | 'parcial' | 'pagada' | 'vencida'
 
@@ -283,7 +277,7 @@ export interface Banco {
   activo: boolean
 }
 
-// ── Audit ────────────────────────────────────────────────────────────────
+// ─── Audit ─────────────────────────────────────────────────────────────────
 export interface AuditLog {
   auditId: string
   fecha: string
