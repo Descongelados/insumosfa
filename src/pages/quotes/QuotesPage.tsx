@@ -87,7 +87,7 @@ export function QuotesPage() {
   const { quotes, loadQuotes, subscribeRealtime, addQuote, updateQuote, deleteQuote } = useQuotesStore()
   const { addOrder }                   = useSalesOrdersStore()
   const { clients, loadClients }       = useClientsStore()
-  const { products, loadProducts }     = useProductsStore()
+  const { products, loadProducts, loading: productsLoading } = useProductsStore()
   const { user: me }                   = useAuthStore()
   const { company }                    = useConfigStore()
 
@@ -284,6 +284,7 @@ export function QuotesPage() {
         </div>
         <button className="btn-primary" onClick={() => {
           setForm({ ...BLANK_FORM, clienteId: clients.filter(c => c.estatus === 'activo')[0]?.clientId ?? '' })
+          void loadProducts()
           setModal('new')
         }}>
           <Plus size={16} /> Nueva Cotización
@@ -468,8 +469,15 @@ export function QuotesPage() {
                 <div key={it.detalleId} className="grid grid-cols-12 gap-2 mb-2 items-end">
                   <div className="col-span-5">
                     {idx === 0 && <label className="label">Producto</label>}
-                    <select className="select" value={it.productId} onChange={e => updateItem(idx, 'productId', e.target.value)}>
-                      <option value="">Seleccionar...</option>
+                    <select
+                      className="select"
+                      value={it.productId}
+                      disabled={productsLoading}
+                      onChange={e => updateItem(idx, 'productId', e.target.value)}
+                    >
+                      <option value="">
+                        {productsLoading ? 'Cargando productos...' : 'Seleccionar...'}
+                      </option>
                       {products.filter(p => p.activo).map(p => (
                         <option key={p.productId} value={p.productId}>{p.sku} — {p.descripcion}</option>
                       ))}
