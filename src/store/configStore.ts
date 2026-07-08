@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { supabase } from '../lib/supabase'
 
 export interface CompanyInfo {
   nombre: string
@@ -8,11 +8,6 @@ export interface CompanyInfo {
   direccion: string
   correo: string
   logoUrl: string   // base64 data URL or ''
-}
-
-interface ConfigState {
-  company: CompanyInfo
-  updateCompany: (data: Partial<CompanyInfo>) => void
 }
 
 const DEFAULT_COMPANY: CompanyInfo = {
@@ -24,14 +19,54 @@ const DEFAULT_COMPANY: CompanyInfo = {
   logoUrl:   '',
 }
 
-export const useConfigStore = create<ConfigState>()(
-  persist(
-    (set) => ({
-      company: DEFAULT_COMPANY,
-      updateCompany(data) {
-        set((s) => ({ company: { ...s.company, ...data } }))
-      },
-    }),
-    { name: 'erp_config' }
-  )
-)
+const CONFIG_ID = 'empresa'
+
+interface ConfigState {
+  company: CompanyInfo
+  loadCompany: () => Promise<void>
+  updateCompany: (data: Partial<CompanyInfo>) => Promise<void>
+}
+
+export const useConfigStore = create<ConfigState>()((set, get) => ({
+  company: DEFAULT_COMPANY,
+
+  async loadCompany() {
+    const { data } = await supabase
+      .from('erp_config')
+      .select('*')
+      .eq('id', CONFIG_ID)
+      .maybeSingle()
+
+    if (data) {
+      set({
+        company: {
+          nombre:    data.nombre    ?? DEFAULT_COMPANY.nombre,
+          rfc:       data.rfc       ?? DEFAULT_COMPANY.rfc,
+          telefono:  data.telefono  ?? DEFAULT_COMPANY.telefono,
+          direccion: data.direccion ?? DEFAULT_COMPANY.direccion,
+          correo:    data.correo    ?? DEFAULT_COMPANY.correo,
+          logoUrl:   data.logo_url  ?? DEFAULT_COMPANY.logoUrl,
+        },
+      })
+    }
+    // Si la fila no existe aún, se queda con DEFAULT_COMPANY (primera vez)
+  },
+
+  async updateCompany(data) {
+    // Optimista: actualizar el store inmediatamente
+    set(s => ({ company: { ...s.company, ...data } }))
+
+    const current = get().company
+    await supabase
+      .from('erp_config')
+      .upsert({
+        id:        CONFIG_ID,
+        nombre:    current.nombre,
+        rfc:       current.rfc,
+        telefono:  current.telefono,
+        direccion: current.direccion,
+        correo:    current.correo,
+        logo_url:  current.logoUrl,
+      })
+  },
+}))

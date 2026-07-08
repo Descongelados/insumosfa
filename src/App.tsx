@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { useAuthStore } from './store/authStore'
+import { useConfigStore } from './store/configStore'
 import { canAccess } from './rbac'
 import { Layout } from './components/Layout'
 import { Toaster } from './components/ui/Toaster'
@@ -41,7 +42,7 @@ function AccesoDenegado() {
           Tu perfil no tiene permisos para ver este módulo.
           {' '}Tus roles: <strong>{user.roles.join(', ')}</strong>.
         </p>
-        <a href="/" className="btn-primary">← Ir al Dashboard</a>
+        <a href="/" className="btn-primary"> Ir al Dashboard</a>
       </div>
     </Layout>
   )
@@ -73,8 +74,12 @@ function MigrationScreen() {
 
 export function App() {
   const [migrating, setMigrating] = useState(() => hasLocalStorageData())
+  const { loadCompany } = useConfigStore()
 
   useEffect(() => {
+    // Cargar datos de empresa desde Supabase al iniciar la app
+    void loadCompany()
+
     if (!migrating) return
     migrateLocalStorageToSupabase().finally(() => setMigrating(false))
   }, [])

@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react'
+﻿import { useRef, useState, useEffect } from 'react'
 import { useUsersStore } from '../../store/usersStore'
 import { useAuthStore } from '../../store/authStore'
 import { useConfigStore } from '../../store/configStore'
@@ -58,18 +58,24 @@ function RolesSelector({ selected, onChange, disabled = false }: {
 export function ConfigPage() {
   const { users, loadUsers, addUser, updateUser, deleteUser, toggleUser, changePassword } = useUsersStore()
   const { user: me } = useAuthStore()
-  const { company, updateCompany } = useConfigStore()
+  const { company, updateCompany, loadCompany } = useConfigStore()
 
   const isAdmin = me ? hasRole(me, 'director') : false
   const canEditCompany = me ? hasRole(me, 'director', 'administracion') : false
 
-  useEffect(() => { void loadUsers() }, [])
+  useEffect(() => {
+    void loadUsers()
+    void loadCompany()
+  }, [])
 
   // ── tabs ──────────────────────────────────────────────────────────────────
   const [tab, setTab] = useState<'empresa' | 'usuarios'>('empresa')
 
   // ── company form ──────────────────────────────────────────────────────────
   const [companyForm, setCompanyForm] = useState({ ...company })
+
+  // Sincronizar el form local cuando los datos de empresa se cargan desde Supabase
+  useEffect(() => { setCompanyForm({ ...company }) }, [company.nombre, company.rfc])
   const [companyDirty, setCompanyDirty] = useState(false)
   const logoInputRef = useRef<HTMLInputElement>(null)
 
@@ -93,8 +99,8 @@ export function ConfigPage() {
     e.target.value = '' // reset input
   }
 
-  function handleSaveCompany() {
-    updateCompany(companyForm)
+  async function handleSaveCompany() {
+    await updateCompany(companyForm)
     setCompanyDirty(false)
     toast.success('Información de la empresa actualizada.')
   }
@@ -559,3 +565,4 @@ export function ConfigPage() {
     </div>
   )
 }
+
