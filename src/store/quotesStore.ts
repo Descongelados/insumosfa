@@ -3,14 +3,19 @@ import type { Quote } from '../types'
 import { supabase } from '../lib/supabase'
 
 type DbQuote = {
-  id: string; folio: string; cliente_id: string; fecha: string
-  vigencia: string; subtotal: number; impuestos: number; total: number
+  id: string; folio: string; cliente_id: string
+  cliente_nombre: string; cliente_rfc: string; cliente_correo: string; cliente_telefono: string
+  fecha: string; vigencia: string; subtotal: number; impuestos: number; total: number
   estatus: string; items: unknown; notas: string
 }
 
 function toQuote(r: DbQuote): Quote {
   return {
     cotizacionId: r.id, folio: r.folio, clienteId: r.cliente_id,
+    clienteNombre:   r.cliente_nombre   || undefined,
+    clienteRfc:      r.cliente_rfc      || undefined,
+    clienteCorreo:   r.cliente_correo   || undefined,
+    clienteTelefono: r.cliente_telefono || undefined,
     fecha: r.fecha, vigencia: r.vigencia, subtotal: r.subtotal,
     impuestos: r.impuestos, total: r.total,
     estatus: r.estatus as Quote['estatus'],
@@ -28,6 +33,7 @@ interface QuotesState {
   quotes: Quote[]
   loading: boolean
   loadQuotes: () => Promise<void>
+  subscribeRealtime: () => () => void
   addQuote: (q: Omit<Quote, 'cotizacionId' | 'folio'>) => Promise<Quote>
   updateQuote: (id: string, data: Partial<Quote>) => Promise<void>
   deleteQuote: (id: string) => Promise<void>
@@ -46,14 +52,29 @@ export const useQuotesStore = create<QuotesState>()((set, get) => ({
     }
   },
 
+  subscribeRealtime() {
+    const channel = supabase
+      .channel('erp_quotes_rt')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_quotes' }, () => {
+        void get().loadQuotes()
+      })
+      .subscribe()
+    return () => { void supabase.removeChannel(channel) }
+  },
+
   async addQuote(data) {
     const folio = await nextFolio('COT', 'erp_quotes')
     const { data: row } = await supabase
       .from('erp_quotes')
       .insert({
-        folio, cliente_id: data.clienteId, fecha: data.fecha,
-        vigencia: data.vigencia, subtotal: data.subtotal,
-        impuestos: data.impuestos, total: data.total,
+        folio,
+        cliente_id:       data.clienteId,
+        cliente_nombre:   data.clienteNombre   ?? '',
+        cliente_rfc:      data.clienteRfc      ?? '',
+        cliente_correo:   data.clienteCorreo   ?? '',
+        cliente_telefono: data.clienteTelefono ?? '',
+        fecha: data.fecha, vigencia: data.vigencia,
+        subtotal: data.subtotal, impuestos: data.impuestos, total: data.total,
         estatus: data.estatus, items: data.items, notas: data.notas,
       })
       .select('*')
@@ -64,15 +85,19 @@ export const useQuotesStore = create<QuotesState>()((set, get) => ({
 
   async updateQuote(id, data) {
     const patch: Record<string, unknown> = {}
-    if (data.clienteId !== undefined) patch.cliente_id = data.clienteId
-    if (data.fecha !== undefined) patch.fecha = data.fecha
-    if (data.vigencia !== undefined) patch.vigencia = data.vigencia
-    if (data.subtotal !== undefined) patch.subtotal = data.subtotal
-    if (data.impuestos !== undefined) patch.impuestos = data.impuestos
-    if (data.total !== undefined) patch.total = data.total
-    if (data.estatus !== undefined) patch.estatus = data.estatus
-    if (data.items !== undefined) patch.items = data.items
-    if (data.notas !== undefined) patch.notas = data.notas
+    if (data.clienteId        !== undefined) patch.cliente_id       = data.clienteId
+    if (data.clienteNombre    !== undefined) patch.cliente_nombre   = data.clienteNombre
+    if (data.clienteRfc       !== undefined) patch.cliente_rfc      = data.clienteRfc
+    if (data.clienteCorreo    !== undefined) patch.cliente_correo   = data.clienteCorreo
+    if (data.clienteTelefono  !== undefined) patch.cliente_telefono = data.clienteTelefono
+    if (data.fecha     !== undefined) patch.fecha      = data.fecha
+    if (data.vigencia  !== undefined) patch.vigencia   = data.vigencia
+    if (data.subtotal  !== undefined) patch.subtotal   = data.subtotal
+    if (data.impuestos !== undefined) patch.impuestos  = data.impuestos
+    if (data.total     !== undefined) patch.total      = data.total
+    if (data.estatus   !== undefined) patch.estatus    = data.estatus
+    if (data.items     !== undefined) patch.items      = data.items
+    if (data.notas     !== undefined) patch.notas      = data.notas
     await supabase.from('erp_quotes').update(patch).eq('id', id)
     await get().loadQuotes()
   },

@@ -120,6 +120,11 @@ export interface Quote {
   cotizacionId: string
   folio: string
   clienteId: string
+  /** Datos del cliente eventual (cuando clienteId es vacío) */
+  clienteNombre?: string
+  clienteRfc?: string
+  clienteCorreo?: string
+  clienteTelefono?: string
   fecha: string
   vigencia: string
   subtotal: number
