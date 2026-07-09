@@ -125,6 +125,7 @@ export interface Quote {
   clienteRfc?: string
   clienteCorreo?: string
   clienteTelefono?: string
+  clienteDireccion?: string
   fecha: string
   vigencia: string
   subtotal: number

@@ -75,7 +75,7 @@ const BLANK_FORM = {
   // registrado
   clienteId: '',
   // eventual
-  clienteNombre: '', clienteRfc: '', clienteCorreo: '', clienteTelefono: '',
+  clienteNombre: '', clienteRfc: '', clienteCorreo: '', clienteTelefono: '', clienteDireccion: '',
   // común
   vigencia: '', notas: '',
   items: [] as QuoteItem[],
@@ -155,10 +155,11 @@ export function QuotesPage() {
     return {
       cotizacionId: 'preview', folio: 'PREV-0000',
       clienteId:       form.clienteMode === 'registrado' ? form.clienteId : '',
-      clienteNombre:   form.clienteMode === 'eventual'   ? form.clienteNombre   : undefined,
-      clienteRfc:      form.clienteMode === 'eventual'   ? form.clienteRfc      : undefined,
-      clienteCorreo:   form.clienteMode === 'eventual'   ? form.clienteCorreo   : undefined,
-      clienteTelefono: form.clienteMode === 'eventual'   ? form.clienteTelefono : undefined,
+      clienteNombre:    form.clienteMode === 'eventual' ? form.clienteNombre    : undefined,
+      clienteRfc:       form.clienteMode === 'eventual' ? form.clienteRfc       : undefined,
+      clienteCorreo:    form.clienteMode === 'eventual' ? form.clienteCorreo    : undefined,
+      clienteTelefono:  form.clienteMode === 'eventual' ? form.clienteTelefono  : undefined,
+      clienteDireccion: form.clienteMode === 'eventual' ? form.clienteDireccion : undefined,
       vigencia: form.vigencia, notas: form.notas, items: form.items,
       fecha: new Date().toISOString().split('T')[0],
       subtotal, impuestos, total, estatus: 'borrador',
@@ -177,11 +178,12 @@ export function QuotesPage() {
 
     const { subtotal, impuestos, total } = calcTotals(form.items)
     const quote = await addQuote({
-      clienteId:       form.clienteMode === 'registrado' ? form.clienteId : '',
-      clienteNombre:   form.clienteMode === 'eventual'   ? form.clienteNombre   : '',
-      clienteRfc:      form.clienteMode === 'eventual'   ? form.clienteRfc      : '',
-      clienteCorreo:   form.clienteMode === 'eventual'   ? form.clienteCorreo   : '',
-      clienteTelefono: form.clienteMode === 'eventual'   ? form.clienteTelefono : '',
+      clienteId:        form.clienteMode === 'registrado' ? form.clienteId : '',
+      clienteNombre:    form.clienteMode === 'eventual'   ? form.clienteNombre    : '',
+      clienteRfc:       form.clienteMode === 'eventual'   ? form.clienteRfc       : '',
+      clienteCorreo:    form.clienteMode === 'eventual'   ? form.clienteCorreo    : '',
+      clienteTelefono:  form.clienteMode === 'eventual'   ? form.clienteTelefono  : '',
+      clienteDireccion: form.clienteMode === 'eventual'   ? form.clienteDireccion : '',
       vigencia: form.vigencia, notas: form.notas, items: form.items,
       fecha: new Date().toISOString().split('T')[0],
       subtotal, impuestos, total, estatus: 'borrador',
@@ -443,6 +445,15 @@ export function QuotesPage() {
                       className="input"
                       value={form.clienteTelefono}
                       onChange={e => setForm(f => ({ ...f, clienteTelefono: e.target.value }))}
+                      placeholder="Opcional"
+                    />
+                  </div>
+                  <div className="form-group sm:col-span-2">
+                    <label className="label">Dirección</label>
+                    <input
+                      className="input"
+                      value={form.clienteDireccion}
+                      onChange={e => setForm(f => ({ ...f, clienteDireccion: e.target.value }))}
                       placeholder="Opcional"
                     />
                   </div>

@@ -12,6 +12,7 @@ type DbQuoteBase = {
 type DbQuote = DbQuoteBase & {
   cliente_nombre?: string; cliente_rfc?: string
   cliente_correo?: string; cliente_telefono?: string
+  cliente_direccion?: string
 }
 
 /**
@@ -35,10 +36,11 @@ function toQuote(r: DbQuote): Quote {
   const rawItems = Array.isArray(r.items) ? r.items : []
   return {
     cotizacionId: r.id, folio: r.folio, clienteId: r.cliente_id ?? '',
-    clienteNombre:   r.cliente_nombre   || undefined,
-    clienteRfc:      r.cliente_rfc      || undefined,
-    clienteCorreo:   r.cliente_correo   || undefined,
-    clienteTelefono: r.cliente_telefono || undefined,
+    clienteNombre:    r.cliente_nombre    || undefined,
+    clienteRfc:       r.cliente_rfc       || undefined,
+    clienteCorreo:    r.cliente_correo    || undefined,
+    clienteTelefono:  r.cliente_telefono  || undefined,
+    clienteDireccion: r.cliente_direccion || undefined,
     fecha: r.fecha, vigencia: r.vigencia ?? '',
     subtotal: r.subtotal, impuestos: r.impuestos, total: r.total,
     estatus: r.estatus as Quote['estatus'],
@@ -100,11 +102,12 @@ export const useQuotesStore = create<QuotesState>()((set, get) => ({
       .from('erp_quotes')
       .insert({
         folio,
-        cliente_id:       data.clienteId        ?? '',
-        cliente_nombre:   data.clienteNombre     ?? '',
-        cliente_rfc:      data.clienteRfc        ?? '',
-        cliente_correo:   data.clienteCorreo     ?? '',
-        cliente_telefono: data.clienteTelefono   ?? '',
+        cliente_id:        data.clienteId         ?? '',
+        cliente_nombre:    data.clienteNombre      ?? '',
+        cliente_rfc:       data.clienteRfc         ?? '',
+        cliente_correo:    data.clienteCorreo      ?? '',
+        cliente_telefono:  data.clienteTelefono    ?? '',
+        cliente_direccion: data.clienteDireccion   ?? '',
         fecha:            data.fecha,
         vigencia:         data.vigencia || null,
         subtotal:         data.subtotal,
@@ -143,10 +146,11 @@ export const useQuotesStore = create<QuotesState>()((set, get) => ({
         const base = toQuote(row2 as DbQuote)
         return {
           ...base,
-          clienteNombre:   data.clienteNombre   || undefined,
-          clienteRfc:      data.clienteRfc      || undefined,
-          clienteCorreo:   data.clienteCorreo   || undefined,
-          clienteTelefono: data.clienteTelefono || undefined,
+          clienteNombre:    data.clienteNombre    || undefined,
+          clienteRfc:       data.clienteRfc       || undefined,
+          clienteCorreo:    data.clienteCorreo    || undefined,
+          clienteTelefono:  data.clienteTelefono  || undefined,
+          clienteDireccion: data.clienteDireccion || undefined,
         }
       }
       // Último recurso: devolver objeto en memoria con items normalizados
@@ -160,10 +164,11 @@ export const useQuotesStore = create<QuotesState>()((set, get) => ({
   async updateQuote(id, data) {
     const patch: Record<string, unknown> = {}
     if (data.clienteId        !== undefined) patch.cliente_id       = data.clienteId
-    if (data.clienteNombre    !== undefined) patch.cliente_nombre   = data.clienteNombre
-    if (data.clienteRfc       !== undefined) patch.cliente_rfc      = data.clienteRfc
-    if (data.clienteCorreo    !== undefined) patch.cliente_correo   = data.clienteCorreo
-    if (data.clienteTelefono  !== undefined) patch.cliente_telefono = data.clienteTelefono
+    if (data.clienteNombre    !== undefined) patch.cliente_nombre    = data.clienteNombre
+    if (data.clienteRfc       !== undefined) patch.cliente_rfc       = data.clienteRfc
+    if (data.clienteCorreo    !== undefined) patch.cliente_correo    = data.clienteCorreo
+    if (data.clienteTelefono  !== undefined) patch.cliente_telefono  = data.clienteTelefono
+    if (data.clienteDireccion !== undefined) patch.cliente_direccion = data.clienteDireccion
     if (data.fecha     !== undefined) patch.fecha      = data.fecha
     if (data.vigencia  !== undefined) patch.vigencia   = data.vigencia || null
     if (data.subtotal  !== undefined) patch.subtotal   = data.subtotal

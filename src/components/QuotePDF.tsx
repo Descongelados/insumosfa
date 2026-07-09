@@ -28,7 +28,7 @@ export const QuotePDF = forwardRef<HTMLDivElement, Props>(
     const rfcCliente      = client?.rfc ?? quote.clienteRfc ?? ''
     const correoCliente   = client?.correo ?? quote.clienteCorreo ?? ''
     const telCliente      = client?.telefono ?? quote.clienteTelefono ?? ''
-    const dirCliente      = client?.direccionFiscal ?? ''
+    const dirCliente      = client?.direccionFiscal ?? quote.clienteDireccion ?? ''
 
     // Vigencia en texto corto (ej: "15 días")
     const vigenciaLabel = quote.vigencia
