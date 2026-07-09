@@ -14,11 +14,10 @@ import { Plus, CreditCard as Edit2, Trash2, Package, ToggleLeft, ToggleRight, Ci
 // Roles que pueden eliminar productos
 const DELETE_ROLES = ['director', 'administracion', 'compras'] as const
 
-const CATEGORIAS = ['PVC', 'Tornillería', 'Eléctrico', 'Válvulas', 'Perfiles', 'Cementantes', 'Hidráulica', 'Herramientas', 'Otro']
 const UNIDADES = ['PZA', 'MT', 'KG', 'LT', 'SAC', 'CJA', 'ROL', 'TON']
 
 const BLANK: Omit<Product, 'productId'> = {
-  sku: '', descripcion: '', categoria: CATEGORIAS[0], marca: '',
+  sku: '', descripcion: '', categoria: '', marca: '',
   unidadMedida: UNIDADES[0], costoPromedio: 0, precioVenta: 0, activo: true,
 }
 
@@ -100,7 +99,7 @@ export function ProductsPage() {
           columns={[
             { key: 'sku', header: 'SKU', render: (p) => <span className="font-mono text-xs font-semibold text-blue-700">{p.sku}</span> },
             { key: 'descripcion', header: 'Descripción' },
-            { key: 'categoria', header: 'Categoría' },
+            { key: 'categoria', header: 'Presentación' },
             { key: 'marca', header: 'Marca' },
             { key: 'unidadMedida', header: 'UM' },
             { key: 'costoPromedio', header: 'Costo', render: (p) => <Currency value={p.costoPromedio} /> },
@@ -151,10 +150,8 @@ export function ProductsPage() {
               <input className="input" value={form.descripcion} onChange={S('descripcion')} required />
             </div>
             <div className="form-group">
-              <label className="label">Categoría</label>
-              <select className="select" value={form.categoria} onChange={S('categoria')}>
-                {CATEGORIAS.map((c) => <option key={c}>{c}</option>)}
-              </select>
+              <label className="label">Presentación</label>
+              <input className="input" value={form.categoria} onChange={S('categoria')} placeholder="Ej: Caja, Bolsa, Rollo..." />
             </div>
             <div className="form-group">
               <label className="label">Unidad de Medida</label>
@@ -163,7 +160,7 @@ export function ProductsPage() {
               </select>
             </div>
             <div className="form-group">
-              <label className="label">Costo Promedio (MXN)</label>
+              <label className="label">Precio de compra (MXN)</label>
               <input type="number" className="input" value={form.costoPromedio} onChange={N('costoPromedio')} min={0} step="0.01" />
             </div>
             <div className="form-group">

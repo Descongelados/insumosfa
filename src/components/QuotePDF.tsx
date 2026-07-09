@@ -25,9 +25,10 @@ export const QuotePDF = forwardRef<HTMLDivElement, Props>(
     // Nombre del cliente (registrado o eventual)
     const nombreCliente =
       client?.razonSocial ?? quote.clienteNombre ?? '—'
-    const rfcCliente    = client?.rfc ?? quote.clienteRfc ?? ''
-    const correoCliente = client?.correo ?? quote.clienteCorreo ?? ''
-    const telCliente    = client?.telefono ?? quote.clienteTelefono ?? ''
+    const rfcCliente      = client?.rfc ?? quote.clienteRfc ?? ''
+    const correoCliente   = client?.correo ?? quote.clienteCorreo ?? ''
+    const telCliente      = client?.telefono ?? quote.clienteTelefono ?? ''
+    const dirCliente      = client?.direccionFiscal ?? ''
 
     // Vigencia en texto corto (ej: "15 días")
     const vigenciaLabel = quote.vigencia
@@ -262,7 +263,7 @@ export const QuotePDF = forwardRef<HTMLDivElement, Props>(
             <li>Precios + IVA,</li>
             <li>Moneda: MXN,</li>
             <li>
-              <strong>Precios LAB en <em>{company.direccion?.split(',')[0] ?? company.nombre}</em></strong>
+              <strong>Dirección de entrega: <em>{dirCliente || nombreCliente}</em></strong>
             </li>
             <li>
               Forma de Pago:{' '}
