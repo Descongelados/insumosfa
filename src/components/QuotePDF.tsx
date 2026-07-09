@@ -186,8 +186,8 @@ export const QuotePDF = forwardRef<HTMLDivElement, Props>(
                   <td style={{ ...tdStyle('center'), fontSize: 10 }}>
                     {prod?.categoria ?? ''}
                   </td>
-                  {/* Papel: vacío por defecto — campo libre */}
-                  <td style={tdStyle('center')}></td>
+                  {/* Papel: marca del producto */}
+                  <td style={{ ...tdStyle('center'), fontSize: 10 }}>{prod?.marca ?? ''}</td>
                   <td style={tdStyle('right')}>
                     {it.cantidad.toLocaleString('es-MX', { minimumFractionDigits: 3, maximumFractionDigits: 3 })}
                   </td>
