@@ -157,13 +157,12 @@ export const QuotePDF = forwardRef<HTMLDivElement, Props>(
         <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 16, fontSize: 11 }}>
           <thead>
             <tr style={{ background: TEAL, color: '#fff' }}>
-              <Th align="left"  w="28%">Descripción</Th>
-              <Th align="center" w="8%">Unidad</Th>
-              <Th align="center" w="18%">Especificaciones</Th>
-              <Th align="center" w="15%">Presentación</Th>
-              <Th align="center" w="10%">Papel</Th>
-              <Th align="right"  w="10%">Cantidades mínimas</Th>
-              <Th align="right"  w="11%">Precio Unitario</Th>
+              <Th align="left"  w="34%">Descripción</Th>
+              <Th align="center" w="10%">Unidad</Th>
+              <Th align="center" w="18%">Presentación</Th>
+              <Th align="center" w="12%">Papel</Th>
+              <Th align="right"  w="13%">Cantidades mínimas</Th>
+              <Th align="right"  w="13%">Precio Unitario</Th>
             </tr>
           </thead>
           <tbody>
@@ -183,10 +182,6 @@ export const QuotePDF = forwardRef<HTMLDivElement, Props>(
                     )}
                   </td>
                   <td style={tdStyle('center')}>{prod?.unidadMedida ?? ''}</td>
-                  {/* Especificaciones: usando campo marca como especificación */}
-                  <td style={{ ...tdStyle('center'), fontSize: 10 }}>
-                    {prod?.marca ?? ''}
-                  </td>
                   {/* Presentación: usando categoría del producto */}
                   <td style={{ ...tdStyle('center'), fontSize: 10 }}>
                     {prod?.categoria ?? ''}
@@ -204,7 +199,7 @@ export const QuotePDF = forwardRef<HTMLDivElement, Props>(
             })}
             {/* Fila de totales */}
             <tr style={{ background: '#f0f0f0' }}>
-              <td colSpan={5} style={{ ...tdStyle('right'), fontSize: 11, paddingRight: 12 }}>
+              <td colSpan={4} style={{ ...tdStyle('right'), fontSize: 11, paddingRight: 12 }}>
                 Subtotal:
               </td>
               <td colSpan={2} style={{ ...tdStyle('right'), fontWeight: 600 }}>
@@ -212,7 +207,7 @@ export const QuotePDF = forwardRef<HTMLDivElement, Props>(
               </td>
             </tr>
             <tr style={{ background: '#f0f0f0' }}>
-              <td colSpan={5} style={{ ...tdStyle('right'), fontSize: 11, paddingRight: 12 }}>
+              <td colSpan={4} style={{ ...tdStyle('right'), fontSize: 11, paddingRight: 12 }}>
                 IVA (16%):
               </td>
               <td colSpan={2} style={{ ...tdStyle('right'), fontWeight: 600 }}>
@@ -220,7 +215,7 @@ export const QuotePDF = forwardRef<HTMLDivElement, Props>(
               </td>
             </tr>
             <tr style={{ background: TEAL }}>
-              <td colSpan={5} style={{ ...tdStyle('right'), color: '#fff', fontWeight: 700, paddingRight: 12 }}>
+              <td colSpan={4} style={{ ...tdStyle('right'), color: '#fff', fontWeight: 700, paddingRight: 12 }}>
                 TOTAL:
               </td>
               <td colSpan={2} style={{ ...tdStyle('right'), color: '#fff', fontWeight: 700, fontSize: 13 }}>
