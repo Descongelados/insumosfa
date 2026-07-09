@@ -282,28 +282,6 @@ export interface Banco {
   activo: boolean
 }
 
-// ─── Gastos del Negocio ────────────────────────────────────────────────────
-export type GastoCategoria =
-  | 'Renta'
-  | 'Nomina'
-  | 'Servicios'
-  | 'Mantenimiento'
-  | 'Publicidad'
-  | 'Transporte'
-  | 'Impuestos'
-  | 'Otros'
-
-export interface GastoNegocio {
-  gastoId: string
-  fecha: string
-  categoria: GastoCategoria
-  descripcion: string
-  monto: number
-  formaPago: string
-  referencia: string
-  notas: string
-}
-
 // ─── Audit ─────────────────────────────────────────────────────────────────
 export interface AuditLog {
   auditId: string
