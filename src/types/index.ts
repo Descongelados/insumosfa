@@ -37,6 +37,14 @@ export interface ContactoCliente {
   telefono: string
 }
 
+export interface ContactNote {
+  noteId: string
+  /** ID del cliente o prospecto al que pertenece */
+  entidadId: string
+  fecha: string   // ISO date "YYYY-MM-DD HH:mm"
+  texto: string
+}
+
 // ─── Prospects ─────────────────────────────────────────────────────────────
 export type ProspectoEstatus = 'nuevo' | 'contactado' | 'calificado' | 'cotizado' | 'ganado' | 'perdido'
 
@@ -53,6 +61,9 @@ export interface Prospect {
 }
 
 // ─── Products ──────────────────────────────────────────────────────────────
+// ── Contact Notes ───────────────────────────────────────────────────────────
+// (notas de contacto almacenadas en erp_client_notes / erp_prospect_notes)
+
 export interface Product {
   productId: string
   sku: string

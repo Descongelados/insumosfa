@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Prospect } from '../types'
+import type { Prospect, ContactNote } from '../types'
 import { supabase } from '../lib/supabase'
 import { useClientsStore } from './clientsStore'
 
@@ -12,6 +12,9 @@ type DbProspect = {
   telefono: string; origen: string; estatus: string
   valor_potencial: number; fecha_alta: string
 }
+type DbProspectNote = {
+  id: string; prospecto_id: string; fecha: string; texto: string
+}
 
 function toProspect(r: DbProspect): Prospect {
   return {
@@ -21,9 +24,13 @@ function toProspect(r: DbProspect): Prospect {
     valorPotencial: r.valor_potencial, fechaAlta: r.fecha_alta,
   }
 }
+function toProspectNote(r: DbProspectNote): ContactNote {
+  return { noteId: r.id, entidadId: r.prospecto_id, fecha: r.fecha, texto: r.texto }
+}
 
 interface ProspectsState {
   prospects: Prospect[]
+  prospectNotes: ContactNote[]
   loading: boolean
   loadProspects: () => Promise<void>
   subscribeRealtime: () => () => void
@@ -31,15 +38,18 @@ interface ProspectsState {
   updateProspect: (id: string, data: Partial<Prospect>) => Promise<void>
   deleteProspect: (id: string) => Promise<void>
   convertirACliente: (id: string, fiscal: DatosFiscales) => Promise<void>
+  addProspectNote: (prospectoId: string, texto: string) => Promise<void>
+  removeProspectNote: (noteId: string) => Promise<void>
 }
 
 export const useProspectsStore = create<ProspectsState>()((set, get) => ({
-  prospects: [], loading: false,
+  prospects: [], prospectNotes: [], loading: false,
 
   subscribeRealtime() {
     const ch = supabase
       .channel('erp_prospects_rt')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_prospects' }, () => { void get().loadProspects() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_prospect_notes' }, () => { void get().loadProspects() })
       .subscribe()
     return () => { void supabase.removeChannel(ch) }
   },
@@ -47,8 +57,12 @@ export const useProspectsStore = create<ProspectsState>()((set, get) => ({
   async loadProspects() {
     set({ loading: true })
     try {
-      const { data } = await supabase.from('erp_prospects').select('*').order('created_at', { ascending: false })
+      const [{ data }, { data: nd }] = await Promise.all([
+        supabase.from('erp_prospects').select('*').order('created_at', { ascending: false }),
+        supabase.from('erp_prospect_notes').select('*').order('fecha', { ascending: false }),
+      ])
       if (data) set({ prospects: (data as DbProspect[]).map(toProspect) })
+      if (nd)   set({ prospectNotes: (nd as DbProspectNote[]).map(toProspectNote) })
     } finally {
       set({ loading: false })
     }
@@ -92,5 +106,15 @@ export const useProspectsStore = create<ProspectsState>()((set, get) => ({
     })
     await supabase.from('erp_prospects').delete().eq('id', id)
     await get().loadProspects()
+  },
+
+  async addProspectNote(prospectoId, texto) {
+    await supabase.from('erp_prospect_notes').insert({ prospecto_id: prospectoId, texto })
+    await get().loadProspects()
+  },
+
+  async removeProspectNote(noteId) {
+    await supabase.from('erp_prospect_notes').delete().eq('id', noteId)
+    set(s => ({ prospectNotes: s.prospectNotes.filter(n => n.noteId !== noteId) }))
   },
 }))

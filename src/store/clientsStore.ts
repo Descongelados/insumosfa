@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Client, ContactoCliente } from '../types'
+import type { Client, ContactoCliente, ContactNote } from '../types'
 import { supabase } from '../lib/supabase'
 
 type DbClient = {
@@ -10,6 +10,9 @@ type DbClient = {
 type DbContact = {
   id: string; cliente_id: string; nombre: string
   puesto: string; correo: string; telefono: string
+}
+type DbClientNote = {
+  id: string; cliente_id: string; fecha: string; texto: string
 }
 
 function toClient(r: DbClient): Client {
@@ -26,10 +29,14 @@ function toContacto(r: DbContact): ContactoCliente {
     puesto: r.puesto, correo: r.correo, telefono: r.telefono,
   }
 }
+function toClientNote(r: DbClientNote): ContactNote {
+  return { noteId: r.id, entidadId: r.cliente_id, fecha: r.fecha, texto: r.texto }
+}
 
 interface ClientsState {
   clients: Client[]
   contactos: ContactoCliente[]
+  clientNotes: ContactNote[]
   loading: boolean
   loadClients: () => Promise<void>
   subscribeRealtime: () => () => void
@@ -38,16 +45,19 @@ interface ClientsState {
   deleteClient: (id: string) => Promise<void>
   addContacto: (c: Omit<ContactoCliente, 'contactoId'>) => Promise<void>
   removeContacto: (id: string) => Promise<void>
+  addClientNote: (clienteId: string, texto: string) => Promise<void>
+  removeClientNote: (noteId: string) => Promise<void>
 }
 
 export const useClientsStore = create<ClientsState>()((set, get) => ({
-  clients: [], contactos: [], loading: false,
+  clients: [], contactos: [], clientNotes: [], loading: false,
 
   subscribeRealtime() {
     const ch = supabase
       .channel('erp_clients_rt')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_clients' }, () => { void get().loadClients() })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_client_contacts' }, () => { void get().loadClients() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_client_notes' }, () => { void get().loadClients() })
       .subscribe()
     return () => { void supabase.removeChannel(ch) }
   },
@@ -55,12 +65,14 @@ export const useClientsStore = create<ClientsState>()((set, get) => ({
   async loadClients() {
     set({ loading: true })
     try {
-      const [{ data: cd }, { data: ctd }] = await Promise.all([
+      const [{ data: cd }, { data: ctd }, { data: nd }] = await Promise.all([
         supabase.from('erp_clients').select('*').order('created_at', { ascending: false }),
         supabase.from('erp_client_contacts').select('*'),
+        supabase.from('erp_client_notes').select('*').order('fecha', { ascending: false }),
       ])
-      if (cd) set({ clients: (cd as DbClient[]).map(toClient) })
+      if (cd)  set({ clients: (cd as DbClient[]).map(toClient) })
       if (ctd) set({ contactos: (ctd as DbContact[]).map(toContacto) })
+      if (nd)  set({ clientNotes: (nd as DbClientNote[]).map(toClientNote) })
     } finally {
       set({ loading: false })
     }
@@ -114,5 +126,15 @@ export const useClientsStore = create<ClientsState>()((set, get) => ({
   async removeContacto(id) {
     await supabase.from('erp_client_contacts').delete().eq('id', id)
     set(s => ({ contactos: s.contactos.filter(c => c.contactoId !== id) }))
+  },
+
+  async addClientNote(clienteId, texto) {
+    await supabase.from('erp_client_notes').insert({ cliente_id: clienteId, texto })
+    await get().loadClients()
+  },
+
+  async removeClientNote(noteId) {
+    await supabase.from('erp_client_notes').delete().eq('id', noteId)
+    set(s => ({ clientNotes: s.clientNotes.filter(n => n.noteId !== noteId) }))
   },
 }))

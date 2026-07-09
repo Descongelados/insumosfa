@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useClientsStore } from '../../store/clientsStore'
 import { useProspectsStore } from '../../store/prospectsStore'
 import type { DatosFiscales } from '../../store/prospectsStore'
@@ -11,7 +11,7 @@ import { Modal } from '../../components/ui/Modal'
 import { Currency } from '../../components/ui/Currency'
 import { toast } from '../../store/toastStore'
 import type { Client, Prospect, ProspectoEstatus } from '../../types'
-import { Users, UserSearch, Plus, CreditCard as Edit2, Trash2, UserCheck, ArrowRight, Info, CircleAlert as AlertCircle } from 'lucide-react'
+import { Users, UserSearch, Plus, CreditCard as Edit2, Trash2, UserCheck, ArrowRight, Info, CircleAlert as AlertCircle, MessageSquare, Send } from 'lucide-react'
 
 // ── Shared constants ─────────────────────────────────────────────────────────
 const REGIMENES = [
@@ -44,9 +44,17 @@ const BLANK_CLIENT: Omit<Client, 'clientId' | 'fechaAlta'> = {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function fmtNoteDate(iso: string) {
+  try {
+    const d = new Date(iso)
+    return d.toLocaleString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  } catch { return iso }
+}
+
 export function ClientsProspectsPage() {
-  const { clients, loadClients, subscribeRealtime: subClients, updateClient, deleteClient } = useClientsStore()
-  const { prospects, loadProspects, subscribeRealtime: subProspects, addProspect, updateProspect, deleteProspect, convertirACliente } = useProspectsStore()
+  const { clients, loadClients, subscribeRealtime: subClients, updateClient, deleteClient, clientNotes, addClientNote, removeClientNote } = useClientsStore()
+  const { prospects, loadProspects, subscribeRealtime: subProspects, addProspect, updateProspect, deleteProspect, convertirACliente, prospectNotes, addProspectNote, removeProspectNote } = useProspectsStore()
   const { user: me } = useAuthStore()
 
   useEffect(() => {
@@ -83,6 +91,35 @@ export function ClientsProspectsPage() {
   const [cForm, setCForm] = useState(BLANK_CLIENT)
   const [cEditId, setCEditId] = useState<string | null>(null)
   const [cDelTarget, setCDelTarget] = useState<Client | null>(null)
+
+  // ── notes state ────────────────────────────────────────────────────────────
+  type NotesTarget = { type: 'cliente'; id: string; nombre: string } | { type: 'prospecto'; id: string; nombre: string } | null
+  const [notesTarget, setNotesTarget] = useState<NotesTarget>(null)
+  const [noteInput, setNoteInput] = useState('')
+  const notesEndRef = useRef<HTMLDivElement>(null)
+
+  function openNotes(type: 'cliente' | 'prospecto', id: string, nombre: string) {
+    setNotesTarget({ type, id, nombre })
+    setNoteInput('')
+  }
+
+  async function handleAddNote() {
+    if (!noteInput.trim() || !notesTarget) return
+    if (notesTarget.type === 'cliente') await addClientNote(notesTarget.id, noteInput.trim())
+    else await addProspectNote(notesTarget.id, noteInput.trim())
+    setNoteInput('')
+    setTimeout(() => notesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
+  }
+
+  function handleRemoveNote(noteId: string) {
+    if (!notesTarget) return
+    if (notesTarget.type === 'cliente') removeClientNote(noteId)
+    else removeProspectNote(noteId)
+  }
+
+  const activeNotes = notesTarget
+    ? (notesTarget.type === 'cliente' ? clientNotes : prospectNotes).filter(n => n.entidadId === notesTarget.id)
+    : []
 
   // ── filtered lists ─────────────────────────────────────────────────────────
   const filteredProspects = prospects.filter((p) =>
@@ -261,6 +298,14 @@ export function ClientsProspectsPage() {
                           <Edit2 size={13} /> Editar
                         </button>
                       )}
+                      <button className="btn btn-secondary btn-sm" onClick={() => openNotes('prospecto', p.prospectoId, p.empresa)} title="Notas de contacto">
+                        <MessageSquare size={13} />
+                        {prospectNotes.filter(n => n.entidadId === p.prospectoId).length > 0 && (
+                          <span className="ml-1 text-xs font-bold text-blue-600">
+                            {prospectNotes.filter(n => n.entidadId === p.prospectoId).length}
+                          </span>
+                        )}
+                      </button>
                       {p.estatus === 'cotizado' && canConvert && (
                         <button className="btn btn-success btn-sm" onClick={() => openMarcarGanado(p)}>
                           <UserCheck size={13} /> Ganado
@@ -316,6 +361,14 @@ export function ClientsProspectsPage() {
                     <div className="flex gap-1">
                       <button className="btn btn-secondary btn-sm" onClick={() => openEditClient(c)}>
                         <Edit2 size={13} /> Editar
+                      </button>
+                      <button className="btn btn-secondary btn-sm" onClick={() => openNotes('cliente', c.clientId, c.razonSocial)} title="Notas de contacto">
+                        <MessageSquare size={13} />
+                        {clientNotes.filter(n => n.entidadId === c.clientId).length > 0 && (
+                          <span className="ml-1 text-xs font-bold text-blue-600">
+                            {clientNotes.filter(n => n.entidadId === c.clientId).length}
+                          </span>
+                        )}
                       </button>
                       {canDeleteClient && (
                         <button className="btn btn-danger btn-sm" onClick={() => openDelClient(c)} title="Eliminar">
@@ -513,6 +566,67 @@ export function ClientsProspectsPage() {
             <div className="flex items-start gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800">
               <AlertCircle size={15} className="flex-shrink-0 mt-0.5" />
               <span>Se eliminarán también sus contactos asociados. Esta acción no se puede deshacer.</span>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ══ MODAL: NOTAS DE CONTACTO ═══════════════════════════════════════════ */}
+      {notesTarget && (
+        <Modal
+          title={`Notas — ${notesTarget.nombre}`}
+          onClose={() => setNotesTarget(null)}
+          size="lg"
+          footer={
+            <button className="btn-secondary" onClick={() => setNotesTarget(null)}>Cerrar</button>
+          }
+        >
+          <div className="flex flex-col gap-3">
+            {/* Lista de notas */}
+            <div className="flex flex-col gap-2 max-h-72 overflow-y-auto pr-1">
+              {activeNotes.length === 0 && (
+                <div className="text-sm text-gray-400 text-center py-6 border border-dashed border-gray-300 rounded-lg">
+                  Sin notas registradas aún.
+                </div>
+              )}
+              {activeNotes.map(note => (
+                <div key={note.noteId} className="flex items-start gap-3 p-3 bg-gray-50 border border-gray-200 rounded-lg group">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs text-gray-400 font-medium mb-1 flex items-center gap-1">
+                      <MessageSquare size={11} />
+                      {fmtNoteDate(note.fecha)}
+                    </div>
+                    <p className="text-sm text-gray-800 whitespace-pre-wrap">{note.texto}</p>
+                  </div>
+                  <button
+                    className="opacity-0 group-hover:opacity-100 transition-opacity btn btn-danger btn-sm flex-shrink-0"
+                    onClick={() => handleRemoveNote(note.noteId)}
+                    title="Eliminar nota"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              ))}
+              <div ref={notesEndRef} />
+            </div>
+
+            {/* Input nueva nota */}
+            <div className="flex gap-2 pt-2 border-t border-gray-200">
+              <textarea
+                className="textarea flex-1 resize-none"
+                rows={2}
+                placeholder="Escribe una nota sobre el contacto..."
+                value={noteInput}
+                onChange={e => setNoteInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void handleAddNote() } }}
+              />
+              <button
+                className="btn-primary self-end flex items-center gap-1"
+                onClick={() => void handleAddNote()}
+                disabled={!noteInput.trim()}
+              >
+                <Send size={14} /> Agregar
+              </button>
             </div>
           </div>
         </Modal>
