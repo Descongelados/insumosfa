@@ -17,7 +17,7 @@ import { DollarSign, CreditCard, Building, Eye, CircleCheck as CheckCircle, Cloc
 const MXN = (v: number) => v.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })
 const FORMAS_PAGO = ['Transferencia', 'Cheque', 'Efectivo', 'Tarjeta']
 const CATEGORIAS_GASTO: GastoNegocio['categoria'][] = [
-  'Renta', 'Nomina', 'Servicios', 'Mantenimiento', 'Publicidad', 'Transporte', 'Impuestos', 'Otros',
+  'Renta', 'Nomina', 'Servicios', 'Mantenimiento', 'Publicidad', 'Transporte', 'Impuestos', 'Prestamos', 'Maquinaria', 'Suministros', 'Otros',
 ]
 
 const today = () => new Date().toISOString().split('T')[0]
@@ -278,8 +278,17 @@ export function FinancePage() {
     Publicidad: 'bg-pink-100 text-pink-700',
     Transporte: 'bg-orange-100 text-orange-700',
     Impuestos: 'bg-red-100 text-red-700',
+    Prestamos: 'bg-violet-100 text-violet-700',
+    Maquinaria: 'bg-amber-100 text-amber-700',
+    Suministros: 'bg-teal-100 text-teal-700',
     Otros: 'bg-gray-100 text-gray-600',
   }
+
+  // resumen por forma de pago (todos los gastos, no solo del mes)
+  const totalEfectivo = gastos.filter(g => g.formaPago === 'Efectivo').reduce((a, g) => a + g.monto, 0)
+  const totalTransferencia = gastos.filter(g => g.formaPago === 'Transferencia').reduce((a, g) => a + g.monto, 0)
+  const totalCheque = gastos.filter(g => g.formaPago === 'Cheque').reduce((a, g) => a + g.monto, 0)
+  const totalTarjeta = gastos.filter(g => g.formaPago === 'Tarjeta').reduce((a, g) => a + g.monto, 0)
 
   return (
     <div className="space-y-6">
@@ -518,20 +527,42 @@ export function FinancePage() {
             return (
               <div className="card space-y-3">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-semibold text-gray-700">Resumen del mes actual</h4>
-                  <span className="text-xs text-gray-400">{mesActual}</span>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {porCat.map(({ cat, total }) => (
-                    <div key={cat} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${catColor[cat]}`}>
-                      <span>{cat}</span>
-                      <span className="opacity-75">{MXN(total)}</span>
+                    <h4 className="text-sm font-semibold text-gray-700">Resumen del mes actual</h4>
+                    <span className="text-xs text-gray-400">{mesActual}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {porCat.map(({ cat, total }) => (
+                      <div key={cat} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${catColor[cat]}`}>
+                        <span>{cat}</span>
+                        <span className="opacity-75">{MXN(total)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex justify-end text-sm font-bold text-rose-600">
+                    Total mes: {MXN(totalGastosMes)}
+                  </div>
+                  {/* Resumen por forma de pago — acumulado total */}
+                  <div className="border-t border-gray-100 pt-3 mt-1">
+                    <div className="text-xs font-semibold text-gray-500 mb-2">Por forma de pago (acumulado total)</div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      <div className="text-center p-2 rounded-lg bg-green-50">
+                        <div className="text-sm font-bold text-green-700">{MXN(totalEfectivo)}</div>
+                        <div className="text-xs text-gray-500 mt-0.5">Efectivo</div>
+                      </div>
+                      <div className="text-center p-2 rounded-lg bg-blue-50">
+                        <div className="text-sm font-bold text-blue-700">{MXN(totalTransferencia)}</div>
+                        <div className="text-xs text-gray-500 mt-0.5">Transferencia</div>
+                      </div>
+                      <div className="text-center p-2 rounded-lg bg-purple-50">
+                        <div className="text-sm font-bold text-purple-700">{MXN(totalCheque)}</div>
+                        <div className="text-xs text-gray-500 mt-0.5">Cheque</div>
+                      </div>
+                      <div className="text-center p-2 rounded-lg bg-orange-50">
+                        <div className="text-sm font-bold text-orange-700">{MXN(totalTarjeta)}</div>
+                        <div className="text-xs text-gray-500 mt-0.5">Tarjeta</div>
+                      </div>
                     </div>
-                  ))}
-                </div>
-                <div className="flex justify-end text-sm font-bold text-rose-600">
-                  Total: {MXN(totalGastosMes)}
-                </div>
+                  </div>
               </div>
             )
           })()}
@@ -560,12 +591,12 @@ export function FinancePage() {
                 rowKey={(g) => g.gastoId}
                 columns={[
                   { key: 'fecha', header: 'Fecha', render: (g: GastoNegocio) => <span className="font-medium">{g.fecha}</span> },
-                  { key: 'categoria', header: 'Categor├¡a', render: (g: GastoNegocio) => (
+                  { key: 'categoria', header: 'Categoria', render: (g: GastoNegocio) => (
                     <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${catColor[g.categoria]}`}>
                       {g.categoria}
                     </span>
                   )},
-                  { key: 'descripcion', header: 'Descripci├│n', render: (g: GastoNegocio) => (
+                  { key: 'descripcion', header: 'Descripcion', render: (g: GastoNegocio) => (
                     <div>
                       <div className="font-medium text-gray-900">{g.descripcion}</div>
                       {g.notas && <div className="text-xs text-gray-400">{g.notas}</div>}
@@ -938,7 +969,7 @@ export function FinancePage() {
                   onChange={(e) => setGastoForm(f => ({ ...f, fecha: e.target.value }))} />
               </div>
               <div className="form-group">
-                <label className="label">Categor├¡a *</label>
+                <label className="label">Categoria *</label>
                 <select className="select" value={gastoForm.categoria}
                   onChange={(e) => setGastoForm(f => ({ ...f, categoria: e.target.value as GastoNegocio['categoria'] }))}>
                   {CATEGORIAS_GASTO.map(c => <option key={c}>{c}</option>)}
@@ -946,7 +977,7 @@ export function FinancePage() {
               </div>
             </div>
             <div className="form-group">
-              <label className="label">Descripci├│n *</label>
+              <label className="label">Descripcion *</label>
               <input className="input" value={gastoForm.descripcion} placeholder="Ej. Renta oficina agosto"
                 onChange={(e) => setGastoForm(f => ({ ...f, descripcion: e.target.value }))} />
             </div>
