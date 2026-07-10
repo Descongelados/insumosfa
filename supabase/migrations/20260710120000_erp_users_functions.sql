@@ -26,6 +26,15 @@ CREATE POLICY "users_update" ON erp_users FOR UPDATE TO anon, authenticated USIN
 DROP POLICY IF EXISTS "users_delete" ON erp_users;
 CREATE POLICY "users_delete" ON erp_users FOR DELETE TO anon, authenticated USING (true);
 
+-- ─── DROP funciones existentes (por si tienen tipo de retorno distinto) ────
+DROP FUNCTION IF EXISTS erp_verify_login(text, text);
+DROP FUNCTION IF EXISTS erp_get_users();
+DROP FUNCTION IF EXISTS erp_create_user(text, text, text[], text);
+DROP FUNCTION IF EXISTS erp_update_user(uuid, text, text, text[]);
+DROP FUNCTION IF EXISTS erp_delete_user(uuid);
+DROP FUNCTION IF EXISTS erp_toggle_user(uuid, boolean);
+DROP FUNCTION IF EXISTS erp_change_password(uuid, text);
+
 -- ─── RPC: erp_verify_login ──────────────────────────────────────
 CREATE OR REPLACE FUNCTION erp_verify_login(p_email text, p_password text)
 RETURNS TABLE (id uuid, email text, name text, roles text[], active boolean, created_at timestamptz)
