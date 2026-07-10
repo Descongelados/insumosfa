@@ -202,6 +202,7 @@ export interface OrdenCompra {
   fecha: string
   fechaEntregaEsperada: string
   monto: number
+  ivaPct: 0 | 8 | 16
   estatus: OrdenCompraEstatus
   items: OrdenCompraItem[]
   notas: string

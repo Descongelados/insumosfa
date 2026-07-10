@@ -8,7 +8,7 @@ type DbSolicitud = {
 }
 type DbOrden = {
   id: string; folio: string; supplier_id: string; fecha: string
-  fecha_entrega_esperada: string; monto: number; estatus: string
+  fecha_entrega_esperada: string; monto: number; iva_pct: number; estatus: string
   items: unknown; notas: string
 }
 
@@ -24,7 +24,8 @@ function toOrden(r: DbOrden): OrdenCompra {
   return {
     ordenCompraId: r.id, folio: r.folio, supplierId: r.supplier_id,
     fecha: r.fecha, fechaEntregaEsperada: r.fecha_entrega_esperada,
-    monto: r.monto, estatus: r.estatus as OrdenCompra['estatus'],
+    monto: r.monto, ivaPct: (r.iva_pct ?? 16) as OrdenCompra['ivaPct'],
+    estatus: r.estatus as OrdenCompra['estatus'],
     items: (r.items as OrdenCompra['items']) ?? [], notas: r.notas,
   }
 }
@@ -104,7 +105,8 @@ export const usePurchasesStore = create<PurchasesState>()((set, get) => ({
       .insert({
         folio, supplier_id: data.supplierId, fecha: data.fecha,
         fecha_entrega_esperada: data.fechaEntregaEsperada,
-        monto: data.monto, estatus: data.estatus, items: data.items, notas: data.notas,
+        monto: data.monto, iva_pct: data.ivaPct ?? 16,
+        estatus: data.estatus, items: data.items, notas: data.notas,
       })
       .select('*')
       .maybeSingle()
@@ -118,6 +120,7 @@ export const usePurchasesStore = create<PurchasesState>()((set, get) => ({
     if (data.fecha !== undefined) patch.fecha = data.fecha
     if (data.fechaEntregaEsperada !== undefined) patch.fecha_entrega_esperada = data.fechaEntregaEsperada
     if (data.monto !== undefined) patch.monto = data.monto
+    if (data.ivaPct !== undefined) patch.iva_pct = data.ivaPct
     if (data.estatus !== undefined) patch.estatus = data.estatus
     if (data.items !== undefined) patch.items = data.items
     if (data.notas !== undefined) patch.notas = data.notas
