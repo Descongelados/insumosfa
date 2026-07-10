@@ -1,8 +1,8 @@
-import { create } from 'zustand'
-import type { FacturaVenta, PagoCliente, FacturaProveedor, PagoProveedor, Banco } from '../types'
+﻿import { create } from 'zustand'
+import type { FacturaVenta, PagoCliente, FacturaProveedor, PagoProveedor, Banco, GastoNegocio } from '../types'
 import { supabase } from '../lib/supabase'
 
-// ── DB type mappers ──────────────────────────────────────────────────────────
+// ΓöÇΓöÇ DB type mappers ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 type DbFV = {
   id: string; folio: string; cliente_id: string; pedido_id: string | null
@@ -24,6 +24,10 @@ type DbPP = {
 }
 type DbBanco = {
   id: string; banco: string; cuenta: string; saldo: number; moneda: string; activo: boolean
+}
+type DbGasto = {
+  id: string; fecha: string; categoria: string; descripcion: string
+  monto: number; forma_pago: string; referencia: string; notas: string
 }
 
 function toFV(r: DbFV): FacturaVenta {
@@ -59,8 +63,16 @@ function toPP(r: DbPP): PagoProveedor {
 function toBanco(r: DbBanco): Banco {
   return { bancoId: r.id, banco: r.banco, cuenta: r.cuenta, saldo: r.saldo, moneda: r.moneda, activo: r.activo }
 }
+function toGasto(r: DbGasto): GastoNegocio {
+  return {
+    gastoId: r.id, fecha: r.fecha,
+    categoria: r.categoria as GastoNegocio['categoria'],
+    descripcion: r.descripcion, monto: r.monto,
+    formaPago: r.forma_pago, referencia: r.referencia, notas: r.notas,
+  }
+}
 
-// ── Store ─────────────────────────────────────────────────────────────────────
+// ΓöÇΓöÇ Store ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 interface FinanceState {
   facturasVenta: FacturaVenta[]
@@ -68,6 +80,7 @@ interface FinanceState {
   facturasProveedor: FacturaProveedor[]
   pagosProveedores: PagoProveedor[]
   bancos: Banco[]
+  gastos: GastoNegocio[]
   loading: boolean
   loadFinance: () => Promise<void>
   subscribeRealtime: () => () => void
@@ -79,12 +92,15 @@ interface FinanceState {
   updateBanco: (id: string, data: Partial<Banco>) => Promise<void>
   addBanco: (b: Omit<Banco, 'bancoId'>) => Promise<void>
   deleteBanco: (id: string) => Promise<void>
+  addGasto: (g: Omit<GastoNegocio, 'gastoId'>) => Promise<void>
+  updateGasto: (id: string, data: Partial<Omit<GastoNegocio, 'gastoId'>>) => Promise<void>
+  deleteGasto: (id: string) => Promise<void>
 }
 
 export const useFinanceStore = create<FinanceState>()((set, get) => ({
   facturasVenta: [], pagosClientes: [],
   facturasProveedor: [], pagosProveedores: [],
-  bancos: [], loading: false,
+  bancos: [], gastos: [], loading: false,
 
   subscribeRealtime() {
     const ch = supabase
@@ -94,6 +110,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
       .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_invoices_supplier' }, () => { void get().loadFinance() })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_payments_supplier' }, () => { void get().loadFinance() })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_banks' }, () => { void get().loadFinance() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_gastos_negocio' }, () => { void get().loadFinance() })
       .subscribe()
     return () => { void supabase.removeChannel(ch) }
   },
@@ -101,18 +118,20 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
   async loadFinance() {
     set({ loading: true })
     try {
-      const [{ data: fv }, { data: pc }, { data: fp }, { data: pp }, { data: bk }] = await Promise.all([
+      const [{ data: fv }, { data: pc }, { data: fp }, { data: pp }, { data: bk }, { data: gn }] = await Promise.all([
         supabase.from('erp_invoices_sale').select('*').order('created_at', { ascending: false }),
         supabase.from('erp_payments_client').select('*').order('created_at', { ascending: false }),
         supabase.from('erp_invoices_supplier').select('*').order('created_at', { ascending: false }),
         supabase.from('erp_payments_supplier').select('*').order('created_at', { ascending: false }),
         supabase.from('erp_banks').select('*').order('banco'),
+        supabase.from('erp_gastos_negocio').select('*').order('fecha', { ascending: false }),
       ])
       if (fv) set({ facturasVenta: (fv as DbFV[]).map(toFV) })
       if (pc) set({ pagosClientes: (pc as DbPC[]).map(toPC) })
       if (fp) set({ facturasProveedor: (fp as DbFP[]).map(toFP) })
       if (pp) set({ pagosProveedores: (pp as DbPP[]).map(toPP) })
       if (bk) set({ bancos: (bk as DbBanco[]).map(toBanco) })
+      if (gn) set({ gastos: (gn as DbGasto[]).map(toGasto) })
     } finally {
       set({ loading: false })
     }
@@ -212,5 +231,32 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
   async deleteBanco(id) {
     await supabase.from('erp_banks').delete().eq('id', id)
     set(s => ({ bancos: s.bancos.filter(b => b.bancoId !== id) }))
+  },
+
+  async addGasto(data) {
+    await supabase.from('erp_gastos_negocio').insert({
+      fecha: data.fecha, categoria: data.categoria,
+      descripcion: data.descripcion, monto: data.monto,
+      forma_pago: data.formaPago, referencia: data.referencia, notas: data.notas,
+    })
+    await get().loadFinance()
+  },
+
+  async updateGasto(id, data) {
+    const patch: Record<string, unknown> = {}
+    if (data.fecha !== undefined) patch.fecha = data.fecha
+    if (data.categoria !== undefined) patch.categoria = data.categoria
+    if (data.descripcion !== undefined) patch.descripcion = data.descripcion
+    if (data.monto !== undefined) patch.monto = data.monto
+    if (data.formaPago !== undefined) patch.forma_pago = data.formaPago
+    if (data.referencia !== undefined) patch.referencia = data.referencia
+    if (data.notas !== undefined) patch.notas = data.notas
+    await supabase.from('erp_gastos_negocio').update(patch).eq('id', id)
+    await get().loadFinance()
+  },
+
+  async deleteGasto(id) {
+    await supabase.from('erp_gastos_negocio').delete().eq('id', id)
+    set(s => ({ gastos: s.gastos.filter(g => g.gastoId !== id) }))
   },
 }))
