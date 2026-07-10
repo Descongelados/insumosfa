@@ -59,10 +59,12 @@ export const usePurchasesStore = create<PurchasesState>()((set, get) => ({
   async loadPurchases() {
     set({ loading: true })
     try {
-      const [{ data: sd }, { data: od }] = await Promise.all([
+      const [{ data: sd, error: e1 }, { data: od, error: e2 }] = await Promise.all([
         supabase.from('erp_purchase_requests').select('*').order('created_at', { ascending: false }),
         supabase.from('erp_purchase_orders').select('*').order('created_at', { ascending: false }),
       ])
+      if (e1) console.error('loadPurchases solicitudes error:', e1.message)
+      if (e2) console.error('loadPurchases ordenes error:', e2.message)
       if (sd) set({ solicitudes: (sd as DbSolicitud[]).map(toSolicitud) })
       if (od) set({ ordenesCompra: (od as DbOrden[]).map(toOrden) })
     } finally {
@@ -98,9 +100,17 @@ export const usePurchasesStore = create<PurchasesState>()((set, get) => ({
   },
 
   async addOrdenCompra(data) {
-    const { count } = await supabase.from('erp_purchase_orders').select('*', { count: 'exact', head: true })
-    const folio = `OC-${String((count ?? 0) + 1).padStart(4, '0')}`
-    const { data: row } = await supabase
+    // Generar folio basado en el folio más alto existente para evitar duplicados
+    const { data: last } = await supabase
+      .from('erp_purchase_orders')
+      .select('folio')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    const lastNum = last?.folio ? parseInt(last.folio.replace('OC-', ''), 10) : 0
+    const folio = `OC-${String((isNaN(lastNum) ? 0 : lastNum) + 1).padStart(4, '0')}`
+
+    const { data: row, error } = await supabase
       .from('erp_purchase_orders')
       .insert({
         folio, supplier_id: data.supplierId, fecha: data.fecha,
@@ -110,6 +120,7 @@ export const usePurchasesStore = create<PurchasesState>()((set, get) => ({
       })
       .select('*')
       .maybeSingle()
+    if (error) console.error('addOrdenCompra insert error:', error.message)
     await get().loadPurchases()
     return row ? toOrden(row as DbOrden) : { ...data, ordenCompraId: '', folio }
   },
