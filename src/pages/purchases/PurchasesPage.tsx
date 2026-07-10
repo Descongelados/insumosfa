@@ -61,8 +61,9 @@ export function PurchasesPage() {
   const [delOC, setDelOC] = useState<OrdenCompra | null>(null)
   const [form, setForm] = useState<OCForm>(BLANK_FORM)
 
-  const canDelete = user ? hasRole(user, 'director', 'compras', 'administracion') : false
-  const canEdit   = user ? hasRole(user, 'director', 'compras', 'administracion') : false
+  const canDelete  = user ? hasRole(user, 'director', 'compras', 'administracion') : false
+  const canEdit    = user ? hasRole(user, 'director', 'compras', 'administracion') : false
+  const isDirector = user ? hasRole(user, 'director') : false
 
   const filteredOC = ordenesCompra.filter((o) => {
     const sup = suppliers.find(s => s.supplierId === o.supplierId)
@@ -277,6 +278,16 @@ export function PurchasesPage() {
                         <Trash2 size={13} />
                       </button>
                     )}
+                    {isDirector && o.estatus === 'cerrada' && (
+                      <button className="btn btn-secondary btn-sm" onClick={() => openEdit(o)} title="Editar (Admin)">
+                        <Pencil size={13} />
+                      </button>
+                    )}
+                    {isDirector && o.estatus === 'cerrada' && (
+                      <button className="btn btn-danger btn-sm" onClick={() => { setDelOC(o); setModal('del_oc') }} title="Eliminar (Admin)">
+                        <Trash2 size={13} />
+                      </button>
+                    )}
                   </div>
                 )
               },
@@ -447,9 +458,14 @@ export function PurchasesPage() {
         <Modal title="Eliminar Orden de Compra" onClose={() => setModal(null)}
           footer={<><button className="btn-secondary" onClick={() => setModal(null)}>Cancelar</button><button className="btn-danger" onClick={handleDeleteOC}><Trash2 size={14} /> Eliminar</button></>}
         >
-          <p className="text-sm text-gray-700">
-            ¿Eliminar la OC <strong>{delOC.folio}</strong> (borrador)? Esta acción no se puede deshacer.
-          </p>
+          <div className="space-y-2 text-sm text-gray-700">
+            <p>¿Eliminar la OC <strong>{delOC.folio}</strong>? Esta acción no se puede deshacer.</p>
+            {delOC.estatus === 'cerrada' && (
+              <p className="p-2 bg-amber-50 border border-amber-200 rounded text-amber-800 text-xs font-medium">
+                ⚠️ Esta OC está <strong>cerrada</strong>. Solo el director del sistema puede eliminarla.
+              </p>
+            )}
+          </div>
         </Modal>
       )}
     </div>
