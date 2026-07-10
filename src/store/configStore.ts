@@ -57,7 +57,7 @@ export const useConfigStore = create<ConfigState>()((set, get) => ({
     set(s => ({ company: { ...s.company, ...data } }))
 
     const current = get().company
-    await supabase
+    const { error } = await supabase
       .from('erp_config')
       .upsert({
         id:        CONFIG_ID,
@@ -68,5 +68,6 @@ export const useConfigStore = create<ConfigState>()((set, get) => ({
         correo:    current.correo,
         logo_url:  current.logoUrl,
       })
+    if (error) console.error('updateCompany error:', error.message)
   },
 }))

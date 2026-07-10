@@ -75,7 +75,7 @@ export function ConfigPage() {
   const [companyForm, setCompanyForm] = useState({ ...company })
 
   // Sincronizar el form local cuando los datos de empresa se cargan desde Supabase
-  useEffect(() => { setCompanyForm({ ...company }) }, [company.nombre, company.rfc])
+  useEffect(() => { setCompanyForm({ ...company }) }, [company.nombre, company.rfc, company.telefono, company.direccion, company.correo, company.logoUrl])
   const [companyDirty, setCompanyDirty] = useState(false)
   const logoInputRef = useRef<HTMLInputElement>(null)
 
