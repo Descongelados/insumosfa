@@ -143,6 +143,50 @@ export function LogisticsPage() {
     toast.success('Datos del embarque actualizados.')
   }
 
+  // ── guardar campos de embarque solicitado ────────────────────────────────
+  async function handleGuardarSolicitado() {
+    if (!selEmb) return
+
+    // Construir la lista de OC refs con la OC seleccionada
+    let nuevasOCs: EmbarqueOCRef[] = selEmb.ordenesIds ?? []
+    if (editOrdenCompraId) {
+      const ocSel = ordenesCompra.find(o => o.ordenCompraId === editOrdenCompraId)
+      if (ocSel) {
+        // Reemplaza / actualiza la primera OC con el folio y cantidad editada
+        const existeIdx = nuevasOCs.findIndex(r => r.ordenCompraId === editOrdenCompraId)
+        const ref: EmbarqueOCRef = {
+          ordenCompraId: ocSel.ordenCompraId,
+          folio: ocSel.folio,
+          kgEmbarcados: editCantidad,
+        }
+        if (existeIdx >= 0) {
+          nuevasOCs = nuevasOCs.map((r, i) => i === existeIdx ? ref : r)
+        } else {
+          // Si cambiaron de OC, reemplaza la primera
+          nuevasOCs = [ref, ...nuevasOCs.slice(1)]
+        }
+      }
+    } else {
+      // Sin OC — actualiza solo el kgEmbarcados de la primera si existe
+      if (nuevasOCs.length > 0) {
+        nuevasOCs = [{ ...nuevasOCs[0], kgEmbarcados: editCantidad }, ...nuevasOCs.slice(1)]
+      }
+    }
+
+    await updateEmbarque(selEmb.embarqueId, {
+      destino: editDestino,
+      fechaProgramada: editFechaProgramada,
+      costoFlete: editCostoFlete,
+      ordenesIds: nuevasOCs,
+    })
+
+    setSelEmb(prev => prev
+      ? { ...prev, destino: editDestino, fechaProgramada: editFechaProgramada, costoFlete: editCostoFlete, ordenesIds: nuevasOCs }
+      : prev
+    )
+    toast.success('Datos del embarque actualizados.')
+  }
+
   // ── cambiar estatus del embarque ──────────────────────────────────────────
   async function handleCambiarEstatus(est: EmbarqueEstatus) {
     if (!selEmb) return
