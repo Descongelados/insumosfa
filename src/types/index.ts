@@ -209,7 +209,7 @@ export interface OrdenCompra {
 }
 
 // ─── Logistics ─────────────────────────────────────────────────────────────
-export type EmbarqueEstatus = 'solicitado' | 'programado' | 'recolectado' | 'enTransito' | 'entregado' | 'cerrado' | 'cancelado'
+export type EmbarqueEstatus = 'solicitado' | 'programado' | 'recolectado' | 'enTransito' | 'entregado' | 'cerrado'
 
 export interface Transportista {
   transportistaId: string
