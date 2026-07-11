@@ -66,6 +66,7 @@ export function PurchasesPage() {
   const isDirector = user ? hasRole(user, 'director') : false
 
   const filteredOC = ordenesCompra.filter((o) => {
+    if (['enviarLogistica', 'parcialLogistica'].includes(o.estatus)) return false
     const sup = suppliers.find(s => s.supplierId === o.supplierId)
     return [o.folio, sup?.razonSocial ?? ''].join(' ').toLowerCase().includes(q.toLowerCase())
   })
