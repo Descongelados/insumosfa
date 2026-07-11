@@ -40,6 +40,7 @@ interface InventoryState {
     productId: string; tipo: MovimientoTipo; cantidad: number
     documentoOrigen: string; usuario: string; notas?: string
   }) => Promise<void>
+  updateCantidadDisponible: (productId: string, nuevaCantidad: number, usuario: string) => Promise<void>
   getStock: (productId: string) => number
 }
 
@@ -71,6 +72,23 @@ export const useInventoryStore = create<InventoryState>()((set, get) => ({
     } finally {
       set({ loading: false })
     }
+  },
+
+  async updateCantidadDisponible(productId, nuevaCantidad, usuario) {
+    const existing = get().inventario.find(i => i.productId === productId)
+    const anterior = existing?.cantidadDisponible ?? 0
+    await supabase
+      .from('erp_inventory')
+      .update({ cantidad_disponible: nuevaCantidad, updated_at: new Date().toISOString() })
+      .eq('product_id', productId)
+    await supabase.from('erp_kardex').insert({
+      product_id: productId, tipo: 'Ajuste', cantidad: Math.abs(nuevaCantidad - anterior),
+      documento_origen: 'Ajuste Manual', usuario,
+      notas: `Ajuste directo de ${anterior} a ${nuevaCantidad}`,
+      fecha: new Date().toISOString().split('T')[0],
+      existencia_anterior: anterior, existencia_nueva: nuevaCantidad,
+    })
+    await get().loadInventory()
   },
 
   async applyMovimiento({ productId, tipo, cantidad, documentoOrigen, usuario, notas = '' }) {

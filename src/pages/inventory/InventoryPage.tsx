@@ -2,13 +2,13 @@ import { useState, useEffect } from 'react'
 import { useInventoryStore } from '../../store/inventoryStore'
 import { useProductsStore } from '../../store/productsStore'
 import { useAuthStore } from '../../store/authStore'
+import { hasRole } from '../../store/usersStore'
 import { DataTable } from '../../components/ui/DataTable'
 import { SearchBar } from '../../components/ui/SearchBar'
 import { Modal } from '../../components/ui/Modal'
-import { StatusBadge } from '../../components/ui/StatusBadge'
 import { toast } from '../../store/toastStore'
 import type { MovimientoTipo } from '../../types'
-import { Warehouse, CirclePlus as PlusCircle, History } from 'lucide-react'
+import { Warehouse, CirclePlus as PlusCircle, History, Pencil, Check, X } from 'lucide-react'
 
 const TIPOS: MovimientoTipo[] = ['EntradaCompra', 'SalidaVenta', 'Transferencia', 'Ajuste', 'Merma', 'Devolucion']
 const TIPO_LABELS: Record<MovimientoTipo, string> = {
@@ -17,9 +17,11 @@ const TIPO_LABELS: Record<MovimientoTipo, string> = {
 }
 
 export function InventoryPage() {
-  const { inventario, kardex, loadInventory, subscribeRealtime: subInventory, applyMovimiento } = useInventoryStore()
+  const { inventario, kardex, loadInventory, subscribeRealtime: subInventory, applyMovimiento, updateCantidadDisponible } = useInventoryStore()
   const { products, loadProducts, subscribeRealtime: subProducts } = useProductsStore()
   const { user } = useAuthStore()
+
+  const isAdmin = user ? hasRole(user, 'director', 'administracion') : false
 
   useEffect(() => {
     void loadInventory()
@@ -34,6 +36,22 @@ export function InventoryPage() {
   const [modal, setModal] = useState(false)
   const [selProd, setSelProd] = useState('')
   const [form, setForm] = useState({ tipo: TIPOS[0], cantidad: 1, doc: '', notas: '' })
+
+  // edición inline de cantidad disponible
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editQty, setEditQty] = useState<number>(0)
+
+  function startEdit(inventarioId: string, actual: number) {
+    setEditingId(inventarioId)
+    setEditQty(actual)
+  }
+  function cancelEdit() { setEditingId(null) }
+  async function confirmEdit(productId: string) {
+    if (editQty < 0) { toast.error('La cantidad no puede ser negativa.'); return }
+    await updateCantidadDisponible(productId, editQty, user?.email ?? 'admin')
+    toast.success(`Cantidad actualizada a ${editQty}.`)
+    setEditingId(null)
+  }
 
   const enriched = inventario.map((inv) => {
     const prod = products.find((p) => p.productId === inv.productId)
@@ -113,9 +131,36 @@ export function InventoryPage() {
               { key: 'cat', header: 'Categoría', render: (i) => i.prod?.categoria ?? '-' },
               { key: 'um', header: 'UM', render: (i) => i.prod?.unidadMedida ?? '-' },
               { key: 'disp', header: 'Disponible', render: (i) => (
-                <span className={`font-bold ${i.cantidadDisponible < 50 ? 'text-red-600' : 'text-green-700'}`}>
-                  {i.cantidadDisponible}
-                </span>
+                editingId === i.inventarioId ? (
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      className="input w-24 py-0.5 text-sm"
+                      value={editQty}
+                      min={0}
+                      autoFocus
+                      onChange={e => setEditQty(Number(e.target.value))}
+                      onKeyDown={e => { if (e.key === 'Enter') void confirmEdit(i.productId); if (e.key === 'Escape') cancelEdit() }}
+                    />
+                    <button className="btn btn-success btn-sm p-1" onClick={() => void confirmEdit(i.productId)} title="Guardar"><Check size={13} /></button>
+                    <button className="btn btn-secondary btn-sm p-1" onClick={cancelEdit} title="Cancelar"><X size={13} /></button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span className={`font-bold ${i.cantidadDisponible < 50 ? 'text-red-600' : 'text-green-700'}`}>
+                      {i.cantidadDisponible.toLocaleString('es-MX')}
+                    </span>
+                    {isAdmin && (
+                      <button
+                        className="btn btn-secondary btn-sm p-0.5 opacity-50 hover:opacity-100"
+                        title="Editar cantidad"
+                        onClick={() => startEdit(i.inventarioId, i.cantidadDisponible)}
+                      >
+                        <Pencil size={11} />
+                      </button>
+                    )}
+                  </div>
+                )
               )},
               { key: 'comp', header: 'Comprometido', render: (i) => <span className="text-yellow-700">{i.cantidadComprometida}</span> },
               { key: 'tran', header: 'Tránsito', render: (i) => <span className="text-blue-700">{i.cantidadTransito}</span> },
