@@ -351,6 +351,50 @@ export function LogisticsPage() {
 
       {/* ── TABLA EMBARQUES ─────────────────────────────────────────────── */}
       {tab === 'embarques' && (
+        <div className="space-y-4">
+
+        {/* ── Listos para En tránsito ─────────────────────────────────── */}
+        {(() => {
+          const pendientes = embarques.filter(e => ['solicitado', 'programado', 'recolectado'].includes(e.estatus))
+          if (pendientes.length === 0) return null
+          return (
+            <div className="card space-y-2">
+              <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                <Truck size={16} className="text-green-600" />
+                Listos para enviar en tránsito
+                <span className="text-xs font-normal text-white bg-green-500 px-2 py-0.5 rounded-full">{pendientes.length}</span>
+              </h3>
+              {pendientes.map(e => {
+                const trans = transportistas.find(t => t.transportistaId === e.transportistaId)
+                return (
+                  <div key={e.embarqueId} className="flex items-center justify-between gap-3 p-3 rounded-lg bg-green-50 border border-green-200">
+                    <div className="space-y-0.5 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-mono font-bold text-blue-700 text-sm">{e.folio}</span>
+                        <StatusBadge status={e.estatus} />
+                        {e.ordenesIds.map(r => (
+                          <span key={r.ordenCompraId} className="font-mono text-xs bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">
+                            {r.folio} ({r.kgEmbarcados.toLocaleString()} kg)
+                          </span>
+                        ))}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {trans?.nombre ?? 'Sin transportista'} · Destino: {e.destino || '—'} · {e.fechaProgramada || 'Sin fecha'}
+                      </div>
+                    </div>
+                    <button
+                      className="btn btn-success btn-sm shrink-0"
+                      onClick={() => { updateEmbarque(e.embarqueId, { estatus: 'enTransito' }); toast.success(`EMB ${e.folio} → En tránsito`) }}
+                    >
+                      <Truck size={13} /> En tránsito
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          )
+        })()}
+
         <div className="card">
           <div className="flex justify-between mb-4">
             <SearchBar value={q} onChange={setQ} placeholder="Buscar folio o destino..." />
@@ -402,6 +446,7 @@ export function LogisticsPage() {
               },
             ]}
           />
+        </div>
         </div>
       )}
 
