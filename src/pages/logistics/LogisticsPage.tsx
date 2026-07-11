@@ -2,80 +2,67 @@ import { useState, useEffect } from 'react'
 import { useLogisticsStore } from '../../store/logisticsStore'
 import { useAuthStore } from '../../store/authStore'
 import { hasRole } from '../../store/usersStore'
-import { usePurchasesStore } from '../../store/purchasesStore'
-import { useSuppliersStore } from '../../store/suppliersStore'
-import { useProductsStore } from '../../store/productsStore'
+import { useSalesOrdersStore } from '../../store/salesOrdersStore'
 import { toast } from '../../store/toastStore'
 import { DataTable } from '../../components/ui/DataTable'
 import { SearchBar } from '../../components/ui/SearchBar'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { Modal } from '../../components/ui/Modal'
 import { Currency } from '../../components/ui/Currency'
-import type { Embarque, EmbarqueEstatus, EmbarqueOCRef, OrdenCompra, Transportista } from '../../types'
-import { Truck, Plus, CreditCard as Edit2, Trash2, CircleAlert as AlertCircle, ToggleLeft, ToggleRight, Package, XCircle } from 'lucide-react'
+import type { Embarque, EmbarqueEstatus, Transportista } from '../../types'
+import { Truck, Plus, CreditCard as Edit2, Trash2, CircleAlert as AlertCircle, ToggleLeft, ToggleRight } from 'lucide-react'
 
 // ─── constantes ────────────────────────────────────────────────────────────
 const ESTADOS: EmbarqueEstatus[] = ['solicitado', 'programado', 'recolectado', 'enTransito', 'entregado', 'cerrado']
+
+const BLANK_EMB = {
+  pedidoId: '' as string | undefined,
+  origen: 'Almacén Central, MTY',
+  destino: '',
+  transportistaId: '',
+  fechaProgramada: '',
+  costoFlete: 0,
+  notas: '',
+}
 
 const BLANK_TRANS: Omit<Transportista, 'transportistaId'> = {
   nombre: '', contacto: '', telefono: '', tarifaBase: 0, activo: true,
 }
 
+// Solo director y operaciones pueden gestionar transportistas
 const TRANS_MANAGE_ROLES = ['director', 'operaciones', 'almacen'] as const
-
-// ─── helpers ────────────────────────────────────────────────────────────────
-// Kg totales de una OC (suma de cantidad * unidad, aquí simplificamos a suma de cantidades de items)
-function ocTotalKg(oc: OrdenCompra): number {
-  return oc.items.reduce((a, it) => a + it.cantidad, 0)
-}
 
 // ─── componente ────────────────────────────────────────────────────────────
 export function LogisticsPage() {
   const {
     embarques, transportistas, loadLogistics, subscribeRealtime: subLogistics,
-    addEmbarque, updateEmbarque, deleteEmbarque,
+    addEmbarque, updateEmbarque,
     addTransportista, updateTransportista, deleteTransportista,
   } = useLogisticsStore()
-  const { ordenesCompra, loadPurchases, subscribeRealtime: subPurchases, updateOrdenCompra } = usePurchasesStore()
-  const { suppliers, loadSuppliers } = useSuppliersStore()
-  const { products, loadProducts } = useProductsStore()
+  const { orders, loadOrders, subscribeRealtime: subOrders } = useSalesOrdersStore()
   const { user: me } = useAuthStore()
 
   useEffect(() => {
     void loadLogistics()
-    void loadPurchases()
-    void loadSuppliers()
-    void loadProducts()
+    void loadOrders()
     const u1 = subLogistics()
-    const u2 = subPurchases()
+    const u2 = subOrders()
     return () => { u1(); u2() }
   }, [])
 
   const canManageTrans = me ? hasRole(me, ...TRANS_MANAGE_ROLES) : false
 
-  // OCs listas para logística (enviarLogistica o parcialLogistica)
-  const ocsLogistica = ordenesCompra.filter(o =>
-    o.estatus === 'enviarLogistica' || o.estatus === 'parcialLogistica'
-  )
-
   // ── estado de pestañas ───────────────────────────────────────────────────
-  const [tab, setTab] = useState<'dashboard' | 'embarques' | 'transportistas'>('dashboard')
+  const [tab, setTab] = useState<'embarques' | 'transportistas'>('embarques')
+
+  // ── búsqueda ─────────────────────────────────────────────────────────────
   const [q, setQ] = useState('')
 
   // ── modal embarque ───────────────────────────────────────────────────────
-  type EmbModal = 'new_emb' | 'view_emb' | 'cancel_emb' | null
+  type EmbModal = 'new_emb' | 'view_emb' | null
   const [embModal, setEmbModal] = useState<EmbModal>(null)
   const [selEmb, setSelEmb] = useState<Embarque | null>(null)
-
-  // form nuevo embarque
-  const [formTransId, setFormTransId] = useState('')
-  const [formOrigen, setFormOrigen] = useState('Almacén Central')
-  const [formDestino, setFormDestino] = useState('')
-  const [formFecha, setFormFecha] = useState('')
-  const [formFlete, setFormFlete] = useState(0)
-  const [formNotas, setFormNotas] = useState('')
-  // OCs seleccionadas para el embarque: Map<ordenCompraId, kgEmbarcados>
-  const [selOCs, setSelOCs] = useState<Record<string, number>>({})
+  const [formEmb, setFormEmb] = useState(BLANK_EMB)
 
   // ── modal transportista ──────────────────────────────────────────────────
   type TransModal = 'new_trans' | 'edit_trans' | 'del_trans' | null
@@ -86,7 +73,6 @@ export function LogisticsPage() {
 
   // ── filtros ──────────────────────────────────────────────────────────────
   const filteredEmb = embarques.filter(e =>
-    e.estatus !== 'cerrado' &&
     [e.folio, e.destino].join(' ').toLowerCase().includes(q.toLowerCase())
   )
   const filteredTrans = transportistas.filter(t =>
@@ -98,112 +84,18 @@ export function LogisticsPage() {
   const totalEmb = embarques.filter(e => ['entregado', 'cerrado'].includes(e.estatus)).length
   const pct = totalEmb > 0 ? Math.round(onTime / totalEmb * 100) : 100
 
-  // ── helpers embarque ─────────────────────────────────────────────────────
-  function toggleOC(oc: OrdenCompra) {
-    const maxKg = ocTotalKg(oc)
-    setSelOCs(prev => {
-      if (prev[oc.ordenCompraId] !== undefined) {
-        const next = { ...prev }
-        delete next[oc.ordenCompraId]
-        return next
-      }
-      return { ...prev, [oc.ordenCompraId]: maxKg }
-    })
-  }
+  // ── handlers embarque ────────────────────────────────────────────────────
+  const FEmb = (k: keyof typeof formEmb) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
+      setFormEmb(f => ({ ...f, [k]: k === 'costoFlete' ? Number(e.target.value) : e.target.value }))
 
-  function setKgForOC(ordenCompraId: string, kg: number) {
-    setSelOCs(prev => ({ ...prev, [ordenCompraId]: kg }))
-  }
-
-  function openNewEmb() {
-    setFormTransId(transportistas[0]?.transportistaId ?? '')
-    setFormOrigen('Almacén Central')
-    setFormDestino('')
-    setFormFecha('')
-    setFormFlete(0)
-    setFormNotas('')
-    setSelOCs({})
-    setEmbModal('new_emb')
-  }
-
-  async function handleSaveEmb() {
-    if (!formTransId) { toast.error('Selecciona un transportista.'); return }
-    if (!formDestino.trim()) { toast.error('El destino es obligatorio.'); return }
-    const ocIds = Object.keys(selOCs)
-    if (ocIds.length === 0) { toast.error('Selecciona al menos una Orden de Compra.'); return }
-
-    // Construir refs de OCs
-    const ordenesRefs: EmbarqueOCRef[] = ocIds.map(id => {
-      const oc = ocsLogistica.find(o => o.ordenCompraId === id)!
-      return { ordenCompraId: id, folio: oc.folio, kgEmbarcados: selOCs[id] }
-    })
-
-    await addEmbarque({
-      pedidoId: undefined,
-      ordenesIds: ordenesRefs,
-      origen: formOrigen,
-      destino: formDestino,
-      transportistaId: formTransId,
-      fechaProgramada: formFecha,
-      costoFlete: formFlete,
-      estatus: 'solicitado',
-      notas: formNotas,
-    })
-
-    // Actualizar cada OC: si es parcial reducir items al restante
-    for (const ref of ordenesRefs) {
-      const oc = ocsLogistica.find(o => o.ordenCompraId === ref.ordenCompraId)!
-      const totalKg = ocTotalKg(oc)
-
-      if (ref.kgEmbarcados >= totalKg) {
-        // Entrega completa → pasar a finanzas para pago
-        await updateOrdenCompra(ref.ordenCompraId, { estatus: 'enviarPago' })
-      } else {
-        // Entrega parcial → reducir la cantidad de cada item proporcionalmente
-        const ratio = (totalKg - ref.kgEmbarcados) / totalKg
-        const itemsRestantes = oc.items.map(it => ({
-          ...it,
-          cantidad: Math.round(it.cantidad * ratio * 100) / 100,
-        }))
-        const montoRestante = itemsRestantes.reduce((a, it) => a + it.cantidad * it.precioUnitario, 0) * (1 + (oc.ivaPct ?? 16) / 100)
-        await updateOrdenCompra(ref.ordenCompraId, {
-          estatus: 'parcialLogistica',
-          items: itemsRestantes,
-          monto: Math.round(montoRestante * 100) / 100,
-        })
-      }
-    }
-
-    toast.success(`Embarque creado con ${ordenesRefs.length} OC(s).`)
+  function handleSaveEmb() {
+    if (!formEmb.transportistaId) { toast.error('Selecciona un transportista.'); return }
+    if (!formEmb.destino.trim()) { toast.error('El destino es obligatorio.'); return }
+    addEmbarque({ ...formEmb, estatus: 'solicitado' })
+    toast.success('Embarque registrado.')
     setEmbModal(null)
-    setTab('embarques')
-  }
-
-  async function handleCambiarEstatusEmb(emb: Embarque, nuevoEstatus: EmbarqueEstatus) {
-    await updateEmbarque(emb.embarqueId, { estatus: nuevoEstatus })
-    // Al marcar entregado → todas las OCs del embarque pasan a "enviarPago"
-    if (nuevoEstatus === 'entregado') {
-      for (const ref of emb.ordenesIds) {
-        const oc = ordenesCompra.find(o => o.ordenCompraId === ref.ordenCompraId)
-        // Solo actualizamos si la OC todavía está en logística (no ya cerrada/pagada)
-        if (oc && ['enviarLogistica', 'parcialLogistica'].includes(oc.estatus)) {
-          await updateOrdenCompra(ref.ordenCompraId, { estatus: 'enviarPago' })
-        }
-      }
-      toast.success(`EMB ${emb.folio} entregado — OC(s) enviadas a Finanzas para pago.`)
-    }
-  }
-
-  async function handleCancelarEmbarque() {
-    if (!selEmb) return
-    // Regresar cada OC a "confirmada"
-    for (const ref of selEmb.ordenesIds) {
-      await updateOrdenCompra(ref.ordenCompraId, { estatus: 'confirmada' })
-    }
-    await deleteEmbarque(selEmb.embarqueId)
-    toast.success(`Embarque ${selEmb.folio} cancelado — OC(s) regresadas a Compras.`)
-    setEmbModal(null)
-    setSelEmb(null)
+    setFormEmb(BLANK_EMB)
   }
 
   // ── handlers transportista ───────────────────────────────────────────────
@@ -229,7 +121,8 @@ export function LogisticsPage() {
   }
   function handleDeleteTrans() {
     if (selTrans) { deleteTransportista(selTrans.transportistaId); toast.success(`Transportista "${selTrans.nombre}" eliminado.`) }
-    setTransModal(null); setSelTrans(null)
+    setTransModal(null)
+    setSelTrans(null)
   }
 
   // ─── render ───────────────────────────────────────────────────────────────
@@ -239,11 +132,11 @@ export function LogisticsPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title flex items-center gap-2"><Truck size={24} /> Logística</h1>
-          <p className="page-subtitle">Órdenes de compra, embarques y transportistas</p>
+          <p className="page-subtitle">Embarques y transportistas</p>
         </div>
         <div className="flex gap-2">
           {tab === 'embarques' && (
-            <button className="btn-primary" onClick={openNewEmb}>
+            <button className="btn-primary" onClick={() => { setFormEmb(BLANK_EMB); setEmbModal('new_emb') }}>
               <Plus size={16} /> Nuevo Embarque
             </button>
           )}
@@ -258,12 +151,12 @@ export function LogisticsPage() {
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="card-sm text-center">
-          <div className="text-2xl font-bold text-amber-600">{ocsLogistica.length}</div>
-          <div className="text-xs text-gray-500 mt-1">OCs pendientes logística</div>
-        </div>
-        <div className="card-sm text-center">
           <div className="text-2xl font-bold text-gray-900">{embarques.filter(e => e.estatus === 'enTransito').length}</div>
           <div className="text-xs text-gray-500 mt-1">En Tránsito</div>
+        </div>
+        <div className="card-sm text-center">
+          <div className="text-2xl font-bold text-gray-900">{embarques.filter(e => e.estatus === 'programado').length}</div>
+          <div className="text-xs text-gray-500 mt-1">Programados</div>
         </div>
         <div className="card-sm text-center">
           <div className="text-2xl font-bold text-green-600">{pct}%</div>
@@ -278,12 +171,6 @@ export function LogisticsPage() {
       {/* Pestañas */}
       <div className="flex gap-2">
         <button
-          className={`btn ${tab === 'dashboard' ? 'btn-primary' : 'btn-secondary'}`}
-          onClick={() => { setTab('dashboard'); setQ('') }}
-        >
-          <Package size={15} /> Órdenes ({ocsLogistica.length})
-        </button>
-        <button
           className={`btn ${tab === 'embarques' ? 'btn-primary' : 'btn-secondary'}`}
           onClick={() => { setTab('embarques'); setQ('') }}
         >
@@ -297,130 +184,8 @@ export function LogisticsPage() {
         </button>
       </div>
 
-      {/* ── DASHBOARD: OCs pendientes de embarque ───────────────────────── */}
-      {tab === 'dashboard' && (
-        <div className="space-y-4">
-          {ocsLogistica.length === 0 ? (
-            <div className="card text-center py-10 text-gray-400">
-              <Package size={32} className="mx-auto mb-3 opacity-40" />
-              <p className="text-sm">No hay órdenes de compra pendientes de logística.</p>
-            </div>
-          ) : (
-            <div className="card space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-gray-900">Órdenes listas para embarque</h3>
-                <button className="btn-primary" onClick={openNewEmb}>
-                  <Plus size={15} /> Nuevo Embarque
-                </button>
-              </div>
-              {ocsLogistica.map(oc => {
-                const proveedor = suppliers.find(s => s.supplierId === oc.supplierId)
-                const totalKg = ocTotalKg(oc)
-                const isParcial = oc.estatus === 'parcialLogistica'
-                return (
-                  <div key={oc.ordenCompraId} className={`p-3 rounded-lg border ${isParcial ? 'bg-amber-50 border-amber-200' : 'bg-blue-50 border-blue-200'}`}>
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold text-blue-700 text-sm">{oc.folio}</span>
-                          {isParcial && (
-                            <span className="text-xs font-semibold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
-                              Parcialmente entregado
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-sm text-gray-700">{proveedor?.razonSocial ?? '-'}</div>
-                        <div className="text-xs text-gray-500">
-                          {oc.items.map(it => {
-                            const p = products.find(pr => pr.productId === it.productId)
-                            return `${p?.sku ?? it.productId}: ${it.cantidad} ${p?.unidadMedida ?? ''}`
-                          }).join(' · ')}
-                        </div>
-                        <div className="text-xs font-medium text-gray-600">
-                          Total: {totalKg.toLocaleString()} kg · F. Entrega esperada: {oc.fechaEntregaEsperada || '—'}
-                        </div>
-                      </div>
-                      <div className="flex flex-col gap-1 shrink-0">
-                        <button
-                          className="btn btn-primary btn-sm"
-                          onClick={() => {
-                            setSelOCs({ [oc.ordenCompraId]: totalKg })
-                            setFormTransId(transportistas[0]?.transportistaId ?? '')
-                            setFormOrigen('Almacén Central')
-                            setFormDestino('')
-                            setFormFecha('')
-                            setFormFlete(0)
-                            setFormNotas('')
-                            setEmbModal('new_emb')
-                          }}
-                        >
-                          <Truck size={13} /> Embarcar
-                        </button>
-                        <button
-                          className="btn btn-danger btn-sm"
-                          onClick={async () => {
-                            await updateOrdenCompra(oc.ordenCompraId, { estatus: 'confirmada' })
-                            toast.success(`${oc.folio} regresada a Compras.`)
-                          }}
-                        >
-                          <XCircle size={13} /> Regresar a Compras
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
       {/* ── TABLA EMBARQUES ─────────────────────────────────────────────── */}
       {tab === 'embarques' && (
-        <div className="space-y-4">
-
-        {/* ── Listos para En tránsito ─────────────────────────────────── */}
-        {(() => {
-          const pendientes = embarques.filter(e => ['solicitado', 'programado', 'recolectado'].includes(e.estatus))
-          if (pendientes.length === 0) return null
-          return (
-            <div className="card space-y-2">
-              <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                <Truck size={16} className="text-green-600" />
-                Listos para enviar en tránsito
-                <span className="text-xs font-normal text-white bg-green-500 px-2 py-0.5 rounded-full">{pendientes.length}</span>
-              </h3>
-              {pendientes.map(e => {
-                const trans = transportistas.find(t => t.transportistaId === e.transportistaId)
-                return (
-                  <div key={e.embarqueId} className="flex items-center justify-between gap-3 p-3 rounded-lg bg-green-50 border border-green-200">
-                    <div className="space-y-0.5 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-mono font-bold text-blue-700 text-sm">{e.folio}</span>
-                        <StatusBadge status={e.estatus} />
-                        {e.ordenesIds.map(r => (
-                          <span key={r.ordenCompraId} className="font-mono text-xs bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">
-                            {r.folio} ({r.kgEmbarcados.toLocaleString()} kg)
-                          </span>
-                        ))}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        {trans?.nombre ?? 'Sin transportista'} · Destino: {e.destino || '—'} · {e.fechaProgramada || 'Sin fecha'}
-                      </div>
-                    </div>
-                    <button
-                      className="btn btn-success btn-sm shrink-0"
-                      onClick={() => { updateEmbarque(e.embarqueId, { estatus: 'enTransito' }); toast.success(`EMB ${e.folio} → En tránsito`) }}
-                    >
-                      <Truck size={13} /> En tránsito
-                    </button>
-                  </div>
-                )
-              })}
-            </div>
-          )
-        })()}
-
         <div className="card">
           <div className="flex justify-between mb-4">
             <SearchBar value={q} onChange={setQ} placeholder="Buscar folio o destino..." />
@@ -430,17 +195,7 @@ export function LogisticsPage() {
             rowKey={e => e.embarqueId}
             columns={[
               { key: 'folio', header: 'Folio', render: e => <span className="font-mono font-semibold text-blue-700">{e.folio}</span> },
-              { key: 'ocs', header: 'OC(s)', render: e => (
-                e.ordenesIds.length > 0
-                  ? <div className="flex flex-wrap gap-1">
-                      {e.ordenesIds.map(r => (
-                        <span key={r.ordenCompraId} className="font-mono text-xs bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">
-                          {r.folio} ({r.kgEmbarcados.toLocaleString()} kg)
-                        </span>
-                      ))}
-                    </div>
-                  : <span className="text-gray-400 text-xs">—</span>
-              )},
+              { key: 'pedido', header: 'Pedido', render: e => e.pedidoId ? orders.find(o => o.pedidoId === e.pedidoId)?.folio ?? '-' : '-' },
               { key: 'destino', header: 'Destino' },
               { key: 'trans', header: 'Transportista', render: e => transportistas.find(t => t.transportistaId === e.transportistaId)?.nombre ?? <span className="text-red-500 text-xs">Sin asignar</span> },
               { key: 'fechaProg', header: 'F. Programada', render: e => e.fechaProgramada || '-' },
@@ -448,31 +203,11 @@ export function LogisticsPage() {
               { key: 'estatus', header: 'Estatus', render: e => <StatusBadge status={e.estatus} /> },
               {
                 key: 'acc', header: '', render: e => (
-                  <div className="flex gap-1">
-                    <button className="btn btn-secondary btn-sm" onClick={() => { setSelEmb(e); setEmbModal('view_emb') }}>Ver</button>
-                    {['solicitado', 'programado', 'recolectado'].includes(e.estatus) && (
-                      <button
-                        className="btn btn-success btn-sm"
-                        onClick={() => { updateEmbarque(e.embarqueId, { estatus: 'enTransito' }); toast.success(`EMB ${e.folio} → En tránsito`) }}
-                      >
-                        <Truck size={13} /> En tránsito
-                      </button>
-                    )}
-                    {!['entregado', 'cerrado'].includes(e.estatus) && (
-                      <button
-                        className="btn btn-danger btn-sm"
-                        title="Cancelar embarque"
-                        onClick={() => { setSelEmb(e); setEmbModal('cancel_emb') }}
-                      >
-                        <XCircle size={13} />
-                      </button>
-                    )}
-                  </div>
+                  <button className="btn btn-secondary btn-sm" onClick={() => { setSelEmb(e); setEmbModal('view_emb') }}>Ver</button>
                 )
               },
             ]}
           />
-        </div>
         </div>
       )}
 
@@ -528,130 +263,56 @@ export function LogisticsPage() {
         </div>
       )}
 
-      {/* ══ MODAL: Nuevo Embarque ════════════════════════════════════════════ */}
-      {embModal === 'new_emb' && (
-        <Modal title="Nuevo Embarque" onClose={() => setEmbModal(null)} size="lg"
-          footer={
-            <>
-              <button className="btn-secondary" onClick={() => setEmbModal(null)}>Cancelar</button>
-              <button className="btn-primary" onClick={handleSaveEmb}>Guardar Embarque</button>
-            </>
-          }
-        >
-          <div className="space-y-5">
-            {/* Selección de OCs */}
-            <div>
-              <label className="label mb-2">Órdenes de Compra a embarcar *</label>
-              {ocsLogistica.length === 0 ? (
-                <p className="text-sm text-gray-400 italic">No hay OCs listas para embarcar.</p>
-              ) : (
-                <div className="space-y-2">
-                  {ocsLogistica.map(oc => {
-                    const isSelected = selOCs[oc.ordenCompraId] !== undefined
-                    const maxKg = ocTotalKg(oc)
-                    const proveedor = suppliers.find(s => s.supplierId === oc.supplierId)
-                    const isParcial = oc.estatus === 'parcialLogistica'
-                    return (
-                      <div key={oc.ordenCompraId}
-                        className={`border rounded-lg p-3 transition-colors ${isSelected ? 'border-blue-400 bg-blue-50' : 'border-gray-200 bg-white'}`}
-                      >
-                        <div className="flex items-start gap-3">
-                          <input
-                            type="checkbox"
-                            className="mt-1"
-                            checked={isSelected}
-                            onChange={() => toggleOC(oc)}
-                          />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-mono font-bold text-blue-700 text-sm">{oc.folio}</span>
-                              <span className="text-xs text-gray-500">{proveedor?.razonSocial ?? '-'}</span>
-                              {isParcial && (
-                                <span className="text-xs font-semibold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
-                                  Parcialmente entregado
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-xs text-gray-500 mt-0.5">
-                              {oc.items.map(it => {
-                                const p = products.find(pr => pr.productId === it.productId)
-                                return `${p?.sku ?? ''}: ${it.cantidad} ${p?.unidadMedida ?? 'kg'}`
-                              }).join(' · ')}
-                            </div>
-                          </div>
-                          {isSelected && (
-                            <div className="shrink-0 flex items-center gap-1.5 text-sm">
-                              <label className="text-gray-500 text-xs">KG a embarcar:</label>
-                              <input
-                                type="number"
-                                className="input w-28 text-right"
-                                min={1}
-                                max={maxKg}
-                                value={selOCs[oc.ordenCompraId]}
-                                onChange={e => setKgForOC(oc.ordenCompraId, Math.min(maxKg, Math.max(1, Number(e.target.value))))}
-                              />
-                              <span className="text-gray-400 text-xs">/ {maxKg.toLocaleString()}</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
+      {/* ══ MODALES EMBARQUE ════════════════════════════════════════════════ */}
 
-            {/* Datos del embarque */}
-            <div className="form-grid">
-              <div className="form-group">
-                <label className="label">Transportista *</label>
-                <select className="select" value={formTransId} onChange={e => setFormTransId(e.target.value)}>
-                  <option value="">— Seleccionar —</option>
-                  {transportistas.filter(t => t.activo).map(t => (
-                    <option key={t.transportistaId} value={t.transportistaId}>
-                      {t.nombre} — {t.tarifaBase.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="label">Fecha Programada</label>
-                <input type="date" className="input" value={formFecha} onChange={e => setFormFecha(e.target.value)} />
-              </div>
-              <div className="form-group sm:col-span-2">
-                <label className="label">Origen</label>
-                <input className="input" value={formOrigen} onChange={e => setFormOrigen(e.target.value)} />
-              </div>
-              <div className="form-group sm:col-span-2">
-                <label className="label">Destino *</label>
-                <input className="input" value={formDestino} onChange={e => setFormDestino(e.target.value)} />
-              </div>
-              <div className="form-group">
-                <label className="label">Costo Flete (MXN)</label>
-                <input type="number" className="input" value={formFlete} onChange={e => setFormFlete(Number(e.target.value))} min={0} />
-              </div>
-              <div className="form-group">
-                <label className="label">Notas</label>
-                <input className="input" value={formNotas} onChange={e => setFormNotas(e.target.value)} />
-              </div>
+      {/* Nuevo embarque */}
+      {embModal === 'new_emb' && (
+        <Modal title="Nuevo Embarque" onClose={() => setEmbModal(null)}
+          footer={<><button className="btn-secondary" onClick={() => setEmbModal(null)}>Cancelar</button><button className="btn-primary" onClick={handleSaveEmb}>Guardar</button></>}
+        >
+          <div className="form-grid">
+            <div className="form-group">
+              <label className="label">Pedido (opcional)</label>
+              <select className="select" value={formEmb.pedidoId ?? ''} onChange={e => setFormEmb(f => ({ ...f, pedidoId: e.target.value || undefined }))}>
+                <option value="">— Sin pedido —</option>
+                {orders.map(o => <option key={o.pedidoId} value={o.pedidoId}>{o.folio}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="label">Transportista *</label>
+              <select className="select" value={formEmb.transportistaId} onChange={FEmb('transportistaId')}>
+                <option value="">— Seleccionar —</option>
+                {transportistas.filter(t => t.activo).map(t => (
+                  <option key={t.transportistaId} value={t.transportistaId}>
+                    {t.nombre} — {t.tarifaBase.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group sm:col-span-2">
+              <label className="label">Origen</label>
+              <input className="input" value={formEmb.origen} onChange={FEmb('origen')} />
+            </div>
+            <div className="form-group sm:col-span-2">
+              <label className="label">Destino *</label>
+              <input className="input" value={formEmb.destino} onChange={FEmb('destino')} />
+            </div>
+            <div className="form-group">
+              <label className="label">Fecha Programada</label>
+              <input type="date" className="input" value={formEmb.fechaProgramada} onChange={FEmb('fechaProgramada')} />
+            </div>
+            <div className="form-group">
+              <label className="label">Costo Flete (MXN)</label>
+              <input type="number" className="input" value={formEmb.costoFlete} onChange={FEmb('costoFlete')} min={0} />
             </div>
           </div>
         </Modal>
       )}
 
-      {/* ══ MODAL: Ver embarque ══════════════════════════════════════════════ */}
+      {/* Ver / cambiar estatus embarque */}
       {embModal === 'view_emb' && selEmb && (
         <Modal title={`Embarque ${selEmb.folio}`} onClose={() => setEmbModal(null)}
-          footer={
-            <div className="flex gap-2">
-              {!['entregado', 'cerrado'].includes(selEmb.estatus) && (
-                <button className="btn-danger" onClick={() => setEmbModal('cancel_emb')}>
-                  <XCircle size={14} /> Cancelar embarque
-                </button>
-              )}
-              <button className="btn-secondary" onClick={() => setEmbModal(null)}>Cerrar</button>
-            </div>
-          }
+          footer={<button className="btn-secondary" onClick={() => setEmbModal(null)}>Cerrar</button>}
         >
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3 text-sm">
@@ -662,76 +323,24 @@ export function LogisticsPage() {
               <div><span className="text-gray-500">F. Programada:</span> {selEmb.fechaProgramada || '—'}</div>
               <div><span className="text-gray-500">Estatus:</span> <StatusBadge status={selEmb.estatus} /></div>
             </div>
-            {selEmb.ordenesIds.length > 0 && (
-              <div>
-                <p className="label mb-2">Órdenes de Compra incluidas</p>
-                <div className="space-y-1">
-                  {selEmb.ordenesIds.map(r => (
-                    <div key={r.ordenCompraId} className="flex items-center justify-between px-3 py-2 bg-blue-50 rounded-lg text-sm">
-                      <span className="font-mono font-semibold text-blue-700">{r.folio}</span>
-                      <span className="text-gray-600">{r.kgEmbarcados.toLocaleString()} kg</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
             <div>
               <p className="label mb-2">Cambiar estatus</p>
               <div className="flex flex-wrap gap-2">
-                {ESTADOS.filter(e => e !== 'cerrado').map(e => (
+                {ESTADOS.map(e => (
                   <button key={e} className={`btn btn-sm ${selEmb.estatus === e ? 'btn-primary' : 'btn-secondary'}`}
-                    onClick={() => { void handleCambiarEstatusEmb(selEmb, e); setEmbModal(null); setSelEmb(null) }}>
+                    onClick={() => { updateEmbarque(selEmb.embarqueId, { estatus: e }); setEmbModal(null); setSelEmb(null) }}>
                     <StatusBadge status={e} />
                   </button>
                 ))}
-                {selEmb.estatus === 'entregado' && (
-                  <button
-                    className="btn btn-sm btn-primary"
-                    onClick={() => { void handleCambiarEstatusEmb(selEmb, 'cerrado'); setEmbModal(null); setSelEmb(null) }}
-                  >
-                    Enviar a pago
-                  </button>
-                )}
               </div>
             </div>
           </div>
         </Modal>
       )}
 
-      {/* ══ MODAL: Confirmar cancelación embarque ═══════════════════════════ */}
-      {embModal === 'cancel_emb' && selEmb && (
-        <Modal
-          title="Cancelar embarque"
-          onClose={() => setEmbModal(null)}
-          footer={
-            <>
-              <button className="btn-secondary" onClick={() => setEmbModal(null)}>No, mantener</button>
-              <button className="btn-danger" onClick={handleCancelarEmbarque}>
-                <XCircle size={14} /> Sí, cancelar embarque
-              </button>
-            </>
-          }
-        >
-          <div className="space-y-3 text-sm text-gray-700">
-            <p>¿Cancelar el embarque <strong>{selEmb.folio}</strong>?</p>
-            {selEmb.ordenesIds.length > 0 && (
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg space-y-1">
-                <p className="text-xs font-semibold text-amber-800 mb-1">Las siguientes OCs regresarán a Compras con estatus <strong>confirmada</strong>:</p>
-                {selEmb.ordenesIds.map(r => (
-                  <div key={r.ordenCompraId} className="flex justify-between text-xs text-amber-700">
-                    <span className="font-mono font-semibold">{r.folio}</span>
-                    <span>{r.kgEmbarcados.toLocaleString()} kg</span>
-                  </div>
-                ))}
-              </div>
-            )}
-            <p className="text-xs text-gray-500">Esta acción no se puede deshacer.</p>
-          </div>
-        </Modal>
-      )}
-
       {/* ══ MODALES TRANSPORTISTA ════════════════════════════════════════════ */}
 
+      {/* Nuevo / editar transportista */}
       {(transModal === 'new_trans' || transModal === 'edit_trans') && (
         <Modal
           title={transModal === 'new_trans' ? 'Nuevo Transportista' : `Editar — ${selTrans?.nombre ?? ''}`}
@@ -761,6 +370,7 @@ export function LogisticsPage() {
         </Modal>
       )}
 
+      {/* Confirmar eliminar transportista */}
       {transModal === 'del_trans' && selTrans && (
         <Modal
           title="Eliminar transportista"

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Embarque, EmbarqueOCRef, Transportista } from '../types'
+import type { Embarque, Transportista } from '../types'
 import { supabase } from '../lib/supabase'
 
 type DbCarrier = {
@@ -7,10 +7,9 @@ type DbCarrier = {
   telefono: string; tarifa_base: number; activo: boolean
 }
 type DbShipment = {
-  id: string; folio: string; pedido_id: string | null; ordenes_ids: unknown
-  origen: string; destino: string; transportista_id: string
-  fecha_programada: string; fecha_entrega: string | null
-  costo_flete: number; estatus: string; notas: string
+  id: string; folio: string; pedido_id: string | null; origen: string
+  destino: string; transportista_id: string; fecha_programada: string
+  fecha_entrega: string | null; costo_flete: number; estatus: string; notas: string
 }
 
 function toCarrier(r: DbCarrier): Transportista {
@@ -22,7 +21,6 @@ function toCarrier(r: DbCarrier): Transportista {
 function toShipment(r: DbShipment): Embarque {
   return {
     embarqueId: r.id, folio: r.folio, pedidoId: r.pedido_id ?? undefined,
-    ordenesIds: (r.ordenes_ids as EmbarqueOCRef[]) ?? [],
     origen: r.origen, destino: r.destino, transportistaId: r.transportista_id,
     fechaProgramada: r.fecha_programada, fechaEntrega: r.fecha_entrega ?? undefined,
     costoFlete: r.costo_flete, estatus: r.estatus as Embarque['estatus'], notas: r.notas,
@@ -37,7 +35,6 @@ interface LogisticsState {
   subscribeRealtime: () => () => void
   addEmbarque: (e: Omit<Embarque, 'embarqueId' | 'folio'>) => Promise<void>
   updateEmbarque: (id: string, data: Partial<Embarque>) => Promise<void>
-  deleteEmbarque: (id: string) => Promise<void>
   addTransportista: (t: Omit<Transportista, 'transportistaId'>) => Promise<void>
   updateTransportista: (id: string, data: Partial<Transportista>) => Promise<void>
   deleteTransportista: (id: string) => Promise<void>
@@ -70,37 +67,20 @@ export const useLogisticsStore = create<LogisticsState>()((set, get) => ({
   },
 
   async addEmbarque(data) {
-    // Folio robusto basado en último registro
-    const { data: last } = await supabase
-      .from('erp_shipments')
-      .select('folio')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-    const lastNum = last?.folio ? parseInt(last.folio.replace('EMB-', ''), 10) : 0
-    const folio = `EMB-${String((isNaN(lastNum) ? 0 : lastNum) + 1).padStart(4, '0')}`
-
-    const { error } = await supabase.from('erp_shipments').insert({
-      folio,
-      pedido_id: data.pedidoId ?? null,
-      ordenes_ids: data.ordenesIds ?? [],
-      origen: data.origen,
-      destino: data.destino,
-      transportista_id: data.transportistaId,
-      fecha_programada: data.fechaProgramada,
-      fecha_entrega: data.fechaEntrega ?? null,
-      costo_flete: data.costoFlete,
-      estatus: data.estatus,
-      notas: data.notas ?? '',
+    const { count } = await supabase.from('erp_shipments').select('*', { count: 'exact', head: true })
+    const folio = `EMB-${String((count ?? 0) + 1).padStart(4, '0')}`
+    await supabase.from('erp_shipments').insert({
+      folio, pedido_id: data.pedidoId ?? null, origen: data.origen,
+      destino: data.destino, transportista_id: data.transportistaId,
+      fecha_programada: data.fechaProgramada, fecha_entrega: data.fechaEntrega ?? null,
+      costo_flete: data.costoFlete, estatus: data.estatus, notas: data.notas ?? '',
     })
-    if (error) console.error('addEmbarque error:', error.message, error.details)
     await get().loadLogistics()
   },
 
   async updateEmbarque(id, data) {
     const patch: Record<string, unknown> = {}
     if (data.pedidoId !== undefined) patch.pedido_id = data.pedidoId
-    if (data.ordenesIds !== undefined) patch.ordenes_ids = data.ordenesIds
     if (data.origen !== undefined) patch.origen = data.origen
     if (data.destino !== undefined) patch.destino = data.destino
     if (data.transportistaId !== undefined) patch.transportista_id = data.transportistaId
@@ -111,11 +91,6 @@ export const useLogisticsStore = create<LogisticsState>()((set, get) => ({
     if (data.notas !== undefined) patch.notas = data.notas
     await supabase.from('erp_shipments').update(patch).eq('id', id)
     await get().loadLogistics()
-  },
-
-  async deleteEmbarque(id) {
-    await supabase.from('erp_shipments').delete().eq('id', id)
-    set(s => ({ embarques: s.embarques.filter(e => e.embarqueId !== id) }))
   },
 
   async addTransportista(data) {

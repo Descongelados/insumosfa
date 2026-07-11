@@ -13,8 +13,6 @@ const variants = {
   vencida: 'badge-red', cancelada: 'badge-red',
   facturado: 'badge-purple', calificado: 'badge-purple',
   solicitado: 'badge-orange', creada: 'badge-orange',
-  enviarPago: 'badge-purple', parcialLogistica: 'badge-yellow',
-  enviarLogistica: 'badge-blue',
   alta: 'badge-red', media: 'badge-yellow', baja: 'badge-gray',
 } as Record<string, string>
 
@@ -30,8 +28,6 @@ const labels: Record<string, string> = {
   perdido: 'Perdido', vencida: 'Vencida', cancelada: 'Cancelada',
   facturado: 'Facturado', calificado: 'Calificado',
   solicitado: 'Solicitado', creada: 'Creada', alta: 'Alta', media: 'Media', baja: 'Baja',
-  enviarPago: 'Enviar a Pago', parcialLogistica: 'Parcial Logística',
-  enviarLogistica: 'Enviar a Logística',
 }
 
 export function StatusBadge({ status }: { status: string }) {

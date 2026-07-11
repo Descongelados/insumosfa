@@ -4,7 +4,6 @@ import { useClientsStore } from '../../store/clientsStore'
 import { useSuppliersStore } from '../../store/suppliersStore'
 import { useSalesOrdersStore } from '../../store/salesOrdersStore'
 import { useProductsStore } from '../../store/productsStore'
-import { usePurchasesStore } from '../../store/purchasesStore'
 import { useAuthStore } from '../../store/authStore'
 import { hasRole } from '../../store/usersStore'
 import { DataTable } from '../../components/ui/DataTable'
@@ -12,61 +11,39 @@ import { StatusBadge } from '../../components/ui/StatusBadge'
 import { Modal } from '../../components/ui/Modal'
 import { Currency } from '../../components/ui/Currency'
 import { toast } from '../../store/toastStore'
-import type { FacturaVenta, SalesOrder, Banco, GastoNegocio } from '../../types'
-import { DollarSign, CreditCard, Building, Eye, CircleCheck as CheckCircle, Clock, FileText, Plus, CreditCard as Edit2, Trash2, History, CirclePlus as PlusCircle, Receipt, ShoppingCart, XCircle } from 'lucide-react'
+import type { FacturaVenta, SalesOrder, Banco } from '../../types'
+import { DollarSign, CreditCard, Building, Eye, CircleCheck as CheckCircle, Clock, FileText, Plus, CreditCard as Edit2, Trash2, History, CirclePlus as PlusCircle } from 'lucide-react'
 
 const MXN = (v: number) => v.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })
 const FORMAS_PAGO = ['Transferencia', 'Cheque', 'Efectivo', 'Tarjeta']
-const CATEGORIAS_GASTO: GastoNegocio['categoria'][] = [
-  'Renta', 'Nomina', 'Servicios', 'Mantenimiento', 'Publicidad', 'Transporte', 'Impuestos', 'Prestamos', 'Maquinaria', 'Suministros', 'Otros',
-]
-
-const today = () => new Date().toISOString().split('T')[0]
-
-const BLANK_GASTO: Omit<GastoNegocio, 'gastoId'> = {
-  fecha: today(),
-  categoria: 'Otros',
-  descripcion: '',
-  monto: 0,
-  formaPago: 'Transferencia',
-  referencia: '',
-  notas: '',
-}
 
 export function FinancePage() {
   const {
     facturasVenta, pagosClientes,
-    facturasProveedor, bancos, gastos,
-    loadFinance, subscribeRealtime: subFinance,
+    facturasProveedor, bancos, loadFinance, subscribeRealtime: subFinance,
     addPagoCliente, addPagoProveedor,
-    addFacturaProveedor, deleteFacturaProveedor,
+    addFacturaProveedor,
     addBanco, updateBanco, deleteBanco,
-    addGasto, updateGasto, deleteGasto,
   } = useFinanceStore()
   const { clients, loadClients, subscribeRealtime: subClients } = useClientsStore()
   const { suppliers, loadSuppliers, subscribeRealtime: subSuppliers } = useSuppliersStore()
   const { orders } = useSalesOrdersStore()
   const { products } = useProductsStore()
-  const { ordenesCompra, loadPurchases, subscribeRealtime: subPurchases, updateOrdenCompra } = usePurchasesStore()
   const { user: me } = useAuthStore()
 
   useEffect(() => {
     void loadFinance()
     void loadClients()
     void loadSuppliers()
-    void loadPurchases()
     const u1 = subFinance()
     const u2 = subClients()
     const u3 = subSuppliers()
-    const u4 = subPurchases()
-    return () => { u1(); u2(); u3(); u4() }
+    return () => { u1(); u2(); u3() }
   }, [])
 
-  const canManageBancos  = me ? hasRole(me, 'director', 'administracion') : false
-  const canManageGastos  = me ? hasRole(me, 'director', 'administracion') : false
-  const canCancelPagoCxP = me ? hasRole(me, 'director', 'administracion') : false
+  const canManageBancos = me ? hasRole(me, 'director', 'administracion') : false
 
-  const [tab, setTab] = useState<'cxc' | 'cxp' | 'bancos' | 'gastos'>('cxc')
+  const [tab, setTab] = useState<'cxc' | 'cxp' | 'bancos'>('cxc')
   const [cxcTab, setCxcTab] = useState<'cobrar' | 'pagadas'>('cobrar')
 
   type ModalType =
@@ -75,12 +52,9 @@ export function FinancePage() {
     | 'recibo'
     | 'historial'
     | 'new_fp'
-    | 'cancel_oc_pago'
     | 'new_banco' | 'edit_banco' | 'del_banco'
-    | 'new_gasto' | 'edit_gasto' | 'del_gasto'
     | null
   const [modal, setModal] = useState<ModalType>(null)
-  const [selCancelOC, setSelCancelOC] = useState<string | null>(null)
 
   const [selFv, setSelFv] = useState<string>('')
   const [selRecibo, setSelRecibo] = useState<FacturaVenta | null>(null)
@@ -89,19 +63,12 @@ export function FinancePage() {
   const [selFp, setSelFp] = useState<string>('')
   const [pagoForm, setPagoForm] = useState({ monto: 0, formaPago: 'Transferencia', referencia: '' })
 
-  const BLANK_FP = { supplierId: '', fecha: today(), fechaVencimiento: '', monto: 0, notas: '' }
+  const BLANK_FP = { supplierId: '', fecha: new Date().toISOString().split('T')[0], fechaVencimiento: '', monto: 0, notas: '' }
   const [fpForm, setFpForm] = useState(BLANK_FP)
 
   const BLANK_BANCO: Omit<Banco, 'bancoId'> = { banco: '', cuenta: '', saldo: 0, moneda: 'MXN', activo: true }
   const [bancoForm, setBancoForm] = useState(BLANK_BANCO)
   const [selBanco, setSelBanco] = useState<Banco | null>(null)
-
-  const [gastoForm, setGastoForm] = useState<Omit<GastoNegocio, 'gastoId'>>(BLANK_GASTO)
-  const [selGasto, setSelGasto] = useState<GastoNegocio | null>(null)
-
-  // ΓöÇΓöÇ derived ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
-  // OCs entregadas que esperan pago
-  const ocsPendientesPago = ordenesCompra.filter(o => o.estatus === 'enviarPago')
 
   const porCobrar = facturasVenta.filter(f => f.saldoPendiente > 0)
   const pagadas = facturasVenta.filter(f => f.saldoPendiente === 0 && f.estatus === 'pagada')
@@ -109,16 +76,6 @@ export function FinancePage() {
   const cxcVencida = facturasVenta.filter(f => f.estatus === 'vencida').reduce((a, f) => a + f.saldoPendiente, 0)
   const cxpPendiente = facturasProveedor.filter(f => f.saldoPendiente > 0).reduce((a, f) => a + f.saldoPendiente, 0)
   const saldoTotal = bancos.filter(b => b.moneda === 'MXN').reduce((a, b) => a + b.saldo, 0)
-
-  // gastos del mes actual
-  const mesActual = new Date().toISOString().slice(0, 7) // "YYYY-MM"
-  const gastosMes = gastos.filter(g => g.fecha.startsWith(mesActual))
-  const totalGastosMes = gastosMes.reduce((a, g) => a + g.monto, 0)
-
-  // pagos a proveedores del mes actual (para desglose en CxP)
-  const { pagosProveedores } = useFinanceStore()
-  const pagosMes = pagosProveedores.filter(p => p.fecha.startsWith(mesActual))
-  const totalPagosMes = pagosMes.reduce((a, p) => a + p.monto, 0)
 
   function getOrder(pedidoId?: string): SalesOrder | undefined {
     if (!pedidoId) return undefined
@@ -148,32 +105,18 @@ export function FinancePage() {
     if (!fv) return
     if (pagoForm.monto <= 0) { toast.error('El monto debe ser mayor a cero.'); return }
     if (pagoForm.monto > fv.saldoPendiente) { toast.error(`El monto no puede superar el saldo pendiente (${MXN(fv.saldoPendiente)}).`); return }
-    addPagoCliente({ facturaId: selFv, clienteId: fv.clienteId, fecha: today(), ...pagoForm })
+    addPagoCliente({ facturaId: selFv, clienteId: fv.clienteId, fecha: new Date().toISOString().split('T')[0], ...pagoForm })
     toast.success(`${esAbono ? 'Abono' : 'Cobro'} registrado: ${MXN(pagoForm.monto)}.`)
     setModal(null)
     setPagoForm({ monto: 0, formaPago: 'Transferencia', referencia: '' })
     if (fv.saldoPendiente - pagoForm.monto <= 0) setCxcTab('pagadas')
   }
 
-  async function handlePagoProveedor() {
+  function handlePagoProveedor() {
     const fp = facturasProveedor.find(f => f.facturaProvId === selFp)
     if (!fp) return
     if (pagoForm.monto <= 0) { toast.error('El monto debe ser mayor a cero.'); return }
-    await addPagoProveedor({ facturaProvId: selFp, supplierId: fp.supplierId, fecha: today(), ...pagoForm })
-    // Si el pago liquida la factura, registrar automáticamente como gasto del mes
-    const saldoRestante = Math.max(0, fp.saldoPendiente - pagoForm.monto)
-    if (saldoRestante === 0) {
-      const prov = suppliers.find(s => s.supplierId === fp.supplierId)
-      await addGasto({
-        fecha: today(),
-        categoria: 'Suministros',
-        descripcion: `Pago OC — ${prov?.razonSocial ?? fp.folio} (${fp.folio})`,
-        monto: pagoForm.monto,
-        formaPago: pagoForm.formaPago,
-        referencia: pagoForm.referencia,
-        notas: `Generado automáticamente al liquidar ${fp.folio}`,
-      })
-    }
+    addPagoProveedor({ facturaProvId: selFp, supplierId: fp.supplierId, fecha: new Date().toISOString().split('T')[0], ...pagoForm })
     toast.success(`Pago a proveedor registrado: ${MXN(pagoForm.monto)}.`)
     setModal(null)
     setPagoForm({ monto: 0, formaPago: 'Transferencia', referencia: '' })
@@ -225,33 +168,6 @@ export function FinancePage() {
     setModal(null); setSelBanco(null)
   }
 
-  // ΓöÇΓöÇ gastos handlers ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
-  function openNewGasto() { setGastoForm({ ...BLANK_GASTO, fecha: today() }); setSelGasto(null); setModal('new_gasto') }
-  function openEditGasto(g: GastoNegocio) {
-    const { gastoId, ...rest } = g; void gastoId
-    setGastoForm(rest); setSelGasto(g); setModal('edit_gasto')
-  }
-  function openDelGasto(g: GastoNegocio) { setSelGasto(g); setModal('del_gasto') }
-
-  async function handleSaveGasto() {
-    if (!gastoForm.descripcion.trim()) { toast.error('La descripcion es requerida.'); return }
-    if (gastoForm.monto <= 0) { toast.error('El monto debe ser mayor a cero.'); return }
-    if (selGasto) {
-      await updateGasto(selGasto.gastoId, gastoForm)
-      toast.success('Gasto actualizado.')
-    } else {
-      await addGasto(gastoForm)
-      toast.success(`Gasto registrado: ${MXN(gastoForm.monto)}.`)
-    }
-    setModal(null)
-  }
-
-  function handleDeleteGasto() {
-    if (selGasto) { deleteGasto(selGasto.gastoId); toast.success('Gasto eliminado.') }
-    setModal(null); setSelGasto(null)
-  }
-
-  // ΓöÇΓöÇ column helpers ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   function cxcColumns(showCobrar: boolean) {
     return [
       { key: 'folio', header: 'Factura', render: (f: FacturaVenta) => <span className="font-mono font-semibold text-blue-700">{f.folio}</span> },
@@ -298,34 +214,13 @@ export function FinancePage() {
     ]
   }
 
-  // category colour pill
-  const catColor: Record<GastoNegocio['categoria'], string> = {
-    Renta: 'bg-purple-100 text-purple-700',
-    Nomina: 'bg-blue-100 text-blue-700',
-    Servicios: 'bg-cyan-100 text-cyan-700',
-    Mantenimiento: 'bg-yellow-100 text-yellow-700',
-    Publicidad: 'bg-pink-100 text-pink-700',
-    Transporte: 'bg-orange-100 text-orange-700',
-    Impuestos: 'bg-red-100 text-red-700',
-    Prestamos: 'bg-violet-100 text-violet-700',
-    Maquinaria: 'bg-amber-100 text-amber-700',
-    Suministros: 'bg-teal-100 text-teal-700',
-    Otros: 'bg-gray-100 text-gray-600',
-  }
-
-  // resumen por forma de pago (todos los gastos, no solo del mes)
-  const totalEfectivo = gastos.filter(g => g.formaPago === 'Efectivo').reduce((a, g) => a + g.monto, 0)
-  const totalTransferencia = gastos.filter(g => g.formaPago === 'Transferencia').reduce((a, g) => a + g.monto, 0)
-  const totalCheque = gastos.filter(g => g.formaPago === 'Cheque').reduce((a, g) => a + g.monto, 0)
-  const totalTarjeta = gastos.filter(g => g.formaPago === 'Tarjeta').reduce((a, g) => a + g.monto, 0)
-
   return (
     <div className="space-y-6">
       <div className="page-header">
         <h1 className="page-title flex items-center gap-2"><DollarSign size={24} /> Finanzas</h1>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="card-sm text-center">
           <div className="text-xl font-bold text-green-700">{MXN(cxcPendiente)}</div>
           <div className="text-xs text-gray-500 mt-1">CxC Pendiente</div>
@@ -342,10 +237,6 @@ export function FinancePage() {
           <div className="text-xl font-bold text-blue-700">{MXN(saldoTotal)}</div>
           <div className="text-xs text-gray-500 mt-1">Saldo Bancario MXN</div>
         </div>
-        <div className="card-sm text-center">
-          <div className="text-xl font-bold text-rose-600">{MXN(totalGastosMes)}</div>
-          <div className="text-xs text-gray-500 mt-1">Gastos del Mes</div>
-        </div>
       </div>
 
       <div className="flex gap-2">
@@ -355,22 +246,13 @@ export function FinancePage() {
         </button>
         <button className={`btn ${tab === 'cxp' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('cxp')}>
           <CreditCard size={15} /> CxP
-          <span className="ml-1 text-xs opacity-75">
-            ({facturasProveedor.filter(f => f.saldoPendiente > 0).length + ocsPendientesPago.length} pendientes)
-          </span>
+          <span className="ml-1 text-xs opacity-75">({facturasProveedor.filter(f => f.saldoPendiente > 0).length} pendientes)</span>
         </button>
         <button className={`btn ${tab === 'bancos' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('bancos')}>
           <Building size={15} /> Bancos
         </button>
-        <button className={`btn ${tab === 'gastos' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('gastos')}>
-          <Receipt size={15} /> Gastos
-          {gastosMes.length > 0 && (
-            <span className="ml-1 text-xs opacity-75">({gastosMes.length} este mes)</span>
-          )}
-        </button>
       </div>
 
-      {/* ΓöÇΓöÇ TAB: CxC ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */}
       {tab === 'cxc' && (
         <div className="space-y-4">
           <div className="flex gap-2 border-b border-gray-200 pb-0">
@@ -448,79 +330,8 @@ export function FinancePage() {
         </div>
       )}
 
-      {/* ΓöÇΓöÇ TAB: CxP ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */}
       {tab === 'cxp' && (
-        <div className="space-y-4">
-
-          {/* ── OCs listas para pago (vienen de Logística) ───────────── */}
-          {ocsPendientesPago.length > 0 && (
-            <div className="card space-y-3">
-              <div className="flex items-center gap-2">
-                <ShoppingCart size={17} className="text-purple-600" />
-                <div>
-                  <h3 className="font-semibold text-gray-900">Órdenes de Compra listas para pago</h3>
-                  <p className="text-xs text-gray-500 mt-0.5">Entregadas por Logística — inicia el proceso de pago al proveedor</p>
-                </div>
-                <span className="ml-auto text-xs font-bold text-white bg-purple-600 px-2 py-0.5 rounded-full">
-                  {ocsPendientesPago.length}
-                </span>
-              </div>
-              <div className="space-y-2">
-                {ocsPendientesPago.map(oc => {
-                  const prov = suppliers.find(s => s.supplierId === oc.supplierId)
-                  return (
-                    <div key={oc.ordenCompraId} className="flex items-center justify-between gap-3 p-3 rounded-lg bg-purple-50 border border-purple-200">
-                      <div className="space-y-0.5 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-mono font-bold text-blue-700 text-sm">{oc.folio}</span>
-                          <StatusBadge status={oc.estatus} />
-                          <span className="text-xs text-gray-500">{prov?.razonSocial ?? '—'}</span>
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          F. entrega: {oc.fechaEntregaEsperada || '—'} · Condiciones: {prov?.condicionesPago || '—'}
-                        </div>
-                        <div className="text-sm font-semibold text-gray-800">
-                          <Currency value={oc.monto} />
-                        </div>
-                      </div>
-                      <div className="flex gap-1 shrink-0">
-                        {canCancelPagoCxP && (
-                          <button
-                            className="btn btn-danger btn-sm"
-                            title="Cancelar — regresar OC a Compras"
-                            onClick={() => { setSelCancelOC(oc.ordenCompraId); setModal('cancel_oc_pago') }}
-                          >
-                            <XCircle size={13} /> Cancelar
-                          </button>
-                        )}
-                        <button
-                          className="btn btn-primary btn-sm"
-                          onClick={async () => {
-                            // Registrar factura proveedor pre-llenada con datos de la OC
-                            setFpForm({
-                              supplierId: oc.supplierId,
-                              fecha: today(),
-                              fechaVencimiento: oc.fechaEntregaEsperada || today(),
-                              monto: oc.monto,
-                              notas: `OC ${oc.folio}`,
-                            })
-                            await updateOrdenCompra(oc.ordenCompraId, { estatus: 'cerrada' })
-                            setModal('new_fp')
-                            toast.success(`OC ${oc.folio} → iniciando proceso de pago`)
-                          }}
-                        >
-                          <Plus size={13} /> Iniciar Pago
-                        </button>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* ── Facturas proveedor registradas ────────────────────────── */}
-          <div className="card space-y-4">
+        <div className="card space-y-4">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="font-semibold text-gray-900">Cuentas por Pagar</h3>
@@ -561,67 +372,9 @@ export function FinancePage() {
               ]}
             />
           )}
-          </div>
-
-          {/* ── Desglose de pagos del mes ──────────────────────────────── */}
-          {pagosMes.length > 0 && (() => {
-            const porForma = ['Transferencia', 'Cheque', 'Efectivo', 'Tarjeta'].map(f => ({
-              forma: f,
-              total: pagosMes.filter(p => p.formaPago === f).reduce((a, p) => a + p.monto, 0),
-            })).filter(x => x.total > 0)
-            const formaBadge: Record<string, string> = {
-              Transferencia: 'bg-blue-50 text-blue-700',
-              Cheque:        'bg-purple-50 text-purple-700',
-              Efectivo:      'bg-green-50 text-green-700',
-              Tarjeta:       'bg-orange-50 text-orange-700',
-            }
-            return (
-              <div className="card space-y-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-semibold text-gray-900">Pagos realizados este mes</h3>
-                    <p className="text-xs text-gray-500 mt-0.5">{mesActual} · {pagosMes.length} pago{pagosMes.length !== 1 ? 's' : ''}</p>
-                  </div>
-                  <span className="text-base font-bold text-green-700"><Currency value={totalPagosMes} /></span>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {porForma.map(({ forma, total }) => (
-                    <div key={forma} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${formaBadge[forma] ?? 'bg-gray-100 text-gray-600'}`}>
-                      <span>{forma}</span>
-                      <span className="opacity-75"><Currency value={total} /></span>
-                    </div>
-                  ))}
-                </div>
-                <div className="border-t border-gray-100 pt-2 space-y-1">
-                  {pagosMes.map(p => {
-                    const fp = facturasProveedor.find(f => f.facturaProvId === p.facturaProvId)
-                    const prov = fp ? suppliers.find(s => s.supplierId === fp.supplierId) : undefined
-                    return (
-                      <div key={p.pagoId} className="flex items-center justify-between text-sm py-1.5 border-b border-gray-50 last:border-0">
-                        <div className="min-w-0">
-                          <span className="font-mono font-semibold text-blue-700 text-xs mr-2">{fp?.folio ?? '—'}</span>
-                          <span className="text-gray-700">{prov?.razonSocial ?? '—'}</span>
-                          {p.referencia && <span className="text-xs text-gray-400 ml-2">· {p.referencia}</span>}
-                        </div>
-                        <div className="flex items-center gap-3 shrink-0">
-                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${formaBadge[p.formaPago] ?? 'bg-gray-100 text-gray-600'}`}>
-                            {p.formaPago}
-                          </span>
-                          <span className="font-semibold text-gray-900"><Currency value={p.monto} /></span>
-                          <span className="text-xs text-gray-400">{p.fecha}</span>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )
-          })()}
-
         </div>
       )}
 
-      {/* ΓöÇΓöÇ TAB: Bancos ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */}
       {tab === 'bancos' && (
         <div className="card space-y-4">
           <div className="flex items-center justify-between">
@@ -673,118 +426,7 @@ export function FinancePage() {
         </div>
       )}
 
-      {/* ΓöÇΓöÇ TAB: Gastos del Negocio ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */}
-      {tab === 'gastos' && (
-        <div className="space-y-4">
-          {/* resumen por categor├¡a del mes */}
-          {gastosMes.length > 0 && (() => {
-            const porCat = CATEGORIAS_GASTO
-              .map(cat => ({ cat, total: gastosMes.filter(g => g.categoria === cat).reduce((a, g) => a + g.monto, 0) }))
-              .filter(x => x.total > 0)
-              .sort((a, b) => b.total - a.total)
-            return (
-              <div className="card space-y-3">
-                <div className="flex items-center justify-between">
-                    <h4 className="text-sm font-semibold text-gray-700">Resumen del mes actual</h4>
-                    <span className="text-xs text-gray-400">{mesActual}</span>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {porCat.map(({ cat, total }) => (
-                      <div key={cat} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${catColor[cat]}`}>
-                        <span>{cat}</span>
-                        <span className="opacity-75">{MXN(total)}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex justify-end text-sm font-bold text-rose-600">
-                    Total mes: {MXN(totalGastosMes)}
-                  </div>
-                  {/* Resumen por forma de pago — acumulado total */}
-                  <div className="border-t border-gray-100 pt-3 mt-1">
-                    <div className="text-xs font-semibold text-gray-500 mb-2">Por forma de pago (acumulado total)</div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                      <div className="text-center p-2 rounded-lg bg-green-50">
-                        <div className="text-sm font-bold text-green-700">{MXN(totalEfectivo)}</div>
-                        <div className="text-xs text-gray-500 mt-0.5">Efectivo</div>
-                      </div>
-                      <div className="text-center p-2 rounded-lg bg-blue-50">
-                        <div className="text-sm font-bold text-blue-700">{MXN(totalTransferencia)}</div>
-                        <div className="text-xs text-gray-500 mt-0.5">Transferencia</div>
-                      </div>
-                      <div className="text-center p-2 rounded-lg bg-purple-50">
-                        <div className="text-sm font-bold text-purple-700">{MXN(totalCheque)}</div>
-                        <div className="text-xs text-gray-500 mt-0.5">Cheque</div>
-                      </div>
-                      <div className="text-center p-2 rounded-lg bg-orange-50">
-                        <div className="text-sm font-bold text-orange-700">{MXN(totalTarjeta)}</div>
-                        <div className="text-xs text-gray-500 mt-0.5">Tarjeta</div>
-                      </div>
-                    </div>
-                  </div>
-              </div>
-            )
-          })()}
-
-          <div className="card space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-semibold text-gray-900">Gastos del Negocio</h3>
-                <p className="text-xs text-gray-500 mt-0.5">Registro de todos los gastos operativos del negocio</p>
-              </div>
-              {canManageGastos && (
-                <button className="btn-primary" onClick={openNewGasto}>
-                  <Plus size={15} /> Nuevo Gasto
-                </button>
-              )}
-            </div>
-
-            {gastos.length === 0 ? (
-              <div className="text-center py-10 text-gray-400">
-                <Receipt size={32} className="mx-auto mb-3 opacity-40" />
-                <p className="text-sm">No hay gastos registrados.</p>
-              </div>
-            ) : (
-              <DataTable
-                data={gastos}
-                rowKey={(g) => g.gastoId}
-                columns={[
-                  { key: 'fecha', header: 'Fecha', render: (g: GastoNegocio) => <span className="font-medium">{g.fecha}</span> },
-                  { key: 'categoria', header: 'Categoria', render: (g: GastoNegocio) => (
-                    <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${catColor[g.categoria]}`}>
-                      {g.categoria}
-                    </span>
-                  )},
-                  { key: 'descripcion', header: 'Descripcion', render: (g: GastoNegocio) => (
-                    <div>
-                      <div className="font-medium text-gray-900">{g.descripcion}</div>
-                      {g.notas && <div className="text-xs text-gray-400">{g.notas}</div>}
-                    </div>
-                  )},
-                  { key: 'formaPago', header: 'Forma de Pago', render: (g: GastoNegocio) => (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-xs font-medium">
-                      {g.formaPago}
-                    </span>
-                  )},
-                  { key: 'referencia', header: 'Referencia', render: (g: GastoNegocio) => (
-                    g.referencia ? <span className="font-mono text-xs text-gray-500">{g.referencia}</span> : <span className="text-gray-300">ΓÇö</span>
-                  )},
-                  { key: 'monto', header: 'Monto', render: (g: GastoNegocio) => (
-                    <span className="font-bold text-rose-600">{MXN(g.monto)}</span>
-                  )},
-                  { key: 'acc', header: '', render: (g: GastoNegocio) => canManageGastos ? (
-                    <div className="flex gap-1 justify-end">
-                      <button className="btn btn-secondary btn-sm" onClick={() => openEditGasto(g)}><Edit2 size={13} /></button>
-                      <button className="btn btn-danger btn-sm" onClick={() => openDelGasto(g)}><Trash2 size={13} /></button>
-                    </div>
-                  ) : null },
-                ]}
-              />
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ΓöÇΓöÇ MODAL: Cobro / Abono ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */}
+      {/* MODAL: Cobro / Abono */}
       {modal === 'pago_cli' && (
         <Modal
           title={esAbono ? 'Registrar Abono' : 'Registrar Cobro'}
@@ -855,7 +497,7 @@ export function FinancePage() {
         </Modal>
       )}
 
-      {/* ΓöÇΓöÇ MODAL: Historial de Abonos ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */}
+      {/* MODAL: Historial de Abonos */}
       {modal === 'historial' && selRecibo && (() => {
         const fv = selRecibo
         const cli = clients.find(c => c.clientId === fv.clienteId)
@@ -981,7 +623,7 @@ export function FinancePage() {
         )
       })()}
 
-      {/* ΓöÇΓöÇ MODAL: Pago Proveedor ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */}
+      {/* MODAL: Pago Proveedor */}
       {modal === 'pago_prov' && (
         <Modal title="Registrar Pago a Proveedor" onClose={() => setModal(null)}
           footer={<><button className="btn-secondary" onClick={() => setModal(null)}>Cancelar</button><button className="btn-primary" onClick={handlePagoProveedor}>Registrar Pago</button></>}
@@ -1021,40 +663,7 @@ export function FinancePage() {
         </Modal>
       )}
 
-
-      {/* ── MODAL: Cancelar OC de CxP ──────────────────────────────────────────── */}
-      {modal === 'cancel_oc_pago' && selCancelOC && (() => {
-        const oc = ocsPendientesPago.find(o => o.ordenCompraId === selCancelOC)
-        return oc ? (
-          <Modal
-            title="Cancelar proceso de pago"
-            onClose={() => { setModal(null); setSelCancelOC(null) }}
-            footer={
-              <>
-                <button className="btn-secondary" onClick={() => { setModal(null); setSelCancelOC(null) }}>No, mantener</button>
-                <button className="btn-danger" onClick={async () => {
-                  await updateOrdenCompra(oc.ordenCompraId, { estatus: 'confirmada' })
-                  toast.warning(`OC ${oc.folio} regresada a Compras con estatus confirmada.`)
-                  setModal(null)
-                  setSelCancelOC(null)
-                }}>
-                  <XCircle size={14} /> Sí, cancelar pago
-                </button>
-              </>
-            }
-          >
-            <div className="space-y-3 text-sm text-gray-700">
-              <p>¿Cancelar el proceso de pago de la OC <strong className="font-mono">{oc.folio}</strong>?</p>
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
-                La orden regresará a Compras con estatus <strong>confirmada</strong> para ser procesada nuevamente.
-              </div>
-            </div>
-          </Modal>
-        ) : null
-      })()}
-
-
-      {/* ΓöÇΓöÇ MODAL: Nueva Factura Proveedor ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */}
+      {/* MODAL: Nueva Factura Proveedor */}
       {modal === 'new_fp' && (
         <Modal title="Registrar Factura de Proveedor" onClose={() => setModal(null)}
           footer={<><button className="btn-secondary" onClick={() => setModal(null)}>Cancelar</button><button className="btn-primary" onClick={handleSaveFP}><Plus size={14} /> Registrar</button></>}
@@ -1093,7 +702,7 @@ export function FinancePage() {
         </Modal>
       )}
 
-      {/* ΓöÇΓöÇ MODAL: Banco Nueva / Editar ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */}
+      {/* MODAL: Banco Nueva / Editar */}
       {(modal === 'new_banco' || modal === 'edit_banco') && (
         <Modal
           title={modal === 'new_banco' ? 'Nueva Cuenta Bancaria' : `Editar - ${selBanco?.banco}`}
@@ -1127,7 +736,7 @@ export function FinancePage() {
         </Modal>
       )}
 
-      {/* ΓöÇΓöÇ MODAL: Banco Eliminar ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */}
+      {/* MODAL: Banco Eliminar */}
       {modal === 'del_banco' && selBanco && (
         <Modal title="Eliminar cuenta bancaria" onClose={() => setModal(null)}
           footer={<><button className="btn-secondary" onClick={() => setModal(null)}>Cancelar</button><button className="btn-danger" onClick={handleDeleteBanco}><Trash2 size={14} /> Eliminar</button></>}
@@ -1138,86 +747,7 @@ export function FinancePage() {
         </Modal>
       )}
 
-      {/* ΓöÇΓöÇ MODAL: Nuevo / Editar Gasto ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */}
-      {(modal === 'new_gasto' || modal === 'edit_gasto') && (
-        <Modal
-          title={modal === 'new_gasto' ? 'Registrar Gasto' : 'Editar Gasto'}
-          onClose={() => setModal(null)}
-          footer={
-            <>
-              <button className="btn-secondary" onClick={() => setModal(null)}>Cancelar</button>
-              <button className="btn-primary" onClick={handleSaveGasto}>
-                {modal === 'new_gasto' ? <><Plus size={14} /> Registrar</> : 'Guardar cambios'}
-              </button>
-            </>
-          }
-        >
-          <div className="space-y-4">
-            <div className="form-grid">
-              <div className="form-group">
-                <label className="label">Fecha *</label>
-                <input type="date" className="input" value={gastoForm.fecha}
-                  onChange={(e) => setGastoForm(f => ({ ...f, fecha: e.target.value }))} />
-              </div>
-              <div className="form-group">
-                <label className="label">Categoria *</label>
-                <select className="select" value={gastoForm.categoria}
-                  onChange={(e) => setGastoForm(f => ({ ...f, categoria: e.target.value as GastoNegocio['categoria'] }))}>
-                  {CATEGORIAS_GASTO.map(c => <option key={c}>{c}</option>)}
-                </select>
-              </div>
-            </div>
-            <div className="form-group">
-              <label className="label">Descripcion *</label>
-              <input className="input" value={gastoForm.descripcion} placeholder="Ej. Renta oficina agosto"
-                onChange={(e) => setGastoForm(f => ({ ...f, descripcion: e.target.value }))} />
-            </div>
-            <div className="form-group">
-              <label className="label">Monto *</label>
-              <input type="number" className="input" value={gastoForm.monto} min={0} step="0.01"
-                onChange={(e) => setGastoForm(f => ({ ...f, monto: Number(e.target.value) }))} />
-            </div>
-            <div className="form-grid">
-              <div className="form-group">
-                <label className="label">Forma de Pago</label>
-                <select className="select" value={gastoForm.formaPago}
-                  onChange={(e) => setGastoForm(f => ({ ...f, formaPago: e.target.value }))}>
-                  {FORMAS_PAGO.map(x => <option key={x}>{x}</option>)}
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="label">Referencia</label>
-                <input className="input" value={gastoForm.referencia} placeholder="TRF-001"
-                  onChange={(e) => setGastoForm(f => ({ ...f, referencia: e.target.value }))} />
-              </div>
-            </div>
-            <div className="form-group">
-              <label className="label">Notas</label>
-              <input className="input" value={gastoForm.notas} placeholder="Observaciones opcionales"
-                onChange={(e) => setGastoForm(f => ({ ...f, notas: e.target.value }))} />
-            </div>
-          </div>
-        </Modal>
-      )}
-
-      {/* ΓöÇΓöÇ MODAL: Eliminar Gasto ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */}
-      {modal === 'del_gasto' && selGasto && (
-        <Modal title="Eliminar gasto" onClose={() => setModal(null)}
-          footer={
-            <>
-              <button className="btn-secondary" onClick={() => setModal(null)}>Cancelar</button>
-              <button className="btn-danger" onClick={handleDeleteGasto}><Trash2 size={14} /> Eliminar</button>
-            </>
-          }
-        >
-          <p className="text-sm text-gray-700">
-            Eliminar el gasto <strong>{selGasto.descripcion}</strong> ({MXN(selGasto.monto)}) del {selGasto.fecha}?
-            Esta accion no se puede deshacer.
-          </p>
-        </Modal>
-      )}
-
-      {/* ΓöÇΓöÇ MODAL: Ver Recibo ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */}
+      {/* MODAL: Ver Recibo */}
       {modal === 'recibo' && selRecibo && (() => {
         const order = getOrder(selRecibo.pedidoId)
         const client = clients.find(c => c.clientId === selRecibo.clienteId)
