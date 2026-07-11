@@ -155,8 +155,8 @@ export function LogisticsPage() {
       const totalKg = ocTotalKg(oc)
 
       if (ref.kgEmbarcados >= totalKg) {
-        // Entrega completa → cerrar la OC
-        await updateOrdenCompra(ref.ordenCompraId, { estatus: 'cerrada' })
+        // Entrega completa → pasar a finanzas para pago
+        await updateOrdenCompra(ref.ordenCompraId, { estatus: 'enviarPago' })
       } else {
         // Entrega parcial → reducir la cantidad de cada item proporcionalmente
         const ratio = (totalKg - ref.kgEmbarcados) / totalKg

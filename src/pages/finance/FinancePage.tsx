@@ -1,9 +1,10 @@
-﻿import { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useFinanceStore } from '../../store/financeStore'
 import { useClientsStore } from '../../store/clientsStore'
 import { useSuppliersStore } from '../../store/suppliersStore'
 import { useSalesOrdersStore } from '../../store/salesOrdersStore'
 import { useProductsStore } from '../../store/productsStore'
+import { usePurchasesStore } from '../../store/purchasesStore'
 import { useAuthStore } from '../../store/authStore'
 import { hasRole } from '../../store/usersStore'
 import { DataTable } from '../../components/ui/DataTable'
@@ -12,7 +13,7 @@ import { Modal } from '../../components/ui/Modal'
 import { Currency } from '../../components/ui/Currency'
 import { toast } from '../../store/toastStore'
 import type { FacturaVenta, SalesOrder, Banco, GastoNegocio } from '../../types'
-import { DollarSign, CreditCard, Building, Eye, CircleCheck as CheckCircle, Clock, FileText, Plus, CreditCard as Edit2, Trash2, History, CirclePlus as PlusCircle, Receipt } from 'lucide-react'
+import { DollarSign, CreditCard, Building, Eye, CircleCheck as CheckCircle, Clock, FileText, Plus, CreditCard as Edit2, Trash2, History, CirclePlus as PlusCircle, Receipt, ShoppingCart } from 'lucide-react'
 
 const MXN = (v: number) => v.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })
 const FORMAS_PAGO = ['Transferencia', 'Cheque', 'Efectivo', 'Tarjeta']
@@ -46,16 +47,19 @@ export function FinancePage() {
   const { suppliers, loadSuppliers, subscribeRealtime: subSuppliers } = useSuppliersStore()
   const { orders } = useSalesOrdersStore()
   const { products } = useProductsStore()
+  const { ordenesCompra, loadPurchases, subscribeRealtime: subPurchases, updateOrdenCompra } = usePurchasesStore()
   const { user: me } = useAuthStore()
 
   useEffect(() => {
     void loadFinance()
     void loadClients()
     void loadSuppliers()
+    void loadPurchases()
     const u1 = subFinance()
     const u2 = subClients()
     const u3 = subSuppliers()
-    return () => { u1(); u2(); u3() }
+    const u4 = subPurchases()
+    return () => { u1(); u2(); u3(); u4() }
   }, [])
 
   const canManageBancos = me ? hasRole(me, 'director', 'administracion') : false
@@ -93,6 +97,9 @@ export function FinancePage() {
   const [selGasto, setSelGasto] = useState<GastoNegocio | null>(null)
 
   // ΓöÇΓöÇ derived ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  // OCs entregadas que esperan pago
+  const ocsPendientesPago = ordenesCompra.filter(o => o.estatus === 'enviarPago')
+
   const porCobrar = facturasVenta.filter(f => f.saldoPendiente > 0)
   const pagadas = facturasVenta.filter(f => f.saldoPendiente === 0 && f.estatus === 'pagada')
   const cxcPendiente = porCobrar.reduce((a, f) => a + f.saldoPendiente, 0)
@@ -326,7 +333,9 @@ export function FinancePage() {
         </button>
         <button className={`btn ${tab === 'cxp' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('cxp')}>
           <CreditCard size={15} /> CxP
-          <span className="ml-1 text-xs opacity-75">({facturasProveedor.filter(f => f.saldoPendiente > 0).length} pendientes)</span>
+          <span className="ml-1 text-xs opacity-75">
+            ({facturasProveedor.filter(f => f.saldoPendiente > 0).length + ocsPendientesPago.length} pendientes)
+          </span>
         </button>
         <button className={`btn ${tab === 'bancos' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('bancos')}>
           <Building size={15} /> Bancos
@@ -419,7 +428,68 @@ export function FinancePage() {
 
       {/* ΓöÇΓöÇ TAB: CxP ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */}
       {tab === 'cxp' && (
-        <div className="card space-y-4">
+        <div className="space-y-4">
+
+          {/* ── OCs listas para pago (vienen de Logística) ───────────── */}
+          {ocsPendientesPago.length > 0 && (
+            <div className="card space-y-3">
+              <div className="flex items-center gap-2">
+                <ShoppingCart size={17} className="text-purple-600" />
+                <div>
+                  <h3 className="font-semibold text-gray-900">Órdenes de Compra listas para pago</h3>
+                  <p className="text-xs text-gray-500 mt-0.5">Entregadas por Logística — inicia el proceso de pago al proveedor</p>
+                </div>
+                <span className="ml-auto text-xs font-bold text-white bg-purple-600 px-2 py-0.5 rounded-full">
+                  {ocsPendientesPago.length}
+                </span>
+              </div>
+              <div className="space-y-2">
+                {ocsPendientesPago.map(oc => {
+                  const prov = suppliers.find(s => s.supplierId === oc.supplierId)
+                  return (
+                    <div key={oc.ordenCompraId} className="flex items-center justify-between gap-3 p-3 rounded-lg bg-purple-50 border border-purple-200">
+                      <div className="space-y-0.5 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono font-bold text-blue-700 text-sm">{oc.folio}</span>
+                          <StatusBadge status={oc.estatus} />
+                          <span className="text-xs text-gray-500">{prov?.razonSocial ?? '—'}</span>
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          F. entrega: {oc.fechaEntregaEsperada || '—'} · Condiciones: {prov?.condicionesPago || '—'}
+                        </div>
+                        <div className="text-sm font-semibold text-gray-800">
+                          <Currency value={oc.monto} />
+                        </div>
+                      </div>
+                      <div className="flex gap-1 shrink-0">
+                        <button
+                          className="btn btn-primary btn-sm"
+                          onClick={async () => {
+                            // Registrar factura proveedor pre-llenada con datos de la OC
+                            setFpForm({
+                              supplierId: oc.supplierId,
+                              fecha: today(),
+                              fechaVencimiento: oc.fechaEntregaEsperada || today(),
+                              monto: oc.monto,
+                              notas: `OC ${oc.folio}`,
+                            })
+                            await updateOrdenCompra(oc.ordenCompraId, { estatus: 'cerrada' })
+                            setModal('new_fp')
+                            toast.success(`OC ${oc.folio} → iniciando proceso de pago`)
+                          }}
+                        >
+                          <Plus size={13} /> Iniciar Pago
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ── Facturas proveedor registradas ────────────────────────── */}
+          <div className="card space-y-4">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="font-semibold text-gray-900">Cuentas por Pagar</h3>
@@ -460,6 +530,7 @@ export function FinancePage() {
               ]}
             />
           )}
+          </div>
         </div>
       )}
 

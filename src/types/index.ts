@@ -175,7 +175,7 @@ export interface SalesOrder {
 
 // ─── Purchases ─────────────────────────────────────────────────────────────
 export type SolicitudEstatus = 'creada' | 'enRevision' | 'aprobada' | 'rechazada'
-export type OrdenCompraEstatus = 'borrador' | 'emitida' | 'confirmada' | 'enviarLogistica' | 'parcialLogistica' | 'cerrada'
+export type OrdenCompraEstatus = 'borrador' | 'emitida' | 'confirmada' | 'enviarLogistica' | 'parcialLogistica' | 'enviarPago' | 'cerrada'
 
 export interface SolicitudCompra {
   solicitudId: string
