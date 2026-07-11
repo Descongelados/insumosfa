@@ -12,7 +12,7 @@ import { StatusBadge } from '../../components/ui/StatusBadge'
 import { Modal } from '../../components/ui/Modal'
 import { Currency } from '../../components/ui/Currency'
 import type { Embarque, EmbarqueEstatus, EmbarqueOCRef, OrdenCompra, Transportista } from '../../types'
-import { Truck, Plus, CreditCard as Edit2, Trash2, CircleAlert as AlertCircle, ToggleLeft, ToggleRight, Package } from 'lucide-react'
+import { Truck, Plus, CreditCard as Edit2, Trash2, CircleAlert as AlertCircle, ToggleLeft, ToggleRight, Package, XCircle } from 'lucide-react'
 
 // ─── constantes ────────────────────────────────────────────────────────────
 const ESTADOS: EmbarqueEstatus[] = ['solicitado', 'programado', 'recolectado', 'enTransito', 'entregado', 'cerrado']
@@ -33,7 +33,7 @@ function ocTotalKg(oc: OrdenCompra): number {
 export function LogisticsPage() {
   const {
     embarques, transportistas, loadLogistics, subscribeRealtime: subLogistics,
-    addEmbarque, updateEmbarque,
+    addEmbarque, updateEmbarque, deleteEmbarque,
     addTransportista, updateTransportista, deleteTransportista,
   } = useLogisticsStore()
   const { ordenesCompra, loadPurchases, subscribeRealtime: subPurchases, updateOrdenCompra } = usePurchasesStore()
@@ -63,7 +63,7 @@ export function LogisticsPage() {
   const [q, setQ] = useState('')
 
   // ── modal embarque ───────────────────────────────────────────────────────
-  type EmbModal = 'new_emb' | 'view_emb' | null
+  type EmbModal = 'new_emb' | 'view_emb' | 'cancel_emb' | null
   const [embModal, setEmbModal] = useState<EmbModal>(null)
   const [selEmb, setSelEmb] = useState<Embarque | null>(null)
 
@@ -166,6 +166,18 @@ export function LogisticsPage() {
     toast.success(`Embarque creado con ${ordenesRefs.length} OC(s).`)
     setEmbModal(null)
     setTab('embarques')
+  }
+
+  async function handleCancelarEmbarque() {
+    if (!selEmb) return
+    // Regresar cada OC a "confirmada"
+    for (const ref of selEmb.ordenesIds) {
+      await updateOrdenCompra(ref.ordenCompraId, { estatus: 'confirmada' })
+    }
+    await deleteEmbarque(selEmb.embarqueId)
+    toast.success(`Embarque ${selEmb.folio} cancelado — OC(s) regresadas a Compras.`)
+    setEmbModal(null)
+    setSelEmb(null)
   }
 
   // ── handlers transportista ───────────────────────────────────────────────
@@ -365,6 +377,15 @@ export function LogisticsPage() {
                         <Truck size={13} /> En tránsito
                       </button>
                     )}
+                    {!['entregado', 'cerrado'].includes(e.estatus) && (
+                      <button
+                        className="btn btn-danger btn-sm"
+                        title="Cancelar embarque"
+                        onClick={() => { setSelEmb(e); setEmbModal('cancel_emb') }}
+                      >
+                        <XCircle size={13} />
+                      </button>
+                    )}
                   </div>
                 )
               },
@@ -539,7 +560,16 @@ export function LogisticsPage() {
       {/* ══ MODAL: Ver embarque ══════════════════════════════════════════════ */}
       {embModal === 'view_emb' && selEmb && (
         <Modal title={`Embarque ${selEmb.folio}`} onClose={() => setEmbModal(null)}
-          footer={<button className="btn-secondary" onClick={() => setEmbModal(null)}>Cerrar</button>}
+          footer={
+            <div className="flex gap-2">
+              {!['entregado', 'cerrado'].includes(selEmb.estatus) && (
+                <button className="btn-danger" onClick={() => setEmbModal('cancel_emb')}>
+                  <XCircle size={14} /> Cancelar embarque
+                </button>
+              )}
+              <button className="btn-secondary" onClick={() => setEmbModal(null)}>Cerrar</button>
+            </div>
+          }
         >
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3 text-sm">
@@ -574,6 +604,38 @@ export function LogisticsPage() {
                 ))}
               </div>
             </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ══ MODAL: Confirmar cancelación embarque ═══════════════════════════ */}
+      {embModal === 'cancel_emb' && selEmb && (
+        <Modal
+          title="Cancelar embarque"
+          onClose={() => setEmbModal(null)}
+          footer={
+            <>
+              <button className="btn-secondary" onClick={() => setEmbModal(null)}>No, mantener</button>
+              <button className="btn-danger" onClick={handleCancelarEmbarque}>
+                <XCircle size={14} /> Sí, cancelar embarque
+              </button>
+            </>
+          }
+        >
+          <div className="space-y-3 text-sm text-gray-700">
+            <p>¿Cancelar el embarque <strong>{selEmb.folio}</strong>?</p>
+            {selEmb.ordenesIds.length > 0 && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg space-y-1">
+                <p className="text-xs font-semibold text-amber-800 mb-1">Las siguientes OCs regresarán a Compras con estatus <strong>confirmada</strong>:</p>
+                {selEmb.ordenesIds.map(r => (
+                  <div key={r.ordenCompraId} className="flex justify-between text-xs text-amber-700">
+                    <span className="font-mono font-semibold">{r.folio}</span>
+                    <span>{r.kgEmbarcados.toLocaleString()} kg</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className="text-xs text-gray-500">Esta acción no se puede deshacer.</p>
           </div>
         </Modal>
       )}
