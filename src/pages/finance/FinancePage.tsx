@@ -66,7 +66,7 @@ export function FinancePage() {
   const canManageGastos  = me ? hasRole(me, 'director', 'administracion') : false
   const canCancelPagoCxP = me ? hasRole(me, 'director', 'administracion') : false
 
-  const [tab, setTab] = useState<'cxc' | 'cxp' | 'bancos' | 'gastos'>('cxc')
+  const [tab, setTab] = useState<'pagos' | 'cxc' | 'cxp' | 'bancos' | 'gastos'>('pagos')
   const [cxcTab, setCxcTab] = useState<'cobrar' | 'pagadas'>('cobrar')
 
   type ModalType =
@@ -340,7 +340,13 @@ export function FinancePage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2">
+      <div className="flex gap-2 flex-wrap">
+        <button className={`btn ${tab === 'pagos' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('pagos')}>
+          <DollarSign size={15} /> Pagos del Mes
+          {pagosMes.length > 0 && (
+            <span className="ml-1 text-xs opacity-75">({pagosMes.length})</span>
+          )}
+        </button>
         <button className={`btn ${tab === 'cxc' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('cxc')}>
           <CreditCard size={15} /> CxC
           <span className="ml-1 text-xs opacity-75">({porCobrar.length} pendientes)</span>
@@ -361,6 +367,85 @@ export function FinancePage() {
           )}
         </button>
       </div>
+
+      {/* ── TAB: Pagos del Mes ──────────────────────────────────────────────── */}
+      {tab === 'pagos' && (
+        <div className="space-y-4">
+          {pagosMes.length === 0 ? (
+            <div className="card text-center py-14 text-gray-400">
+              <DollarSign size={36} className="mx-auto mb-3 opacity-30" />
+              <p className="text-sm font-medium">No hay pagos registrados en {mesActual}.</p>
+            </div>
+          ) : (() => {
+            const porForma = FORMAS_PAGO.map(f => ({
+              forma: f,
+              total: pagosMes.filter(p => p.formaPago === f).reduce((a, p) => a + p.monto, 0),
+            })).filter(x => x.total > 0)
+            return (
+              <div className="card space-y-4">
+                {/* Encabezado resumen */}
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <h3 className="font-semibold text-gray-900">Pagos realizados — {mesActual}</h3>
+                    <p className="text-xs text-gray-500 mt-0.5">{pagosMes.length} pago{pagosMes.length !== 1 ? 's' : ''} a proveedores</p>
+                  </div>
+                  <span className="text-xl font-bold text-green-700"><Currency value={totalPagosMes} /></span>
+                </div>
+                {/* Pills por forma de pago */}
+                <div className="flex flex-wrap gap-2">
+                  {porForma.map(({ forma, total }) => (
+                    <div key={forma} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${formaBadge[forma] ?? 'bg-gray-100 text-gray-600'}`}>
+                      <span>{forma}</span>
+                      <span className="opacity-75"><Currency value={total} /></span>
+                    </div>
+                  ))}
+                </div>
+                {/* Detalle renglón a renglón */}
+                <div className="border border-gray-200 rounded-xl overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 border-b border-gray-200">
+                      <tr>
+                        <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase">Fecha</th>
+                        <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase">Factura</th>
+                        <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase">Proveedor</th>
+                        <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase">Forma</th>
+                        <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase">Referencia</th>
+                        <th className="text-right px-4 py-2 text-xs font-semibold text-gray-500 uppercase">Monto</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pagosMes.map(p => {
+                        const fp   = facturasProveedor.find(f => f.facturaProvId === p.facturaProvId)
+                        const prov = fp ? suppliers.find(s => s.supplierId === fp.supplierId) : undefined
+                        return (
+                          <tr key={p.pagoId} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
+                            <td className="px-4 py-3 text-gray-500 text-xs">{p.fecha}</td>
+                            <td className="px-4 py-3 font-mono font-semibold text-blue-700 text-xs">{fp?.folio ?? '—'}</td>
+                            <td className="px-4 py-3 text-gray-700">{prov?.razonSocial ?? '—'}</td>
+                            <td className="px-4 py-3">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${formaBadge[p.formaPago] ?? 'bg-gray-100 text-gray-600'}`}>
+                                {p.formaPago}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-gray-400 text-xs font-mono">{p.referencia || '—'}</td>
+                            <td className="px-4 py-3 text-right font-semibold text-gray-900"><Currency value={p.monto} /></td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                    <tfoot className="bg-gray-50 border-t border-gray-200">
+                      <tr>
+                        <td colSpan={5} className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase text-right">Total</td>
+                        <td className="px-4 py-2 text-right font-bold text-green-700"><Currency value={totalPagosMes} /></td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            )
+          })()}
+        </div>
+      )}
 
       {/* ── TAB: CxC ────────────────────────────────────────────────────────── */}
       {tab === 'cxc' && (
