@@ -178,6 +178,21 @@ export function LogisticsPage() {
     setTab('embarques')
   }
 
+  async function handleCambiarEstatusEmb(emb: Embarque, nuevoEstatus: EmbarqueEstatus) {
+    await updateEmbarque(emb.embarqueId, { estatus: nuevoEstatus })
+    // Al marcar entregado → todas las OCs del embarque pasan a "enviarPago"
+    if (nuevoEstatus === 'entregado') {
+      for (const ref of emb.ordenesIds) {
+        const oc = ordenesCompra.find(o => o.ordenCompraId === ref.ordenCompraId)
+        // Solo actualizamos si la OC todavía está en logística (no ya cerrada/pagada)
+        if (oc && ['enviarLogistica', 'parcialLogistica'].includes(oc.estatus)) {
+          await updateOrdenCompra(ref.ordenCompraId, { estatus: 'enviarPago' })
+        }
+      }
+      toast.success(`EMB ${emb.folio} entregado — OC(s) enviadas a Finanzas para pago.`)
+    }
+  }
+
   async function handleCancelarEmbarque() {
     if (!selEmb) return
     // Regresar cada OC a "confirmada"
@@ -664,7 +679,7 @@ export function LogisticsPage() {
               <div className="flex flex-wrap gap-2">
                 {ESTADOS.map(e => (
                   <button key={e} className={`btn btn-sm ${selEmb.estatus === e ? 'btn-primary' : 'btn-secondary'}`}
-                    onClick={() => { updateEmbarque(selEmb.embarqueId, { estatus: e }); setEmbModal(null); setSelEmb(null) }}>
+                    onClick={() => { void handleCambiarEstatusEmb(selEmb, e); setEmbModal(null); setSelEmb(null) }}>
                     <StatusBadge status={e} />
                   </button>
                 ))}
