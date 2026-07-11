@@ -76,6 +76,7 @@ export const useLogisticsStore = create<LogisticsState>()((set, get) => ({
       destino: data.destino, transportista_id: data.transportistaId,
       fecha_programada: data.fechaProgramada, fecha_entrega: data.fechaEntrega ?? null,
       costo_flete: data.costoFlete, estatus: data.estatus, notas: data.notas ?? '',
+      ordenes_ids: data.ordenesIds ?? [],
     })
     await get().loadLogistics()
   },
@@ -91,6 +92,7 @@ export const useLogisticsStore = create<LogisticsState>()((set, get) => ({
     if (data.costoFlete !== undefined) patch.costo_flete = data.costoFlete
     if (data.estatus !== undefined) patch.estatus = data.estatus
     if (data.notas !== undefined) patch.notas = data.notas
+    if (data.ordenesIds !== undefined) patch.ordenes_ids = data.ordenesIds
     await supabase.from('erp_shipments').update(patch).eq('id', id)
     await get().loadLogistics()
   },
