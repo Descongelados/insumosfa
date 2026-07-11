@@ -63,6 +63,11 @@ export function PurchasesPage() {
   const [delOC, setDelOC] = useState<OrdenCompra | null>(null)
   const [form, setForm] = useState<OCForm>(BLANK_FORM)
 
+  // ── modal de embarque ────────────────────────────────────────────────────
+  // OC seleccionada para crear embarque, y la cantidad a despachar
+  const [embarqueOC, setEmbarqueOC] = useState<OrdenCompra | null>(null)
+  const [embarqueKg, setEmbarqueKg] = useState<number>(0)
+
   const canDelete  = user ? hasRole(user, 'director', 'compras', 'administracion') : false
   const canEdit    = user ? hasRole(user, 'director', 'compras', 'administracion') : false
   const isDirector = user ? hasRole(user, 'director') : false
@@ -73,7 +78,7 @@ export function PurchasesPage() {
     return [o.folio, sup?.razonSocial ?? ''].join(' ').toLowerCase().includes(q.toLowerCase())
   })
 
-  // ── item helpers ────────────────────────────────────────────────────────────
+  // ── item helpers ─────────────────────────────────────────────────────────
   function addItem() {
     setForm(f => ({ ...f, items: [...f.items, { detalleId: `ocd${Date.now()}`, productId: '', cantidad: 1, precioUnitario: 0 }] }))
   }
@@ -87,7 +92,7 @@ export function PurchasesPage() {
   }
   function removeItem(idx: number) { setForm(f => ({ ...f, items: f.items.filter((_, i) => i !== idx) })) }
 
-  // ── totales ─────────────────────────────────────────────────────────────────
+  // ── totales ──────────────────────────────────────────────────────────────
   function calcTotals(items: OrdenCompraItem[], ivaPct: number) {
     const subtotal = items.reduce((a, it) => a + it.cantidad * it.precioUnitario, 0)
     const iva      = subtotal * ivaPct / 100
@@ -95,7 +100,7 @@ export function PurchasesPage() {
     return { subtotal, iva, total }
   }
 
-  // ── open modals ─────────────────────────────────────────────────────────────
+  // ── open modals ──────────────────────────────────────────────────────────
   function openNew() {
     setForm({ ...BLANK_FORM, supplierId: suppliers[0]?.supplierId ?? '' })
     setModal('new')
@@ -113,7 +118,14 @@ export function PurchasesPage() {
     setModal('edit')
   }
 
-  // ── save handlers ───────────────────────────────────────────────────────────
+  /** Abre el modal de confirmación de embarque con la cantidad total precargada */
+  function openEmbarqueModal(oc: OrdenCompra) {
+    const totalKg = oc.items.reduce((a, it) => a + it.cantidad, 0)
+    setEmbarqueOC(oc)
+    setEmbarqueKg(totalKg)
+  }
+
+  // ── save handlers ─────────────────────────────────────────────────────────
   async function handleSave() {
     if (form.items.length === 0) { toast.error('Agrega al menos un producto a la OC.'); return }
     const { total } = calcTotals(form.items, form.ivaPct)
@@ -147,21 +159,39 @@ export function PurchasesPage() {
     setSelOC(null)
   }
 
-  async function handleEnviarCxPLogistica(oc: OrdenCompra) {
-    const totalKg = oc.items.reduce((a, it) => a + it.cantidad, 0)
+  /** Confirmar embarque desde el modal: crea el embarque con la cantidad elegida */
+  async function handleConfirmarEmbarque() {
+    if (!embarqueOC) return
+    const totalKg = embarqueOC.items.reduce((a, it) => a + it.cantidad, 0)
+    if (embarqueKg <= 0) { toast.error('La cantidad a embarcar debe ser mayor a cero.'); return }
+    if (embarqueKg > totalKg) { toast.error(`La cantidad no puede superar el total de la OC (${totalKg} kg).`); return }
+
+    const esParcial = embarqueKg < totalKg
+    const notasEmbarque = esParcial
+      ? `Embarque parcial: ${embarqueKg} de ${totalKg} kg`
+      : ''
+
     await addEmbarque({
       pedidoId: undefined,
-      ordenesIds: [{ ordenCompraId: oc.ordenCompraId, folio: oc.folio, kgEmbarcados: totalKg }],
+      ordenesIds: [{ ordenCompraId: embarqueOC.ordenCompraId, folio: embarqueOC.folio, kgEmbarcados: embarqueKg }],
       origen: '',
       destino: '',
       transportistaId: '',
-      fechaProgramada: oc.fechaEntregaEsperada ?? '',
+      fechaProgramada: embarqueOC.fechaEntregaEsperada ?? '',
       costoFlete: 0,
       estatus: 'solicitado',
-      notas: '',
+      notas: notasEmbarque,
+      // kg_original = totalKg siempre, sin importar cuánto se embarca ahora
+      kgOriginal: totalKg,
     })
-    await updateOrdenCompra(oc.ordenCompraId, { estatus: 'enviarPago' })
-    toast.success(`OC ${oc.folio} → Embarque creado en Logística y OC disponible en CxP para pago.`)
+    await updateOrdenCompra(embarqueOC.ordenCompraId, { estatus: 'enviarPago' })
+
+    const msg = esParcial
+      ? `OC ${embarqueOC.folio} — Embarque parcial creado (${embarqueKg} de ${totalKg} kg). OC disponible en CxP.`
+      : `OC ${embarqueOC.folio} — Embarque creado en Logística y OC disponible en CxP para pago.`
+    toast.success(msg)
+
+    setEmbarqueOC(null)
     setModal(null)
     setSelOC(null)
   }
@@ -171,7 +201,7 @@ export function PurchasesPage() {
     setModal(null); setDelOC(null)
   }
 
-  // ── form items UI ────────────────────────────────────────────────────────────
+  // ── form items UI ─────────────────────────────────────────────────────────
   function renderItems() {
     const { subtotal, iva, total } = calcTotals(form.items, form.ivaPct)
     return (
@@ -186,7 +216,7 @@ export function PurchasesPage() {
               {idx === 0 && <label className="label">Producto</label>}
               <select className="select" value={it.productId} onChange={(e) => updateItem(idx, 'productId', e.target.value)}>
                 <option value="">Seleccionar...</option>
-                {products.filter(p => p.activo).map((p) => <option key={p.productId} value={p.productId}>{p.sku} — {p.descripcion}</option>)}
+                {products.filter(p => p.activo).map((p) => <option key={p.productId} value={p.productId}>{p.sku} - {p.descripcion}</option>)}
               </select>
             </div>
             <div className="col-span-2">
@@ -219,7 +249,7 @@ export function PurchasesPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title flex items-center gap-2"><ClipboardList size={24} /> Compras</h1>
-          <p className="page-subtitle">Órdenes de Compra y Solicitudes</p>
+          <p className="page-subtitle">Ordenes de Compra y Solicitudes</p>
         </div>
         <button className="btn-primary" onClick={openNew}>
           <Plus size={16} /> Nueva OC
@@ -228,7 +258,7 @@ export function PurchasesPage() {
 
       <div className="flex gap-2 mb-2">
         <button className={`btn ${tab === 'oc' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('oc')}>
-          Órdenes de Compra ({filteredOC.length})
+          Ordenes de Compra ({filteredOC.length})
         </button>
         <button className={`btn ${tab === 'sol' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('sol')}>
           Solicitudes ({solicitudes.length})
@@ -261,10 +291,10 @@ export function PurchasesPage() {
                     )}
                     {o.estatus === 'confirmada' && (
                       <>
-                        <button className="btn btn-success btn-sm" onClick={() => handleEnviarCxP(o)} title="Solo CxP — sin logística">
+                        <button className="btn btn-success btn-sm" onClick={() => handleEnviarCxP(o)} title="Solo CxP - sin logística">
                           <CreditCard size={13} /> CxP
                         </button>
-                        <button className="btn btn-primary btn-sm" onClick={() => { void handleEnviarCxPLogistica(o) }} title="CxP + crear embarque en Logística">
+                        <button className="btn btn-primary btn-sm" onClick={() => openEmbarqueModal(o)} title="CxP + crear embarque en Logística">
                           <Truck size={13} /> CxP & Logística
                         </button>
                       </>
@@ -308,7 +338,7 @@ export function PurchasesPage() {
               { key: 'solicitante', header: 'Solicitante' },
               { key: 'producto', header: 'Producto', render: (s) => {
                 const p = products.find(pr => pr.productId === s.productId)
-                return `${p?.sku ?? ''} — ${p?.descripcion ?? '-'}`
+                return `${p?.sku ?? ''} - ${p?.descripcion ?? '-'}`
               }},
               { key: 'cantidad', header: 'Cantidad' },
               { key: 'prioridad', header: 'Prioridad', render: (s) => <StatusBadge status={s.prioridad} /> },
@@ -335,6 +365,88 @@ export function PurchasesPage() {
           />
         )}
       </div>
+
+      {/* ── MODAL CONFIRMAR EMBARQUE ──────────────────────────────────────── */}
+      {embarqueOC && (() => {
+        const totalKg  = embarqueOC.items.reduce((a, it) => a + it.cantidad, 0)
+        const esParcial = embarqueKg > 0 && embarqueKg < totalKg
+        return (
+          <Modal
+            title={`Crear embarque — ${embarqueOC.folio}`}
+            onClose={() => setEmbarqueOC(null)}
+            footer={
+              <div className="flex gap-2 justify-end">
+                <button className="btn-secondary" onClick={() => setEmbarqueOC(null)}>Cancelar</button>
+                <button className="btn-primary" onClick={() => void handleConfirmarEmbarque()}>
+                  <Truck size={14} /> Confirmar embarque
+                </button>
+              </div>
+            }
+          >
+            <div className="space-y-4 text-sm">
+              {/* Resumen de la OC */}
+              <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg space-y-1">
+                <div className="text-xs text-gray-500 uppercase font-semibold tracking-wide mb-2">Resumen de la OC</div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Proveedor</span>
+                  <span className="font-medium text-gray-900">{suppliers.find(s => s.supplierId === embarqueOC.supplierId)?.razonSocial ?? '-'}</span>
+                </div>
+                {embarqueOC.items.map((it) => {
+                  const p = products.find(pr => pr.productId === it.productId)
+                  return (
+                    <div key={it.detalleId} className="flex justify-between text-xs text-gray-600">
+                      <span>{p?.sku} — {p?.descripcion}</span>
+                      <span className="font-medium text-gray-800">{it.cantidad} {p?.unidadMedida ?? 'kg'}</span>
+                    </div>
+                  )
+                })}
+                <div className="flex justify-between border-t border-gray-200 pt-1 mt-1 font-semibold">
+                  <span className="text-gray-700">Total a embarcar</span>
+                  <span className="text-gray-900">{totalKg} kg</span>
+                </div>
+              </div>
+
+              {/* Campo: cantidad a despachar */}
+              <div className="form-group">
+                <label className="label">
+                  Cantidad a transportar en este embarque (kg)
+                  <span className="ml-1 font-normal text-gray-500">— máx. {totalKg} kg</span>
+                </label>
+                <input
+                  type="number"
+                  className="input"
+                  min={1}
+                  max={totalKg}
+                  value={embarqueKg}
+                  onChange={e => setEmbarqueKg(Number(e.target.value))}
+                />
+              </div>
+
+              {/* Leyenda de embarque parcial */}
+              {esParcial && (
+                <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-xs">
+                  <Truck size={14} className="flex-shrink-0 mt-0.5 text-amber-500" />
+                  <div>
+                    <span className="font-semibold">Embarque parcial:</span> se despacharán{' '}
+                    <strong>{embarqueKg} kg</strong> de <strong>{totalKg} kg</strong> totales.
+                    El embarque quedará marcado como parcial y se creará automáticamente un segundo
+                    embarque con los <strong>{totalKg - embarqueKg} kg</strong> restantes al pasar a
+                    estado <em>Recolectado</em> en Logística.
+                  </div>
+                </div>
+              )}
+
+              {/* Confirmación total */}
+              {!esParcial && embarqueKg === totalKg && (
+                <div className="flex items-start gap-2 p-3 bg-green-50 border border-green-200 rounded-lg text-green-800 text-xs">
+                  <Truck size={14} className="flex-shrink-0 mt-0.5 text-green-500" />
+                  <span>Se despachará el <strong>total de {totalKg} kg</strong> en un solo embarque.</span>
+                </div>
+              )}
+            </div>
+          </Modal>
+        )
+      })()}
 
       {/* Nueva OC */}
       {modal === 'new' && (
@@ -404,7 +516,7 @@ export function PurchasesPage() {
 
       {/* Ver OC */}
       {modal === 'view' && selOC && (() => {
-        const ivaPct  = selOC.ivaPct ?? 16
+        const ivaPct   = selOC.ivaPct ?? 16
         const subtotal = selOC.items.reduce((a, it) => a + it.cantidad * it.precioUnitario, 0)
         const iva      = subtotal * ivaPct / 100
         const total    = subtotal + iva
@@ -418,7 +530,7 @@ export function PurchasesPage() {
                     <button className="btn-success" onClick={() => handleEnviarCxP(selOC)}>
                       <CreditCard size={15} /> Enviar a CxP
                     </button>
-                    <button className="btn-primary" onClick={() => { void handleEnviarCxPLogistica(selOC) }}>
+                    <button className="btn-primary" onClick={() => { setModal(null); openEmbarqueModal(selOC) }}>
                       <Truck size={15} /> CxP & Logística
                     </button>
                   </>
@@ -482,7 +594,7 @@ export function PurchasesPage() {
             <p>¿Eliminar la OC <strong>{delOC.folio}</strong>? Esta acción no se puede deshacer.</p>
             {delOC.estatus === 'cerrada' && (
               <p className="p-2 bg-amber-50 border border-amber-200 rounded text-amber-800 text-xs font-medium">
-                ⚠️ Esta OC está <strong>cerrada</strong>. Solo el director del sistema puede eliminarla.
+                ⚠ Esta OC está <strong>cerrada</strong>. Solo el director del sistema puede eliminarla.
               </p>
             )}
           </div>
