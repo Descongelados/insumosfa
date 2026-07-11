@@ -131,7 +131,7 @@ export function LogisticsPage() {
     const ocIds = Object.keys(selOCs)
     if (ocIds.length === 0) { toast.error('Selecciona al menos una Orden de Compra.'); return }
 
-    // Construir refs de OCs y determinar si alguna es parcial
+    // Construir refs de OCs
     const ordenesRefs: EmbarqueOCRef[] = ocIds.map(id => {
       const oc = ocsLogistica.find(o => o.ordenCompraId === id)!
       return { ordenCompraId: id, folio: oc.folio, kgEmbarcados: selOCs[id] }
@@ -149,12 +149,28 @@ export function LogisticsPage() {
       notas: formNotas,
     })
 
-    // Actualizar estatus de cada OC según KGs embarcados vs total
+    // Actualizar cada OC: si es parcial reducir items al restante
     for (const ref of ordenesRefs) {
       const oc = ocsLogistica.find(o => o.ordenCompraId === ref.ordenCompraId)!
       const totalKg = ocTotalKg(oc)
-      const nuevoEstatus = ref.kgEmbarcados >= totalKg ? 'cerrada' : 'parcialLogistica'
-      await updateOrdenCompra(ref.ordenCompraId, { estatus: nuevoEstatus })
+
+      if (ref.kgEmbarcados >= totalKg) {
+        // Entrega completa → cerrar la OC
+        await updateOrdenCompra(ref.ordenCompraId, { estatus: 'cerrada' })
+      } else {
+        // Entrega parcial → reducir la cantidad de cada item proporcionalmente
+        const ratio = (totalKg - ref.kgEmbarcados) / totalKg
+        const itemsRestantes = oc.items.map(it => ({
+          ...it,
+          cantidad: Math.round(it.cantidad * ratio * 100) / 100,
+        }))
+        const montoRestante = itemsRestantes.reduce((a, it) => a + it.cantidad * it.precioUnitario, 0) * (1 + (oc.ivaPct ?? 16) / 100)
+        await updateOrdenCompra(ref.ordenCompraId, {
+          estatus: 'parcialLogistica',
+          items: itemsRestantes,
+          monto: Math.round(montoRestante * 100) / 100,
+        })
+      }
     }
 
     toast.success(`Embarque creado con ${ordenesRefs.length} OC(s).`)

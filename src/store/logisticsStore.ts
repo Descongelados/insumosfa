@@ -80,7 +80,7 @@ export const useLogisticsStore = create<LogisticsState>()((set, get) => ({
     const lastNum = last?.folio ? parseInt(last.folio.replace('EMB-', ''), 10) : 0
     const folio = `EMB-${String((isNaN(lastNum) ? 0 : lastNum) + 1).padStart(4, '0')}`
 
-    await supabase.from('erp_shipments').insert({
+    const { error } = await supabase.from('erp_shipments').insert({
       folio,
       pedido_id: data.pedidoId ?? null,
       ordenes_ids: data.ordenesIds ?? [],
@@ -93,6 +93,7 @@ export const useLogisticsStore = create<LogisticsState>()((set, get) => ({
       estatus: data.estatus,
       notas: data.notas ?? '',
     })
+    if (error) console.error('addEmbarque error:', error.message, error.details)
     await get().loadLogistics()
   },
 
