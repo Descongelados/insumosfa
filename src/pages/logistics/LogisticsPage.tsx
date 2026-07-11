@@ -10,20 +10,17 @@ import { SearchBar } from '../../components/ui/SearchBar'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { Modal } from '../../components/ui/Modal'
 import { Currency } from '../../components/ui/Currency'
-import type { Embarque, EmbarqueEstatus, Transportista } from '../../types'
-import { Truck, Plus, CreditCard as Edit2, Trash2, CircleAlert as AlertCircle, ToggleLeft, ToggleRight, CheckCircle, Send } from 'lucide-react'
+import type { Embarque, EmbarqueEstatus, EmbarqueOCRef, Transportista } from '../../types'
+import { Truck, Plus, CreditCard as Edit2, Trash2, CircleAlert as AlertCircle, ToggleLeft, ToggleRight, CheckCircle, Send, Save } from 'lucide-react'
 
 // ─── constantes ────────────────────────────────────────────────────────────
-// Estatus visibles en la tabla de embarques activos (cerrado va a CxP)
 const ESTADOS_ACTIVOS: EmbarqueEstatus[] = ['solicitado', 'programado', 'recolectado', 'enTransito', 'entregado']
-// Todos los estatus disponibles para cambiar
 const ESTADOS: EmbarqueEstatus[] = ['solicitado', 'programado', 'recolectado', 'enTransito', 'entregado', 'cerrado']
 
 const BLANK_TRANS: Omit<Transportista, 'transportistaId'> = {
   nombre: '', contacto: '', telefono: '', tarifaBase: 0, activo: true,
 }
 
-// Solo director y operaciones pueden gestionar transportistas
 const TRANS_MANAGE_ROLES = ['director', 'operaciones', 'almacen'] as const
 
 // ─── componente ────────────────────────────────────────────────────────────
@@ -59,8 +56,17 @@ export function LogisticsPage() {
   type EmbModal = 'view_emb' | null
   const [embModal, setEmbModal] = useState<EmbModal>(null)
   const [selEmb, setSelEmb] = useState<Embarque | null>(null)
-  // transportista editable en el modal
+
+  // campos editables comunes
   const [editTransId, setEditTransIdEmb] = useState<string>('')
+
+  // campos editables solo en estatus "solicitado"
+  const [editDestino, setEditDestino] = useState('')
+  const [editCantidad, setEditCantidad] = useState<number>(0)
+  const [editFechaProgramada, setEditFechaProgramada] = useState('')
+  const [editCostoFlete, setEditCostoFlete] = useState<number>(0)
+  const [editOrdenCompraId, setEditOrdenCompraId] = useState<string>('')
+
   // confirmación "enviar a CxP"
   const [confirmCxP, setConfirmCxP] = useState(false)
 
@@ -91,6 +97,12 @@ export function LogisticsPage() {
   function openViewEmb(e: Embarque) {
     setSelEmb(e)
     setEditTransIdEmb(e.transportistaId ?? '')
+    setEditDestino(e.destino ?? '')
+    setEditCantidad(e.ordenesIds?.[0]?.kgEmbarcados ?? 0)
+    setEditFechaProgramada(e.fechaProgramada ?? '')
+    setEditCostoFlete(e.costoFlete ?? 0)
+    // Precarga la primera OC vinculada (si existe)
+    setEditOrdenCompraId(e.ordenesIds?.[0]?.ordenCompraId ?? '')
     setConfirmCxP(false)
     setEmbModal('view_emb')
   }
@@ -101,6 +113,50 @@ export function LogisticsPage() {
     await updateEmbarque(selEmb.embarqueId, { transportistaId: editTransId })
     setSelEmb(prev => prev ? { ...prev, transportistaId: editTransId } : prev)
     toast.success('Transportista actualizado.')
+  }
+
+  // ── guardar campos de embarque solicitado ────────────────────────────────
+  async function handleGuardarSolicitado() {
+    if (!selEmb) return
+
+    // Construir la lista de OC refs con la OC seleccionada
+    let nuevasOCs: EmbarqueOCRef[] = selEmb.ordenesIds ?? []
+    if (editOrdenCompraId) {
+      const ocSel = ordenesCompra.find(o => o.ordenCompraId === editOrdenCompraId)
+      if (ocSel) {
+        // Reemplaza / actualiza la primera OC con el folio y cantidad editada
+        const existeIdx = nuevasOCs.findIndex(r => r.ordenCompraId === editOrdenCompraId)
+        const ref: EmbarqueOCRef = {
+          ordenCompraId: ocSel.ordenCompraId,
+          folio: ocSel.folio,
+          kgEmbarcados: editCantidad,
+        }
+        if (existeIdx >= 0) {
+          nuevasOCs = nuevasOCs.map((r, i) => i === existeIdx ? ref : r)
+        } else {
+          // Si cambiaron de OC, reemplaza la primera
+          nuevasOCs = [ref, ...nuevasOCs.slice(1)]
+        }
+      }
+    } else {
+      // Sin OC — actualiza solo el kgEmbarcados de la primera si existe
+      if (nuevasOCs.length > 0) {
+        nuevasOCs = [{ ...nuevasOCs[0], kgEmbarcados: editCantidad }, ...nuevasOCs.slice(1)]
+      }
+    }
+
+    await updateEmbarque(selEmb.embarqueId, {
+      destino: editDestino,
+      fechaProgramada: editFechaProgramada,
+      costoFlete: editCostoFlete,
+      ordenesIds: nuevasOCs,
+    })
+
+    setSelEmb(prev => prev
+      ? { ...prev, destino: editDestino, fechaProgramada: editFechaProgramada, costoFlete: editCostoFlete, ordenesIds: nuevasOCs }
+      : prev
+    )
+    toast.success('Datos del embarque actualizados.')
   }
 
   // ── cambiar estatus del embarque ──────────────────────────────────────────
@@ -114,9 +170,7 @@ export function LogisticsPage() {
   // ── enviar a CxP ─────────────────────────────────────────────────────────
   async function handleEnviarCxP() {
     if (!selEmb) return
-    // marcar embarque como cerrado
     await updateEmbarque(selEmb.embarqueId, { estatus: 'cerrado' })
-    // mover cada OC referenciada a estatus enviarPago
     const ocs = selEmb.ordenesIds ?? []
     for (const ref of ocs) {
       const oc = ordenesCompra.find(o => o.ordenCompraId === ref.ordenCompraId)
@@ -125,6 +179,20 @@ export function LogisticsPage() {
     toast.success(`Embarque ${selEmb.folio} cerrado → OC(s) enviadas a CxP.`)
     setEmbModal(null)
     setSelEmb(null)
+  }
+
+  // ── detectar si cambió algún campo de solicitado ─────────────────────────
+  function solicitadoCambiado(): boolean {
+    if (!selEmb) return false
+    const ocActual = selEmb.ordenesIds?.[0]?.ordenCompraId ?? ''
+    const cantActual = selEmb.ordenesIds?.[0]?.kgEmbarcados ?? 0
+    return (
+      editDestino !== (selEmb.destino ?? '') ||
+      editFechaProgramada !== (selEmb.fechaProgramada ?? '') ||
+      editCostoFlete !== (selEmb.costoFlete ?? 0) ||
+      editOrdenCompraId !== ocActual ||
+      editCantidad !== cantActual
+    )
   }
 
   // ── handlers transportista ───────────────────────────────────────────────
@@ -312,6 +380,12 @@ export function LogisticsPage() {
               <button className="btn-secondary" onClick={() => { setEmbModal(null); setSelEmb(null); setConfirmCxP(false) }}>
                 Cerrar
               </button>
+              {/* Guardar campos de embarque solicitado */}
+              {selEmb.estatus === 'solicitado' && solicitadoCambiado() && (
+                <button className="btn btn-warning" onClick={() => void handleGuardarSolicitado()}>
+                  <Save size={13} /> Guardar cambios
+                </button>
+              )}
               {/* Botón guardar transportista solo si cambió */}
               {editTransId !== (selEmb.transportistaId ?? '') && (
                 <button className="btn btn-warning" onClick={handleSaveTransportista}>
@@ -338,35 +412,116 @@ export function LogisticsPage() {
           size="lg"
         >
           <div className="space-y-5">
-            {/* Info del embarque */}
+            {/* Info estática del embarque */}
             <div className="grid grid-cols-2 gap-3 text-sm p-4 bg-gray-50 rounded-xl border border-gray-200">
               <div>
                 <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">Origen</span>
                 <span className="text-gray-800">{selEmb.origen}</span>
               </div>
               <div>
-                <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">Destino</span>
-                <span className="text-gray-800">{selEmb.destino}</span>
-              </div>
-              <div>
-                <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">Flete</span>
-                <span className="text-gray-800"><Currency value={selEmb.costoFlete} /></span>
-              </div>
-              <div>
-                <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">F. Programada</span>
-                <span className="text-gray-800">{selEmb.fechaProgramada || '—'}</span>
-              </div>
-              <div>
                 <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">Estatus</span>
                 <StatusBadge status={selEmb.estatus} />
               </div>
-              {(selEmb.ordenesIds?.length ?? 0) > 0 && (
-                <div>
-                  <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">OC(s)</span>
-                  <span className="text-xs font-mono text-blue-700">{selEmb.ordenesIds!.map(r => r.folio).join(', ')}</span>
-                </div>
+              {selEmb.estatus !== 'solicitado' && (
+                <>
+                  <div>
+                    <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">Destino</span>
+                    <span className="text-gray-800">{selEmb.destino}</span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">Flete</span>
+                    <span className="text-gray-800"><Currency value={selEmb.costoFlete} /></span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">F. Programada</span>
+                    <span className="text-gray-800">{selEmb.fechaProgramada || '—'}</span>
+                  </div>
+                  {(selEmb.ordenesIds?.length ?? 0) > 0 && (
+                    <div>
+                      <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">OC(s)</span>
+                      <span className="text-xs font-mono text-blue-700">{selEmb.ordenesIds!.map(r => r.folio).join(', ')}</span>
+                    </div>
+                  )}
+                </>
               )}
             </div>
+
+            {/* ── Edición de campos cuando estatus = "solicitado" ─────────── */}
+            {selEmb.estatus === 'solicitado' && (
+              <div className="space-y-4 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">
+                  Datos del embarque — editable en estado Solicitado
+                </p>
+
+                {/* OC de compras */}
+                <div className="form-group">
+                  <label className="label">Orden de Compra (OC)</label>
+                  <select
+                    className="select"
+                    value={editOrdenCompraId}
+                    onChange={e => setEditOrdenCompraId(e.target.value)}
+                  >
+                    <option value="">— Sin OC vinculada —</option>
+                    {ordenesCompra.map(oc => (
+                      <option key={oc.ordenCompraId} value={oc.ordenCompraId}>
+                        {oc.folio}
+                        {oc.estatus ? ` · ${oc.estatus}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Destino */}
+                <div className="form-group">
+                  <label className="label">Destino</label>
+                  <input
+                    className="input"
+                    value={editDestino}
+                    onChange={e => setEditDestino(e.target.value)}
+                    placeholder="Dirección o ciudad de destino"
+                  />
+                </div>
+
+                {/* Cantidad a transportar y fecha programada en grid */}
+                <div className="form-grid">
+                  <div className="form-group">
+                    <label className="label">Cantidad a transportar (kg)</label>
+                    <input
+                      type="number"
+                      className="input"
+                      value={editCantidad}
+                      min={0}
+                      onChange={e => setEditCantidad(Number(e.target.value))}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="label">Fecha programada</label>
+                    <input
+                      type="date"
+                      className="input"
+                      value={editFechaProgramada}
+                      onChange={e => setEditFechaProgramada(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                {/* Costo del flete */}
+                <div className="form-group">
+                  <label className="label">Costo del flete (MXN)</label>
+                  <input
+                    type="number"
+                    className="input"
+                    value={editCostoFlete}
+                    min={0}
+                    onChange={e => setEditCostoFlete(Number(e.target.value))}
+                  />
+                </div>
+
+                {solicitadoCambiado() && (
+                  <p className="text-xs text-blue-600">Cambios pendientes — presiona "Guardar cambios" para confirmar.</p>
+                )}
+              </div>
+            )}
 
             {/* Editar transportista */}
             <div className="space-y-1">
