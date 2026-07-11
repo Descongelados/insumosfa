@@ -115,6 +115,11 @@ export function FinancePage() {
   const gastosMes = gastos.filter(g => g.fecha.startsWith(mesActual))
   const totalGastosMes = gastosMes.reduce((a, g) => a + g.monto, 0)
 
+  // pagos a proveedores del mes actual (para desglose en CxP)
+  const { pagosProveedores } = useFinanceStore()
+  const pagosMes = pagosProveedores.filter(p => p.fecha.startsWith(mesActual))
+  const totalPagosMes = pagosMes.reduce((a, p) => a + p.monto, 0)
+
   function getOrder(pedidoId?: string): SalesOrder | undefined {
     if (!pedidoId) return undefined
     return orders.find(o => o.pedidoId === pedidoId)
@@ -150,11 +155,25 @@ export function FinancePage() {
     if (fv.saldoPendiente - pagoForm.monto <= 0) setCxcTab('pagadas')
   }
 
-  function handlePagoProveedor() {
+  async function handlePagoProveedor() {
     const fp = facturasProveedor.find(f => f.facturaProvId === selFp)
     if (!fp) return
     if (pagoForm.monto <= 0) { toast.error('El monto debe ser mayor a cero.'); return }
-    addPagoProveedor({ facturaProvId: selFp, supplierId: fp.supplierId, fecha: today(), ...pagoForm })
+    await addPagoProveedor({ facturaProvId: selFp, supplierId: fp.supplierId, fecha: today(), ...pagoForm })
+    // Si el pago liquida la factura, registrar automáticamente como gasto del mes
+    const saldoRestante = Math.max(0, fp.saldoPendiente - pagoForm.monto)
+    if (saldoRestante === 0) {
+      const prov = suppliers.find(s => s.supplierId === fp.supplierId)
+      await addGasto({
+        fecha: today(),
+        categoria: 'Suministros',
+        descripcion: `Pago OC — ${prov?.razonSocial ?? fp.folio} (${fp.folio})`,
+        monto: pagoForm.monto,
+        formaPago: pagoForm.formaPago,
+        referencia: pagoForm.referencia,
+        notas: `Generado automáticamente al liquidar ${fp.folio}`,
+      })
+    }
     toast.success(`Pago a proveedor registrado: ${MXN(pagoForm.monto)}.`)
     setModal(null)
     setPagoForm({ monto: 0, formaPago: 'Transferencia', referencia: '' })
@@ -543,6 +562,62 @@ export function FinancePage() {
             />
           )}
           </div>
+
+          {/* ── Desglose de pagos del mes ──────────────────────────────── */}
+          {pagosMes.length > 0 && (() => {
+            const porForma = ['Transferencia', 'Cheque', 'Efectivo', 'Tarjeta'].map(f => ({
+              forma: f,
+              total: pagosMes.filter(p => p.formaPago === f).reduce((a, p) => a + p.monto, 0),
+            })).filter(x => x.total > 0)
+            const formaBadge: Record<string, string> = {
+              Transferencia: 'bg-blue-50 text-blue-700',
+              Cheque:        'bg-purple-50 text-purple-700',
+              Efectivo:      'bg-green-50 text-green-700',
+              Tarjeta:       'bg-orange-50 text-orange-700',
+            }
+            return (
+              <div className="card space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-semibold text-gray-900">Pagos realizados este mes</h3>
+                    <p className="text-xs text-gray-500 mt-0.5">{mesActual} · {pagosMes.length} pago{pagosMes.length !== 1 ? 's' : ''}</p>
+                  </div>
+                  <span className="text-base font-bold text-green-700"><Currency value={totalPagosMes} /></span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {porForma.map(({ forma, total }) => (
+                    <div key={forma} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${formaBadge[forma] ?? 'bg-gray-100 text-gray-600'}`}>
+                      <span>{forma}</span>
+                      <span className="opacity-75"><Currency value={total} /></span>
+                    </div>
+                  ))}
+                </div>
+                <div className="border-t border-gray-100 pt-2 space-y-1">
+                  {pagosMes.map(p => {
+                    const fp = facturasProveedor.find(f => f.facturaProvId === p.facturaProvId)
+                    const prov = fp ? suppliers.find(s => s.supplierId === fp.supplierId) : undefined
+                    return (
+                      <div key={p.pagoId} className="flex items-center justify-between text-sm py-1.5 border-b border-gray-50 last:border-0">
+                        <div className="min-w-0">
+                          <span className="font-mono font-semibold text-blue-700 text-xs mr-2">{fp?.folio ?? '—'}</span>
+                          <span className="text-gray-700">{prov?.razonSocial ?? '—'}</span>
+                          {p.referencia && <span className="text-xs text-gray-400 ml-2">· {p.referencia}</span>}
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${formaBadge[p.formaPago] ?? 'bg-gray-100 text-gray-600'}`}>
+                            {p.formaPago}
+                          </span>
+                          <span className="font-semibold text-gray-900"><Currency value={p.monto} /></span>
+                          <span className="text-xs text-gray-400">{p.fecha}</span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })()}
+
         </div>
       )}
 
