@@ -86,6 +86,7 @@ export function LogisticsPage() {
 
   // ── filtros ──────────────────────────────────────────────────────────────
   const filteredEmb = embarques.filter(e =>
+    e.estatus !== 'cerrado' &&
     [e.folio, e.destino].join(' ').toLowerCase().includes(q.toLowerCase())
   )
   const filteredTrans = transportistas.filter(t =>
@@ -677,12 +678,20 @@ export function LogisticsPage() {
             <div>
               <p className="label mb-2">Cambiar estatus</p>
               <div className="flex flex-wrap gap-2">
-                {ESTADOS.map(e => (
+                {ESTADOS.filter(e => e !== 'cerrado').map(e => (
                   <button key={e} className={`btn btn-sm ${selEmb.estatus === e ? 'btn-primary' : 'btn-secondary'}`}
                     onClick={() => { void handleCambiarEstatusEmb(selEmb, e); setEmbModal(null); setSelEmb(null) }}>
                     <StatusBadge status={e} />
                   </button>
                 ))}
+                {selEmb.estatus === 'entregado' && (
+                  <button
+                    className="btn btn-sm btn-primary"
+                    onClick={() => { void handleCambiarEstatusEmb(selEmb, 'cerrado'); setEmbModal(null); setSelEmb(null) }}
+                  >
+                    Enviar a pago
+                  </button>
+                )}
               </div>
             </div>
           </div>
