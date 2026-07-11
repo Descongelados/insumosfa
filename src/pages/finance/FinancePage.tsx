@@ -371,10 +371,12 @@ export function FinancePage() {
       {/* ── TAB: Pagos del Mes ──────────────────────────────────────────────── */}
       {tab === 'pagos' && (
         <div className="space-y-4">
+
+          {/* ── Pagos a proveedores ─── */}
           {pagosMes.length === 0 ? (
-            <div className="card text-center py-14 text-gray-400">
-              <DollarSign size={36} className="mx-auto mb-3 opacity-30" />
-              <p className="text-sm font-medium">No hay pagos registrados en {mesActual}.</p>
+            <div className="card text-center py-10 text-gray-400">
+              <DollarSign size={32} className="mx-auto mb-3 opacity-30" />
+              <p className="text-sm font-medium">No hay pagos a proveedores en {mesActual}.</p>
             </div>
           ) : (() => {
             const porForma = FORMAS_PAGO.map(f => ({
@@ -383,15 +385,13 @@ export function FinancePage() {
             })).filter(x => x.total > 0)
             return (
               <div className="card space-y-4">
-                {/* Encabezado resumen */}
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div>
-                    <h3 className="font-semibold text-gray-900">Pagos realizados — {mesActual}</h3>
-                    <p className="text-xs text-gray-500 mt-0.5">{pagosMes.length} pago{pagosMes.length !== 1 ? 's' : ''} a proveedores</p>
+                    <h3 className="font-semibold text-gray-900">Pagos a Proveedores — {mesActual}</h3>
+                    <p className="text-xs text-gray-500 mt-0.5">{pagosMes.length} pago{pagosMes.length !== 1 ? 's' : ''}</p>
                   </div>
                   <span className="text-xl font-bold text-green-700"><Currency value={totalPagosMes} /></span>
                 </div>
-                {/* Pills por forma de pago */}
                 <div className="flex flex-wrap gap-2">
                   {porForma.map(({ forma, total }) => (
                     <div key={forma} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${formaBadge[forma] ?? 'bg-gray-100 text-gray-600'}`}>
@@ -400,7 +400,6 @@ export function FinancePage() {
                     </div>
                   ))}
                 </div>
-                {/* Detalle renglón a renglón */}
                 <div className="border border-gray-200 rounded-xl overflow-hidden">
                   <table className="w-full text-sm">
                     <thead className="bg-gray-50 border-b border-gray-200">
@@ -435,7 +434,7 @@ export function FinancePage() {
                     </tbody>
                     <tfoot className="bg-gray-50 border-t border-gray-200">
                       <tr>
-                        <td colSpan={5} className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase text-right">Total</td>
+                        <td colSpan={5} className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase text-right">Total proveedores</td>
                         <td className="px-4 py-2 text-right font-bold text-green-700"><Currency value={totalPagosMes} /></td>
                       </tr>
                     </tfoot>
@@ -444,6 +443,80 @@ export function FinancePage() {
               </div>
             )
           })()}
+
+          {/* ── Gastos capturados del mes ─── */}
+          {gastosMes.length === 0 ? (
+            <div className="card text-center py-10 text-gray-400">
+              <Receipt size={32} className="mx-auto mb-3 opacity-30" />
+              <p className="text-sm font-medium">No hay gastos registrados en {mesActual}.</p>
+            </div>
+          ) : (() => {
+            const porCatMes = CATEGORIAS_GASTO
+              .map(cat => ({ cat, total: gastosMes.filter(g => g.categoria === cat).reduce((a, g) => a + g.monto, 0) }))
+              .filter(x => x.total > 0)
+              .sort((a, b) => b.total - a.total)
+            return (
+              <div className="card space-y-4">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <h3 className="font-semibold text-gray-900">Gastos del Negocio — {mesActual}</h3>
+                    <p className="text-xs text-gray-500 mt-0.5">{gastosMes.length} registro{gastosMes.length !== 1 ? 's' : ''}</p>
+                  </div>
+                  <span className="text-xl font-bold text-rose-600"><Currency value={totalGastosMes} /></span>
+                </div>
+                {/* Pills por categoría */}
+                <div className="flex flex-wrap gap-2">
+                  {porCatMes.map(({ cat, total }) => (
+                    <div key={cat} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${catColor[cat]}`}>
+                      <span>{cat}</span>
+                      <span className="opacity-75"><Currency value={total} /></span>
+                    </div>
+                  ))}
+                </div>
+                <div className="border border-gray-200 rounded-xl overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 border-b border-gray-200">
+                      <tr>
+                        <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase">Fecha</th>
+                        <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase">Categoría</th>
+                        <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase">Descripción</th>
+                        <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase">Forma</th>
+                        <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase">Notas</th>
+                        <th className="text-right px-4 py-2 text-xs font-semibold text-gray-500 uppercase">Monto</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {gastosMes.map(g => (
+                        <tr key={g.gastoId} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
+                          <td className="px-4 py-3 text-gray-500 text-xs">{g.fecha}</td>
+                          <td className="px-4 py-3">
+                            <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${catColor[g.categoria]}`}>
+                              {g.categoria}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-gray-700 text-sm">{g.descripcion}</td>
+                          <td className="px-4 py-3">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${formaBadge[g.formaPago] ?? 'bg-gray-100 text-gray-600'}`}>
+                              {g.formaPago}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-gray-400 text-xs">{g.notas || '—'}</td>
+                          <td className="px-4 py-3 text-right font-semibold text-rose-600"><Currency value={g.monto} /></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="bg-gray-50 border-t border-gray-200">
+                      <tr>
+                        <td colSpan={5} className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase text-right">Total gastos</td>
+                        <td className="px-4 py-2 text-right font-bold text-rose-600"><Currency value={totalGastosMes} /></td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            )
+          })()}
+
         </div>
       )}
 
