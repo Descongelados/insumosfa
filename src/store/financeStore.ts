@@ -89,6 +89,7 @@ interface FinanceState {
   addPagoCliente: (p: Omit<PagoCliente, 'pagoId'>) => Promise<void>
   addFacturaProveedor: (f: Omit<FacturaProveedor, 'facturaProvId' | 'folio'>) => Promise<FacturaProveedor>
   addPagoProveedor: (p: Omit<PagoProveedor, 'pagoId'>) => Promise<void>
+  deleteFacturaProveedor: (id: string) => Promise<void>
   updateBanco: (id: string, data: Partial<Banco>) => Promise<void>
   addBanco: (b: Omit<Banco, 'bancoId'>) => Promise<void>
   deleteBanco: (id: string) => Promise<void>
@@ -190,6 +191,11 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
       .maybeSingle()
     await get().loadFinance()
     return row ? toFP(row as DbFP) : { ...data, facturaProvId: '', folio }
+  },
+
+  async deleteFacturaProveedor(id) {
+    await supabase.from('erp_invoices_supplier').delete().eq('id', id)
+    set(s => ({ facturasProveedor: s.facturasProveedor.filter(f => f.facturaProvId !== id) }))
   },
 
   async addPagoProveedor(data) {

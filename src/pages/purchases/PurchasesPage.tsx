@@ -150,6 +150,7 @@ export function PurchasesPage() {
   async function handleEnviarCxPLogistica(oc: OrdenCompra) {
     const totalKg = oc.items.reduce((a, it) => a + it.cantidad, 0)
     const supplier = suppliers.find(s => s.supplierId === oc.supplierId)
+    // Primero crear el embarque en Logística
     await addEmbarque({
       pedidoId: undefined,
       ordenesIds: [{ ordenCompraId: oc.ordenCompraId, folio: oc.folio, kgEmbarcados: totalKg }],
@@ -161,8 +162,9 @@ export function PurchasesPage() {
       estatus: 'solicitado',
       notas: '',
     })
-    await updateOrdenCompra(oc.ordenCompraId, { estatus: 'enviarLogistica' })
-    toast.success(`OC ${oc.folio} → Embarque creado en Logística y OC enviada a CxP.`)
+    // La OC original pasa a CxP para proceso de pago (igual que opción 1)
+    await updateOrdenCompra(oc.ordenCompraId, { estatus: 'enviarPago' })
+    toast.success(`OC ${oc.folio} → Embarque creado en Logística y OC disponible en CxP para pago.`)
     setModal(null)
     setSelOC(null)
   }

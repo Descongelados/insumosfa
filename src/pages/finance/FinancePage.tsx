@@ -13,7 +13,7 @@ import { Modal } from '../../components/ui/Modal'
 import { Currency } from '../../components/ui/Currency'
 import { toast } from '../../store/toastStore'
 import type { FacturaVenta, SalesOrder, Banco, GastoNegocio } from '../../types'
-import { DollarSign, CreditCard, Building, Eye, CircleCheck as CheckCircle, Clock, FileText, Plus, CreditCard as Edit2, Trash2, History, CirclePlus as PlusCircle, Receipt, ShoppingCart } from 'lucide-react'
+import { DollarSign, CreditCard, Building, Eye, CircleCheck as CheckCircle, Clock, FileText, Plus, CreditCard as Edit2, Trash2, History, CirclePlus as PlusCircle, Receipt, ShoppingCart, XCircle } from 'lucide-react'
 
 const MXN = (v: number) => v.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })
 const FORMAS_PAGO = ['Transferencia', 'Cheque', 'Efectivo', 'Tarjeta']
@@ -39,7 +39,7 @@ export function FinancePage() {
     facturasProveedor, bancos, gastos,
     loadFinance, subscribeRealtime: subFinance,
     addPagoCliente, addPagoProveedor,
-    addFacturaProveedor,
+    addFacturaProveedor, deleteFacturaProveedor,
     addBanco, updateBanco, deleteBanco,
     addGasto, updateGasto, deleteGasto,
   } = useFinanceStore()
@@ -62,8 +62,9 @@ export function FinancePage() {
     return () => { u1(); u2(); u3(); u4() }
   }, [])
 
-  const canManageBancos = me ? hasRole(me, 'director', 'administracion') : false
-  const canManageGastos = me ? hasRole(me, 'director', 'administracion') : false
+  const canManageBancos  = me ? hasRole(me, 'director', 'administracion') : false
+  const canManageGastos  = me ? hasRole(me, 'director', 'administracion') : false
+  const canCancelPagoCxP = me ? hasRole(me, 'director', 'administracion') : false
 
   const [tab, setTab] = useState<'cxc' | 'cxp' | 'bancos' | 'gastos'>('cxc')
   const [cxcTab, setCxcTab] = useState<'cobrar' | 'pagadas'>('cobrar')
@@ -74,10 +75,12 @@ export function FinancePage() {
     | 'recibo'
     | 'historial'
     | 'new_fp'
+    | 'cancel_oc_pago'
     | 'new_banco' | 'edit_banco' | 'del_banco'
     | 'new_gasto' | 'edit_gasto' | 'del_gasto'
     | null
   const [modal, setModal] = useState<ModalType>(null)
+  const [selCancelOC, setSelCancelOC] = useState<string | null>(null)
 
   const [selFv, setSelFv] = useState<string>('')
   const [selRecibo, setSelRecibo] = useState<FacturaVenta | null>(null)
@@ -462,6 +465,15 @@ export function FinancePage() {
                         </div>
                       </div>
                       <div className="flex gap-1 shrink-0">
+                        {canCancelPagoCxP && (
+                          <button
+                            className="btn btn-danger btn-sm"
+                            title="Cancelar — regresar OC a Compras"
+                            onClick={() => { setSelCancelOC(oc.ordenCompraId); setModal('cancel_oc_pago') }}
+                          >
+                            <XCircle size={13} /> Cancelar
+                          </button>
+                        )}
                         <button
                           className="btn btn-primary btn-sm"
                           onClick={async () => {
@@ -933,6 +945,39 @@ export function FinancePage() {
           </div>
         </Modal>
       )}
+
+
+      {/* ── MODAL: Cancelar OC de CxP ──────────────────────────────────────────── */}
+      {modal === 'cancel_oc_pago' && selCancelOC && (() => {
+        const oc = ocsPendientesPago.find(o => o.ordenCompraId === selCancelOC)
+        return oc ? (
+          <Modal
+            title="Cancelar proceso de pago"
+            onClose={() => { setModal(null); setSelCancelOC(null) }}
+            footer={
+              <>
+                <button className="btn-secondary" onClick={() => { setModal(null); setSelCancelOC(null) }}>No, mantener</button>
+                <button className="btn-danger" onClick={async () => {
+                  await updateOrdenCompra(oc.ordenCompraId, { estatus: 'confirmada' })
+                  toast.warning(`OC ${oc.folio} regresada a Compras con estatus confirmada.`)
+                  setModal(null)
+                  setSelCancelOC(null)
+                }}>
+                  <XCircle size={14} /> Sí, cancelar pago
+                </button>
+              </>
+            }
+          >
+            <div className="space-y-3 text-sm text-gray-700">
+              <p>¿Cancelar el proceso de pago de la OC <strong className="font-mono">{oc.folio}</strong>?</p>
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+                La orden regresará a Compras con estatus <strong>confirmada</strong> para ser procesada nuevamente.
+              </div>
+            </div>
+          </Modal>
+        ) : null
+      })()}
+
 
       {/* ΓöÇΓöÇ MODAL: Nueva Factura Proveedor ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */}
       {modal === 'new_fp' && (
