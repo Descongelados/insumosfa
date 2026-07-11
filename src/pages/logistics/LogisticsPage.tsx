@@ -92,7 +92,7 @@ export function LogisticsPage() {
   function handleSaveEmb() {
     if (!formEmb.transportistaId) { toast.error('Selecciona un transportista.'); return }
     if (!formEmb.destino.trim()) { toast.error('El destino es obligatorio.'); return }
-    addEmbarque({ ...formEmb, estatus: 'solicitado' })
+    addEmbarque({ ...formEmb, ordenesIds: [], estatus: 'solicitado' })
     toast.success('Embarque registrado.')
     setEmbModal(null)
     setFormEmb(BLANK_EMB)

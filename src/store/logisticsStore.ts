@@ -10,6 +10,7 @@ type DbShipment = {
   id: string; folio: string; pedido_id: string | null; origen: string
   destino: string; transportista_id: string; fecha_programada: string
   fecha_entrega: string | null; costo_flete: number; estatus: string; notas: string
+  ordenes_ids: unknown
 }
 
 function toCarrier(r: DbCarrier): Transportista {
@@ -21,6 +22,7 @@ function toCarrier(r: DbCarrier): Transportista {
 function toShipment(r: DbShipment): Embarque {
   return {
     embarqueId: r.id, folio: r.folio, pedidoId: r.pedido_id ?? undefined,
+    ordenesIds: (r.ordenes_ids as import('../types').EmbarqueOCRef[]) ?? [],
     origen: r.origen, destino: r.destino, transportistaId: r.transportista_id,
     fechaProgramada: r.fecha_programada, fechaEntrega: r.fecha_entrega ?? undefined,
     costoFlete: r.costo_flete, estatus: r.estatus as Embarque['estatus'], notas: r.notas,

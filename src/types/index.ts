@@ -175,7 +175,7 @@ export interface SalesOrder {
 
 // ─── Purchases ─────────────────────────────────────────────────────────────
 export type SolicitudEstatus = 'creada' | 'enRevision' | 'aprobada' | 'rechazada'
-export type OrdenCompraEstatus = 'borrador' | 'emitida' | 'confirmada' | 'recibida' | 'cerrada'
+export type OrdenCompraEstatus = 'borrador' | 'emitida' | 'confirmada' | 'enviarLogistica' | 'parcialLogistica' | 'enviarPago' | 'cerrada'
 
 export interface SolicitudCompra {
   solicitudId: string
@@ -202,6 +202,7 @@ export interface OrdenCompra {
   fecha: string
   fechaEntregaEsperada: string
   monto: number
+  ivaPct: 0 | 8 | 16
   estatus: OrdenCompraEstatus
   items: OrdenCompraItem[]
   notas: string
@@ -219,10 +220,17 @@ export interface Transportista {
   activo: boolean
 }
 
+export interface EmbarqueOCRef {
+  ordenCompraId: string
+  folio: string
+  kgEmbarcados: number
+}
+
 export interface Embarque {
   embarqueId: string
   folio: string
-  pedidoId?: string
+  pedidoId?: string        // legacy
+  ordenesIds: EmbarqueOCRef[]
   origen: string
   destino: string
   transportistaId: string
@@ -292,6 +300,18 @@ export interface Banco {
   saldo: number
   moneda: string
   activo: boolean
+}
+
+// ─── Gastos Negocio ────────────────────────────────────────────────────────
+export interface GastoNegocio {
+  gastoId: string
+  fecha: string
+  categoria: 'Renta' | 'Nomina' | 'Servicios' | 'Mantenimiento' | 'Publicidad' | 'Transporte' | 'Impuestos' | 'Prestamos' | 'Maquinaria' | 'Suministros' | 'Otros'
+  descripcion: string
+  monto: number
+  formaPago: string
+  referencia: string
+  notas: string
 }
 
 // ─── Audit ─────────────────────────────────────────────────────────────────

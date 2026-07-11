@@ -8,7 +8,7 @@ type DbSolicitud = {
 }
 type DbOrden = {
   id: string; folio: string; supplier_id: string; fecha: string
-  fecha_entrega_esperada: string; monto: number; estatus: string
+  fecha_entrega_esperada: string; monto: number; iva_pct: number; estatus: string
   items: unknown; notas: string
 }
 
@@ -24,7 +24,8 @@ function toOrden(r: DbOrden): OrdenCompra {
   return {
     ordenCompraId: r.id, folio: r.folio, supplierId: r.supplier_id,
     fecha: r.fecha, fechaEntregaEsperada: r.fecha_entrega_esperada,
-    monto: r.monto, estatus: r.estatus as OrdenCompra['estatus'],
+    monto: r.monto, ivaPct: (r.iva_pct ?? 16) as OrdenCompra['ivaPct'],
+    estatus: r.estatus as OrdenCompra['estatus'],
     items: (r.items as OrdenCompra['items']) ?? [], notas: r.notas,
   }
 }
