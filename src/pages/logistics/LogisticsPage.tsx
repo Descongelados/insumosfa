@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+﻿import { useState, useEffect } from 'react'
 import { useLogisticsStore } from '../../store/logisticsStore'
 import { useAuthStore } from '../../store/authStore'
 import { hasRole } from '../../store/usersStore'
@@ -13,7 +13,7 @@ import { StatusBadge } from '../../components/ui/StatusBadge'
 import { Modal } from '../../components/ui/Modal'
 import { Currency } from '../../components/ui/Currency'
 import type { Embarque, EmbarqueEstatus, EmbarqueOCRef, Transportista } from '../../types'
-import { Truck, Plus, CreditCard as Edit2, Trash2, CircleAlert as AlertCircle, ToggleLeft, ToggleRight, CheckCircle, Send, Save } from 'lucide-react'
+import { Truck, Plus, CreditCard as Edit2, Trash2, CircleAlert as AlertCircle, ToggleLeft, ToggleRight, CheckCircle, Send, Save, XCircle } from 'lucide-react'
 
 // ── constantes ─────────────────────────────────────────────────────────────
 const ESTADOS_ACTIVOS: EmbarqueEstatus[] = ['solicitado', 'programado', 'recolectado', 'enTransito', 'entregado']
@@ -88,6 +88,7 @@ export function LogisticsPage() {
   const [editFechaProgramada, setEditFechaProgramada] = useState('')
   const [editCostoFlete, setEditCostoFlete] = useState<number>(0)
   const [confirmCxP, setConfirmCxP] = useState(false)
+  const [confirmCancelar, setConfirmCancelar] = useState(false)
 
   // ── modal transportista ──────────────────────────────────────────────────
   type TransModal = 'new_trans' | 'edit_trans' | 'del_trans' | null
@@ -97,7 +98,7 @@ export function LogisticsPage() {
   const [editTransIdTrans, setEditTransIdTrans] = useState<string | null>(null)
 
   // ── derivados ─────────────────────────────────────────────────────────────
-  const embarquesActivos = embarques.filter(e => e.estatus !== 'cerrado')
+  const embarquesActivos = embarques.filter(e => e.estatus !== 'cerrado' && e.estatus !== 'cancelado')
   const filteredEmb = embarquesActivos.filter(e =>
     [e.folio, e.destino, e.origen].join(' ').toLowerCase().includes(q.toLowerCase())
   )
@@ -239,6 +240,22 @@ export function LogisticsPage() {
     }
     toast.success(`Embarque ${selEmb.folio} cerrado. Inventario actualizado. OC(s) procesadas.`)
     setEmbModal(null); setSelEmb(null)
+  }
+
+  // ── cancelar embarque ─────────────────────────────────────────────────────
+  // Solo disponible en estados solicitado / programado (antes de que haya movimiento físico).
+  // Revierte las OCs referenciadas de enviarPago → confirmada para que puedan volver a logística.
+  async function handleCancelarEmbarque() {
+    if (!selEmb) return
+    await updateEmbarque(selEmb.embarqueId, { estatus: 'cancelado' })
+    for (const ref of (selEmb.ordenesIds ?? [])) {
+      const oc = ordenesCompra.find(o => o.ordenCompraId === ref.ordenCompraId)
+      if (oc && ['enviarPago', 'parcialLogistica', 'enviarLogistica'].includes(oc.estatus)) {
+        await updateOrdenCompra(oc.ordenCompraId, { estatus: 'confirmada' })
+      }
+    }
+    toast.success(`Embarque ${selEmb.folio} cancelado. OC(s) devueltas a estado Confirmada.`)
+    setEmbModal(null); setSelEmb(null); setConfirmCancelar(false)
   }
 
   // ── detectar cambios en formulario solicitado ─────────────────────────────
@@ -418,10 +435,25 @@ export function LogisticsPage() {
         return (
           <Modal
             title={`Embarque ${selEmb.folio}`}
-            onClose={() => { setEmbModal(null); setSelEmb(null); setConfirmCxP(false) }}
+            onClose={() => { setEmbModal(null); setSelEmb(null); setConfirmCxP(false); setConfirmCancelar(false) }}
             footer={
               <div className="flex gap-2 flex-wrap justify-end">
-                <button className="btn-secondary" onClick={() => { setEmbModal(null); setSelEmb(null); setConfirmCxP(false) }}>Cerrar</button>
+                <button className="btn-secondary" onClick={() => { setEmbModal(null); setSelEmb(null); setConfirmCxP(false); setConfirmCancelar(false) }}>Cerrar</button>
+                {/* Cancelar embarque — solo en estados previos al movimiento físico */}
+                {['solicitado', 'programado'].includes(selEmb.estatus) && !confirmCancelar && !confirmCxP && (
+                  <button className="btn btn-danger btn-sm" onClick={() => setConfirmCancelar(true)}>
+                    <XCircle size={13} /> Cancelar embarque
+                  </button>
+                )}
+                {confirmCancelar && (
+                  <>
+                    <span className="text-xs text-red-700 self-center font-medium">¿Cancelar este embarque?</span>
+                    <button className="btn-secondary" onClick={() => setConfirmCancelar(false)}>No</button>
+                    <button className="btn btn-danger" onClick={() => void handleCancelarEmbarque()}>
+                      <XCircle size={13} /> Sí, cancelar
+                    </button>
+                  </>
+                )}
                 {selEmb.estatus === 'solicitado' && solicitadoCambiado() && (
                   <button className="btn btn-warning" onClick={() => void handleGuardarSolicitado()}><Save size={13} /> Guardar cambios</button>
                 )}
