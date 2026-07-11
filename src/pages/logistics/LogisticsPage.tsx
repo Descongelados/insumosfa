@@ -10,20 +10,17 @@ import { SearchBar } from '../../components/ui/SearchBar'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { Modal } from '../../components/ui/Modal'
 import { Currency } from '../../components/ui/Currency'
-import type { Embarque, EmbarqueEstatus, Transportista } from '../../types'
-import { Truck, Plus, CreditCard as Edit2, Trash2, CircleAlert as AlertCircle, ToggleLeft, ToggleRight, CheckCircle, Send } from 'lucide-react'
+import type { Embarque, EmbarqueEstatus, EmbarqueOCRef, Transportista } from '../../types'
+import { Truck, Plus, CreditCard as Edit2, Trash2, CircleAlert as AlertCircle, ToggleLeft, ToggleRight, CheckCircle, Send, Save } from 'lucide-react'
 
 // ─── constantes ────────────────────────────────────────────────────────────
-// Estatus visibles en la tabla de embarques activos (cerrado va a CxP)
 const ESTADOS_ACTIVOS: EmbarqueEstatus[] = ['solicitado', 'programado', 'recolectado', 'enTransito', 'entregado']
-// Todos los estatus disponibles para cambiar
 const ESTADOS: EmbarqueEstatus[] = ['solicitado', 'programado', 'recolectado', 'enTransito', 'entregado', 'cerrado']
 
 const BLANK_TRANS: Omit<Transportista, 'transportistaId'> = {
   nombre: '', contacto: '', telefono: '', tarifaBase: 0, activo: true,
 }
 
-// Solo director y operaciones pueden gestionar transportistas
 const TRANS_MANAGE_ROLES = ['director', 'operaciones', 'almacen'] as const
 
 // ─── componente ────────────────────────────────────────────────────────────
@@ -59,12 +56,17 @@ export function LogisticsPage() {
   type EmbModal = 'view_emb' | null
   const [embModal, setEmbModal] = useState<EmbModal>(null)
   const [selEmb, setSelEmb] = useState<Embarque | null>(null)
-  // transportista editable en el modal
+
+  // campos editables comunes
   const [editTransId, setEditTransIdEmb] = useState<string>('')
-  // origen editable en el modal
   const [editOrigen, setEditOrigen] = useState<string>('')
-  // kg recolectados (editable al pasar a recolectado)
-  const [kgRecolectados, setKgRecolectados] = useState<number>(0)
+
+  // campos editables solo en estatus "solicitado"
+  const [editDestino, setEditDestino] = useState('')
+  const [editCantidad, setEditCantidad] = useState<number>(0)
+  const [editFechaProgramada, setEditFechaProgramada] = useState('')
+  const [editCostoFlete, setEditCostoFlete] = useState<number>(0)
+
   // confirmación "enviar a CxP"
   const [confirmCxP, setConfirmCxP] = useState(false)
 
@@ -96,9 +98,10 @@ export function LogisticsPage() {
     setSelEmb(e)
     setEditTransIdEmb(e.transportistaId ?? '')
     setEditOrigen(e.origen ?? '')
-    // default kg = total de la OC referenciada
-    const totalKgOC = (e.ordenesIds ?? []).reduce((a, r) => a + r.kgEmbarcados, 0)
-    setKgRecolectados(totalKgOC)
+    setEditDestino(e.destino ?? '')
+    setEditCantidad(e.ordenesIds?.[0]?.kgEmbarcados ?? 0)
+    setEditFechaProgramada(e.fechaProgramada ?? '')
+    setEditCostoFlete(e.costoFlete ?? 0)
     setConfirmCxP(false)
     setEmbModal('view_emb')
   }
@@ -115,6 +118,31 @@ export function LogisticsPage() {
     toast.success('Embarque actualizado.')
   }
 
+  // ── guardar campos de embarque solicitado ────────────────────────────────
+  async function handleGuardarSolicitado() {
+    if (!selEmb) return
+
+    // Los kg editados actualizan la OC ref existente (OC no cambia)
+    let nuevasOCs: EmbarqueOCRef[] = selEmb.ordenesIds ?? []
+    if (nuevasOCs.length > 0) {
+      nuevasOCs = [{ ...nuevasOCs[0], kgEmbarcados: editCantidad }, ...nuevasOCs.slice(1)]
+    }
+
+    await updateEmbarque(selEmb.embarqueId, {
+      origen: editOrigen,
+      destino: editDestino,
+      fechaProgramada: editFechaProgramada,
+      costoFlete: editCostoFlete,
+      ordenesIds: nuevasOCs,
+    })
+
+    setSelEmb(prev => prev
+      ? { ...prev, origen: editOrigen, destino: editDestino, fechaProgramada: editFechaProgramada, costoFlete: editCostoFlete, ordenesIds: nuevasOCs }
+      : prev
+    )
+    toast.success('Datos del embarque actualizados.')
+  }
+
   // ── cambiar estatus del embarque ──────────────────────────────────────────
   async function handleCambiarEstatus(est: EmbarqueEstatus) {
     if (!selEmb) return
@@ -122,19 +150,15 @@ export function LogisticsPage() {
     // Al pasar a "recolectado" verificar si hay KG parciales
     if (est === 'recolectado') {
       const totalKgOC = (selEmb.ordenesIds ?? []).reduce((a, r) => a + r.kgEmbarcados, 0)
-      const pendiente = totalKgOC - kgRecolectados
-
-      if (kgRecolectados <= 0) { toast.error('Los KG recolectados deben ser mayor a cero.'); return }
-      if (kgRecolectados > totalKgOC) { toast.error(`No puedes recolectar más de ${totalKgOC} kg.`); return }
-
-      if (pendiente > 0) {
-        // Actualizar el embarque actual con los kg reales recolectados
+      if (totalKgOC > 0 && editCantidad < totalKgOC) {
+        const pendiente = totalKgOC - editCantidad
+        if (editCantidad <= 0) { toast.error('Los KG recolectados deben ser mayor a cero.'); return }
+        // Actualizar el embarque actual con los kg reales
         const idsActualizados = (selEmb.ordenesIds ?? []).map(r => ({
-          ...r, kgEmbarcados: Math.round(kgRecolectados * (r.kgEmbarcados / totalKgOC)),
+          ...r, kgEmbarcados: Math.round(editCantidad * (r.kgEmbarcados / totalKgOC)),
         }))
         await updateEmbarque(selEmb.embarqueId, { estatus: 'recolectado', ordenesIds: idsActualizados })
-
-        // Crear nuevo embarque con el pendiente y los mismos datos
+        // Crear nuevo embarque pendiente
         const idsPendiente = (selEmb.ordenesIds ?? []).map(r => ({
           ...r, kgEmbarcados: Math.round(pendiente * (r.kgEmbarcados / totalKgOC)),
         }))
@@ -149,7 +173,7 @@ export function LogisticsPage() {
           estatus: 'solicitado',
           notas: `Pendiente de ${pendiente} kg — split de ${selEmb.folio}`,
         })
-        toast.success(`${kgRecolectados} kg recolectados. Nuevo embarque creado con ${pendiente} kg pendientes.`)
+        toast.success(`${editCantidad} kg recolectados. Nuevo embarque creado con ${pendiente} kg pendientes.`)
         setEmbModal(null); setSelEmb(null)
         return
       }
@@ -163,9 +187,7 @@ export function LogisticsPage() {
   // ── enviar a CxP ─────────────────────────────────────────────────────────
   async function handleEnviarCxP() {
     if (!selEmb) return
-    // marcar embarque como cerrado
     await updateEmbarque(selEmb.embarqueId, { estatus: 'cerrado' })
-    // mover cada OC referenciada a estatus enviarPago
     const ocs = selEmb.ordenesIds ?? []
     for (const ref of ocs) {
       const oc = ordenesCompra.find(o => o.ordenCompraId === ref.ordenCompraId)
@@ -174,6 +196,19 @@ export function LogisticsPage() {
     toast.success(`Embarque ${selEmb.folio} cerrado → OC(s) enviadas a CxP.`)
     setEmbModal(null)
     setSelEmb(null)
+  }
+
+  // ── detectar si cambió algún campo de solicitado ─────────────────────────
+  function solicitadoCambiado(): boolean {
+    if (!selEmb) return false
+    const cantActual = selEmb.ordenesIds?.[0]?.kgEmbarcados ?? 0
+    return (
+      editOrigen !== (selEmb.origen ?? '') ||
+      editDestino !== (selEmb.destino ?? '') ||
+      editFechaProgramada !== (selEmb.fechaProgramada ?? '') ||
+      editCostoFlete !== (selEmb.costoFlete ?? 0) ||
+      editCantidad !== cantActual
+    )
   }
 
   // ── handlers transportista ───────────────────────────────────────────────
@@ -352,159 +387,219 @@ export function LogisticsPage() {
       )}
 
       {/* ══ MODAL VER / GESTIONAR EMBARQUE ══════════════════════════════════ */}
-      {embModal === 'view_emb' && selEmb && (() => {
-        const totalKgOC = (selEmb.ordenesIds ?? []).reduce((a, r) => a + r.kgEmbarcados, 0)
-        const hayPendiente = totalKgOC > 0 && kgRecolectados < totalKgOC
-        const hasChanges = editTransId !== (selEmb.transportistaId ?? '') || editOrigen !== (selEmb.origen ?? '')
-        return (
-          <Modal
-            title={`Embarque ${selEmb.folio}`}
-            onClose={() => { setEmbModal(null); setSelEmb(null); setConfirmCxP(false) }}
-            footer={
-              <div className="flex gap-2 flex-wrap justify-end">
-                <button className="btn-secondary" onClick={() => { setEmbModal(null); setSelEmb(null); setConfirmCxP(false) }}>
-                  Cerrar
+      {embModal === 'view_emb' && selEmb && (
+        <Modal
+          title={`Embarque ${selEmb.folio}`}
+          onClose={() => { setEmbModal(null); setSelEmb(null); setConfirmCxP(false) }}
+          footer={
+            <div className="flex gap-2 flex-wrap justify-end">
+              <button className="btn-secondary" onClick={() => { setEmbModal(null); setSelEmb(null); setConfirmCxP(false) }}>
+                Cerrar
+              </button>
+              {/* Guardar campos de embarque solicitado */}
+              {selEmb.estatus === 'solicitado' && solicitadoCambiado() && (
+                <button className="btn btn-warning" onClick={() => void handleGuardarSolicitado()}>
+                  <Save size={13} /> Guardar cambios
                 </button>
-                {/* Guardar cambios de transportista u origen */}
-                {hasChanges && (
-                  <button className="btn btn-warning" onClick={handleSaveTransportista}>
-                    <Edit2 size={13} /> Guardar cambios
+              )}
+              {/* Guardar transportista / origen cuando NO está en solicitado */}
+              {selEmb.estatus !== 'solicitado' && (editTransId !== (selEmb.transportistaId ?? '') || editOrigen !== (selEmb.origen ?? '')) && (
+                <button className="btn btn-warning" onClick={() => void handleSaveTransportista()}>
+                  <Edit2 size={13} /> Guardar cambios
+                </button>
+              )}
+              {/* Enviar a CxP — solo si está entregado y tiene OCs */}
+              {selEmb.estatus === 'entregado' && (selEmb.ordenesIds?.length ?? 0) > 0 && !confirmCxP && (
+                <button className="btn btn-primary" onClick={() => setConfirmCxP(true)}>
+                  <Send size={13} /> Enviar a CxP
+                </button>
+              )}
+              {confirmCxP && (
+                <>
+                  <span className="text-xs text-amber-700 self-center font-medium">¿Confirmar envío a CxP?</span>
+                  <button className="btn-secondary" onClick={() => setConfirmCxP(false)}>No</button>
+                  <button className="btn btn-primary" onClick={handleEnviarCxP}>
+                    <CheckCircle size={13} /> Sí, enviar
                   </button>
-                )}
-                {/* Enviar a CxP — solo si está entregado y tiene OCs */}
-                {selEmb.estatus === 'entregado' && (selEmb.ordenesIds?.length ?? 0) > 0 && !confirmCxP && (
-                  <button className="btn btn-primary" onClick={() => setConfirmCxP(true)}>
-                    <Send size={13} /> Enviar a CxP
-                  </button>
-                )}
-                {confirmCxP && (
-                  <>
-                    <span className="text-xs text-amber-700 self-center font-medium">¿Confirmar envío a CxP?</span>
-                    <button className="btn-secondary" onClick={() => setConfirmCxP(false)}>No</button>
-                    <button className="btn btn-primary" onClick={handleEnviarCxP}>
-                      <CheckCircle size={13} /> Sí, enviar
-                    </button>
-                  </>
-                )}
+                </>
+              )}
+            </div>
+          }
+          size="lg"
+        >
+          <div className="space-y-5">
+            {/* Info estática del embarque */}
+            <div className="grid grid-cols-2 gap-3 text-sm p-4 bg-gray-50 rounded-xl border border-gray-200">
+              <div>
+                <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">Origen</span>
+                <span className="text-gray-800">{selEmb.origen}</span>
               </div>
-            }
-            size="lg"
-          >
-            <div className="space-y-5">
-              {/* Info del embarque */}
-              <div className="grid grid-cols-2 gap-3 text-sm p-4 bg-gray-50 rounded-xl border border-gray-200">
-                <div>
-                  <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">Folio</span>
-                  <span className="font-mono font-bold text-blue-700">{selEmb.folio}</span>
-                </div>
-                {(selEmb.ordenesIds?.length ?? 0) > 0 && (
+              <div>
+                <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">Estatus</span>
+                <StatusBadge status={selEmb.estatus} />
+              </div>
+              {selEmb.estatus !== 'solicitado' && (
+                <>
                   <div>
-                    <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">OC(s)</span>
-                    <span className="text-xs font-mono text-blue-700">
+                    <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">Destino</span>
+                    <span className="text-gray-800">{selEmb.destino}</span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">Flete</span>
+                    <span className="text-gray-800"><Currency value={selEmb.costoFlete} /></span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">F. Programada</span>
+                    <span className="text-gray-800">{selEmb.fechaProgramada || '—'}</span>
+                  </div>
+                  {(selEmb.ordenesIds?.length ?? 0) > 0 && (
+                    <div>
+                      <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">OC(s)</span>
+                      <span className="text-xs font-mono text-blue-700">{selEmb.ordenesIds!.map(r => r.folio).join(', ')}</span>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* ── Edición de campos cuando estatus = "solicitado" ─────────── */}
+            {selEmb.estatus === 'solicitado' && (
+              <div className="space-y-4 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">
+                  Datos del embarque — editable en estado Solicitado
+                </p>
+
+                {/* OC de compras — solo lectura */}
+                {(selEmb.ordenesIds?.length ?? 0) > 0 && (
+                  <div className="form-group">
+                    <label className="label">Orden(es) de Compra</label>
+                    <div className="input bg-gray-100 text-gray-700 font-mono text-sm cursor-not-allowed">
                       {selEmb.ordenesIds!.map(r => `${r.folio} (${r.kgEmbarcados} kg)`).join(', ')}
-                    </span>
+                    </div>
                   </div>
                 )}
-                <div>
-                  <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">Destino</span>
-                  <span className="text-gray-800">{selEmb.destino || '—'}</span>
-                </div>
-                <div>
-                  <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">F. Programada</span>
-                  <span className="text-gray-800">{selEmb.fechaProgramada || '—'}</span>
-                </div>
-                <div>
-                  <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">Flete</span>
-                  <span className="text-gray-800"><Currency value={selEmb.costoFlete} /></span>
-                </div>
-                <div>
-                  <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">Estatus</span>
-                  <StatusBadge status={selEmb.estatus} />
-                </div>
-              </div>
 
-              {/* Editar origen */}
+                {/* Origen */}
+                <div className="form-group">
+                  <label className="label">Origen del envío</label>
+                  <input
+                    className="input"
+                    value={editOrigen}
+                    onChange={e => setEditOrigen(e.target.value)}
+                    placeholder="Ej. Bodega Tepatitlán, Jalisco"
+                  />
+                </div>
+
+                {/* Destino */}
+                <div className="form-group">
+                  <label className="label">Destino</label>
+                  <input
+                    className="input"
+                    value={editDestino}
+                    onChange={e => setEditDestino(e.target.value)}
+                    placeholder="Dirección o ciudad de destino"
+                  />
+                </div>
+
+                {/* Cantidad a transportar y fecha programada en grid */}
+                <div className="form-grid">
+                  <div className="form-group">
+                    <label className="label">Cantidad a transportar (kg)</label>
+                    <input
+                      type="number"
+                      className="input"
+                      value={editCantidad}
+                      min={0}
+                      onChange={e => setEditCantidad(Number(e.target.value))}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="label">Fecha programada</label>
+                    <input
+                      type="date"
+                      className="input"
+                      value={editFechaProgramada}
+                      onChange={e => setEditFechaProgramada(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                {/* Costo del flete */}
+                <div className="form-group">
+                  <label className="label">Costo del flete (MXN)</label>
+                  <input
+                    type="number"
+                    className="input"
+                    value={editCostoFlete}
+                    min={0}
+                    onChange={e => setEditCostoFlete(Number(e.target.value))}
+                  />
+                </div>
+
+                {solicitadoCambiado() && (
+                  <p className="text-xs text-blue-600">Cambios pendientes — presiona "Guardar cambios" para confirmar.</p>
+                )}
+              </div>
+            )}
+
+            {/* Editar origen + transportista (cuando no es solicitado) */}
+            {selEmb.estatus !== 'solicitado' && (
               <div className="space-y-1">
                 <label className="label">Origen del envío</label>
                 <input
                   className="input"
                   value={editOrigen}
-                  placeholder="Ej. Bodega Tepatitlán, Jalisco"
                   onChange={e => setEditOrigen(e.target.value)}
+                  placeholder="Ej. Bodega Tepatitlán, Jalisco"
                 />
               </div>
+            )}
+            <div className="space-y-1">
+              <label className="label">Transportista</label>
+              <select
+                className="select"
+                value={editTransId}
+                onChange={e => setEditTransIdEmb(e.target.value)}
+              >
+                <option value="">— Sin asignar —</option>
+                {transportistas.filter(t => t.activo).map(t => (
+                  <option key={t.transportistaId} value={t.transportistaId}>
+                    {t.nombre}{t.tarifaBase > 0 ? ` — ${t.tarifaBase.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}` : ''}
+                  </option>
+                ))}
+              </select>
+              {(editTransId !== (selEmb.transportistaId ?? '') || (selEmb.estatus !== 'solicitado' && editOrigen !== (selEmb.origen ?? ''))) && (
+                <p className="text-xs text-amber-600">Cambios pendientes — presiona "Guardar cambios" para confirmar.</p>
+              )}
+            </div>
 
-              {/* Editar transportista */}
-              <div className="space-y-1">
-                <label className="label">Transportista</label>
-                <select
-                  className="select"
-                  value={editTransId}
-                  onChange={e => setEditTransIdEmb(e.target.value)}
-                >
-                  <option value="">— Sin asignar —</option>
-                  {transportistas.filter(t => t.activo).map(t => (
-                    <option key={t.transportistaId} value={t.transportistaId}>
-                      {t.nombre}{t.tarifaBase > 0 ? ` — ${t.tarifaBase.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}` : ''}
-                    </option>
-                  ))}
-                </select>
-                {hasChanges && (
-                  <p className="text-xs text-amber-600">Cambios pendientes — presiona "Guardar cambios" para confirmar.</p>
-                )}
+            {/* Cambiar estatus */}
+            <div className="space-y-2">
+              <p className="label">Cambiar estatus</p>
+              <div className="flex flex-wrap gap-2">
+                {ESTADOS_ACTIVOS.map(est => (
+                  <button
+                    key={est}
+                    className={`btn btn-sm ${selEmb.estatus === est ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={() => void handleCambiarEstatus(est)}
+                  >
+                    <StatusBadge status={est} />
+                  </button>
+                ))}
               </div>
-
-              {/* KG a recolectar — visible si el siguiente paso lógico es recolectado */}
-              {['solicitado', 'programado'].includes(selEmb.estatus) && totalKgOC > 0 && (
-                <div className="space-y-1">
-                  <label className="label">
-                    KG a recolectar
-                    <span className="text-xs text-gray-400 font-normal ml-1">(total OC: {totalKgOC} kg)</span>
-                  </label>
-                  <input
-                    type="number"
-                    className="input"
-                    min={1}
-                    max={totalKgOC}
-                    value={kgRecolectados}
-                    onChange={e => setKgRecolectados(Number(e.target.value))}
-                  />
-                  {hayPendiente && (
-                    <p className="text-xs text-amber-700 font-medium">
-                      ⚠ Faltan {totalKgOC - kgRecolectados} kg. Al marcar "recolectado" se creará un nuevo embarque con el pendiente.
-                    </p>
-                  )}
+              {selEmb.estatus === 'entregado' && (selEmb.ordenesIds?.length ?? 0) > 0 && (
+                <div className="flex items-start gap-2 p-3 bg-green-50 border border-green-200 rounded-lg text-green-800 text-xs mt-2">
+                  <CheckCircle size={14} className="flex-shrink-0 mt-0.5" />
+                  <span>
+                    Embarque entregado. Presiona <strong>"Enviar a CxP"</strong> para cerrar el embarque
+                    y mover la(s) OC(s) a Cuentas por Pagar.
+                  </span>
                 </div>
               )}
-
-              {/* Cambiar estatus */}
-              <div className="space-y-2">
-                <p className="label">Cambiar estatus</p>
-                <div className="flex flex-wrap gap-2">
-                  {ESTADOS_ACTIVOS.map(est => (
-                    <button
-                      key={est}
-                      className={`btn btn-sm ${selEmb.estatus === est ? 'btn-primary' : 'btn-secondary'}`}
-                      onClick={() => void handleCambiarEstatus(est)}
-                    >
-                      <StatusBadge status={est} />
-                    </button>
-                  ))}
-                </div>
-                {selEmb.estatus === 'entregado' && (selEmb.ordenesIds?.length ?? 0) > 0 && (
-                  <div className="flex items-start gap-2 p-3 bg-green-50 border border-green-200 rounded-lg text-green-800 text-xs mt-2">
-                    <CheckCircle size={14} className="flex-shrink-0 mt-0.5" />
-                    <span>
-                      Embarque entregado. Presiona <strong>"Enviar a CxP"</strong> para cerrar el embarque
-                      y mover la(s) OC(s) a Cuentas por Pagar.
-                    </span>
-                  </div>
-                )}
-              </div>
             </div>
-          </Modal>
-        )
-      })()}
+          </div>
+        </Modal>
+      )}
 
       {/* ══ MODALES TRANSPORTISTA ════════════════════════════════════════════ */}
 
