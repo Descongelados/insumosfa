@@ -223,7 +223,7 @@ export function PurchasesPage() {
 
       <div className="flex gap-2 mb-2">
         <button className={`btn ${tab === 'oc' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('oc')}>
-          Órdenes de Compra ({ordenesCompra.length})
+          Órdenes de Compra ({filteredOC.length})
         </button>
         <button className={`btn ${tab === 'sol' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('sol')}>
           Solicitudes ({solicitudes.length})
