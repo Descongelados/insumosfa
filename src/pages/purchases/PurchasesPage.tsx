@@ -149,11 +149,10 @@ export function PurchasesPage() {
 
   async function handleEnviarCxPLogistica(oc: OrdenCompra) {
     const totalKg = oc.items.reduce((a, it) => a + it.cantidad, 0)
-    const supplier = suppliers.find(s => s.supplierId === oc.supplierId)
     await addEmbarque({
       pedidoId: undefined,
       ordenesIds: [{ ordenCompraId: oc.ordenCompraId, folio: oc.folio, kgEmbarcados: totalKg }],
-      origen: supplier?.razonSocial ?? '',
+      origen: '',
       destino: '',
       transportistaId: '',
       fechaProgramada: oc.fechaEntregaEsperada ?? '',
