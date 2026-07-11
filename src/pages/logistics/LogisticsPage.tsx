@@ -131,10 +131,16 @@ export function LogisticsPage() {
     const ocIds = Object.keys(selOCs)
     if (ocIds.length === 0) { toast.error('Selecciona al menos una Orden de Compra.'); return }
 
-    // Construir refs de OCs
+    // Construir refs de OCs y determinar si alguna es parcial
     const ordenesRefs: EmbarqueOCRef[] = ocIds.map(id => {
       const oc = ocsLogistica.find(o => o.ordenCompraId === id)!
       return { ordenCompraId: id, folio: oc.folio, kgEmbarcados: selOCs[id] }
+    })
+
+    // Si alguna OC es parcial el embarque arranca directo en enTransito
+    const hayParcial = ordenesRefs.some(ref => {
+      const oc = ocsLogistica.find(o => o.ordenCompraId === ref.ordenCompraId)!
+      return ref.kgEmbarcados < ocTotalKg(oc)
     })
 
     await addEmbarque({
@@ -145,7 +151,7 @@ export function LogisticsPage() {
       transportistaId: formTransId,
       fechaProgramada: formFecha,
       costoFlete: formFlete,
-      estatus: 'solicitado',
+      estatus: hayParcial ? 'enTransito' : 'solicitado',
       notas: formNotas,
     })
 
