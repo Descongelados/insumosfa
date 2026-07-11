@@ -3,6 +3,7 @@ import { useLogisticsStore } from '../../store/logisticsStore'
 import { useAuthStore } from '../../store/authStore'
 import { hasRole } from '../../store/usersStore'
 import { useSalesOrdersStore } from '../../store/salesOrdersStore'
+import { usePurchasesStore } from '../../store/purchasesStore'
 import { toast } from '../../store/toastStore'
 import { DataTable } from '../../components/ui/DataTable'
 import { SearchBar } from '../../components/ui/SearchBar'
@@ -10,20 +11,13 @@ import { StatusBadge } from '../../components/ui/StatusBadge'
 import { Modal } from '../../components/ui/Modal'
 import { Currency } from '../../components/ui/Currency'
 import type { Embarque, EmbarqueEstatus, Transportista } from '../../types'
-import { Truck, Plus, CreditCard as Edit2, Trash2, CircleAlert as AlertCircle, ToggleLeft, ToggleRight } from 'lucide-react'
+import { Truck, Plus, CreditCard as Edit2, Trash2, CircleAlert as AlertCircle, ToggleLeft, ToggleRight, CheckCircle, Send } from 'lucide-react'
 
 // ─── constantes ────────────────────────────────────────────────────────────
+// Estatus visibles en la tabla de embarques activos (cerrado va a CxP)
+const ESTADOS_ACTIVOS: EmbarqueEstatus[] = ['solicitado', 'programado', 'recolectado', 'enTransito', 'entregado']
+// Todos los estatus disponibles para cambiar
 const ESTADOS: EmbarqueEstatus[] = ['solicitado', 'programado', 'recolectado', 'enTransito', 'entregado', 'cerrado']
-
-const BLANK_EMB = {
-  pedidoId: '' as string | undefined,
-  origen: 'Almacén Central, MTY',
-  destino: '',
-  transportistaId: '',
-  fechaProgramada: '',
-  costoFlete: 0,
-  notas: '',
-}
 
 const BLANK_TRANS: Omit<Transportista, 'transportistaId'> = {
   nombre: '', contacto: '', telefono: '', tarifaBase: 0, activo: true,
@@ -36,18 +30,21 @@ const TRANS_MANAGE_ROLES = ['director', 'operaciones', 'almacen'] as const
 export function LogisticsPage() {
   const {
     embarques, transportistas, loadLogistics, subscribeRealtime: subLogistics,
-    addEmbarque, updateEmbarque,
+    updateEmbarque,
     addTransportista, updateTransportista, deleteTransportista,
   } = useLogisticsStore()
   const { orders, loadOrders, subscribeRealtime: subOrders } = useSalesOrdersStore()
+  const { ordenesCompra, loadPurchases, subscribeRealtime: subPurchases, updateOrdenCompra } = usePurchasesStore()
   const { user: me } = useAuthStore()
 
   useEffect(() => {
     void loadLogistics()
     void loadOrders()
+    void loadPurchases()
     const u1 = subLogistics()
     const u2 = subOrders()
-    return () => { u1(); u2() }
+    const u3 = subPurchases()
+    return () => { u1(); u2(); u3() }
   }, [])
 
   const canManageTrans = me ? hasRole(me, ...TRANS_MANAGE_ROLES) : false
@@ -59,21 +56,27 @@ export function LogisticsPage() {
   const [q, setQ] = useState('')
 
   // ── modal embarque ───────────────────────────────────────────────────────
-  type EmbModal = 'new_emb' | 'view_emb' | null
+  type EmbModal = 'view_emb' | null
   const [embModal, setEmbModal] = useState<EmbModal>(null)
   const [selEmb, setSelEmb] = useState<Embarque | null>(null)
-  const [formEmb, setFormEmb] = useState(BLANK_EMB)
+  // transportista editable en el modal
+  const [editTransId, setEditTransIdEmb] = useState<string>('')
+  // confirmación "enviar a CxP"
+  const [confirmCxP, setConfirmCxP] = useState(false)
 
   // ── modal transportista ──────────────────────────────────────────────────
   type TransModal = 'new_trans' | 'edit_trans' | 'del_trans' | null
   const [transModal, setTransModal] = useState<TransModal>(null)
   const [selTrans, setSelTrans] = useState<Transportista | null>(null)
   const [formTrans, setFormTrans] = useState(BLANK_TRANS)
-  const [editTransId, setEditTransId] = useState<string | null>(null)
+  const [editTransIdTrans, setEditTransIdTrans] = useState<string | null>(null)
+
+  // ── embarques activos (no cerrados) ─────────────────────────────────────
+  const embarquesActivos = embarques.filter(e => e.estatus !== 'cerrado')
 
   // ── filtros ──────────────────────────────────────────────────────────────
-  const filteredEmb = embarques.filter(e =>
-    [e.folio, e.destino].join(' ').toLowerCase().includes(q.toLowerCase())
+  const filteredEmb = embarquesActivos.filter(e =>
+    [e.folio, e.destino, e.origen].join(' ').toLowerCase().includes(q.toLowerCase())
   )
   const filteredTrans = transportistas.filter(t =>
     [t.nombre, t.contacto].join(' ').toLowerCase().includes(q.toLowerCase())
@@ -84,18 +87,44 @@ export function LogisticsPage() {
   const totalEmb = embarques.filter(e => ['entregado', 'cerrado'].includes(e.estatus)).length
   const pct = totalEmb > 0 ? Math.round(onTime / totalEmb * 100) : 100
 
-  // ── handlers embarque ────────────────────────────────────────────────────
-  const FEmb = (k: keyof typeof formEmb) =>
-    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
-      setFormEmb(f => ({ ...f, [k]: k === 'costoFlete' ? Number(e.target.value) : e.target.value }))
+  // ── abrir modal embarque ──────────────────────────────────────────────────
+  function openViewEmb(e: Embarque) {
+    setSelEmb(e)
+    setEditTransIdEmb(e.transportistaId ?? '')
+    setConfirmCxP(false)
+    setEmbModal('view_emb')
+  }
 
-  function handleSaveEmb() {
-    if (!formEmb.transportistaId) { toast.error('Selecciona un transportista.'); return }
-    if (!formEmb.destino.trim()) { toast.error('El destino es obligatorio.'); return }
-    addEmbarque({ ...formEmb, ordenesIds: [], estatus: 'solicitado' })
-    toast.success('Embarque registrado.')
+  // ── guardar transportista editado ─────────────────────────────────────────
+  async function handleSaveTransportista() {
+    if (!selEmb) return
+    await updateEmbarque(selEmb.embarqueId, { transportistaId: editTransId })
+    setSelEmb(prev => prev ? { ...prev, transportistaId: editTransId } : prev)
+    toast.success('Transportista actualizado.')
+  }
+
+  // ── cambiar estatus del embarque ──────────────────────────────────────────
+  async function handleCambiarEstatus(e: EmbarqueEstatus) {
+    if (!selEmb) return
+    await updateEmbarque(selEmb.embarqueId, { estatus: e })
+    setSelEmb(prev => prev ? { ...prev, estatus: e } : prev)
+    toast.success(`Estatus actualizado: ${e}`)
+  }
+
+  // ── enviar a CxP ─────────────────────────────────────────────────────────
+  async function handleEnviarCxP() {
+    if (!selEmb) return
+    // marcar embarque como cerrado
+    await updateEmbarque(selEmb.embarqueId, { estatus: 'cerrado' })
+    // mover cada OC referenciada a estatus enviarPago
+    const ocs = selEmb.ordenesIds ?? []
+    for (const ref of ocs) {
+      const oc = ordenesCompra.find(o => o.ordenCompraId === ref.ordenCompraId)
+      if (oc) await updateOrdenCompra(oc.ordenCompraId, { estatus: 'enviarPago' })
+    }
+    toast.success(`Embarque ${selEmb.folio} cerrado → OC(s) enviadas a CxP.`)
     setEmbModal(null)
-    setFormEmb(BLANK_EMB)
+    setSelEmb(null)
   }
 
   // ── handlers transportista ───────────────────────────────────────────────
@@ -104,18 +133,18 @@ export function LogisticsPage() {
       setFormTrans(f => ({ ...f, [k]: k === 'tarifaBase' ? Number(e.target.value) : e.target.value }))
 
   function openNewTrans() {
-    setFormTrans(BLANK_TRANS); setEditTransId(null); setTransModal('new_trans')
+    setFormTrans(BLANK_TRANS); setEditTransIdTrans(null); setTransModal('new_trans')
   }
   function openEditTrans(t: Transportista) {
     const { transportistaId, ...rest } = t
-    setFormTrans(rest); setEditTransId(t.transportistaId); setTransModal('edit_trans')
+    setFormTrans(rest); setEditTransIdTrans(t.transportistaId); setTransModal('edit_trans')
   }
   function openDelTrans(t: Transportista) {
     setSelTrans(t); setTransModal('del_trans')
   }
   function handleSaveTrans() {
     if (!formTrans.nombre.trim()) { toast.error('El nombre del transportista es obligatorio.'); return }
-    if (editTransId) { updateTransportista(editTransId, formTrans); toast.success('Transportista actualizado.') }
+    if (editTransIdTrans) { updateTransportista(editTransIdTrans, formTrans); toast.success('Transportista actualizado.') }
     else { addTransportista(formTrans); toast.success('Transportista creado.') }
     setTransModal(null)
   }
@@ -135,11 +164,6 @@ export function LogisticsPage() {
           <p className="page-subtitle">Embarques y transportistas</p>
         </div>
         <div className="flex gap-2">
-          {tab === 'embarques' && (
-            <button className="btn-primary" onClick={() => { setFormEmb(BLANK_EMB); setEmbModal('new_emb') }}>
-              <Plus size={16} /> Nuevo Embarque
-            </button>
-          )}
           {tab === 'transportistas' && canManageTrans && (
             <button className="btn-primary" onClick={openNewTrans}>
               <Plus size={16} /> Nuevo Transportista
@@ -174,7 +198,7 @@ export function LogisticsPage() {
           className={`btn ${tab === 'embarques' ? 'btn-primary' : 'btn-secondary'}`}
           onClick={() => { setTab('embarques'); setQ('') }}
         >
-          <Truck size={15} /> Embarques ({embarques.length})
+          <Truck size={15} /> Embarques ({embarquesActivos.length})
         </button>
         <button
           className={`btn ${tab === 'transportistas' ? 'btn-primary' : 'btn-secondary'}`}
@@ -188,26 +212,41 @@ export function LogisticsPage() {
       {tab === 'embarques' && (
         <div className="card">
           <div className="flex justify-between mb-4">
-            <SearchBar value={q} onChange={setQ} placeholder="Buscar folio o destino..." />
+            <SearchBar value={q} onChange={setQ} placeholder="Buscar folio, destino u origen..." />
           </div>
-          <DataTable
-            data={filteredEmb}
-            rowKey={e => e.embarqueId}
-            columns={[
-              { key: 'folio', header: 'Folio', render: e => <span className="font-mono font-semibold text-blue-700">{e.folio}</span> },
-              { key: 'pedido', header: 'Pedido', render: e => e.pedidoId ? orders.find(o => o.pedidoId === e.pedidoId)?.folio ?? '-' : '-' },
-              { key: 'destino', header: 'Destino' },
-              { key: 'trans', header: 'Transportista', render: e => transportistas.find(t => t.transportistaId === e.transportistaId)?.nombre ?? <span className="text-red-500 text-xs">Sin asignar</span> },
-              { key: 'fechaProg', header: 'F. Programada', render: e => e.fechaProgramada || '-' },
-              { key: 'flete', header: 'Flete', render: e => <Currency value={e.costoFlete} /> },
-              { key: 'estatus', header: 'Estatus', render: e => <StatusBadge status={e.estatus} /> },
-              {
-                key: 'acc', header: '', render: e => (
-                  <button className="btn btn-secondary btn-sm" onClick={() => { setSelEmb(e); setEmbModal('view_emb') }}>Ver</button>
-                )
-              },
-            ]}
-          />
+          {filteredEmb.length === 0 ? (
+            <div className="text-center py-12 text-gray-400">
+              <Truck size={32} className="mx-auto mb-3 opacity-30" />
+              <p className="text-sm">No hay embarques activos.</p>
+              <p className="text-xs mt-1 text-gray-300">Los embarques se generan desde el módulo de Compras.</p>
+            </div>
+          ) : (
+            <DataTable
+              data={filteredEmb}
+              rowKey={e => e.embarqueId}
+              columns={[
+                { key: 'folio', header: 'Folio', render: e => <span className="font-mono font-semibold text-blue-700">{e.folio}</span> },
+                { key: 'ocs', header: 'OC(s)', render: e => e.ordenesIds?.length
+                  ? <span className="text-xs font-mono text-gray-600">{e.ordenesIds.map(r => r.folio).join(', ')}</span>
+                  : <span className="text-gray-400 text-xs">—</span>
+                },
+                { key: 'origen', header: 'Origen', render: e => <span className="text-xs text-gray-600">{e.origen}</span> },
+                { key: 'destino', header: 'Destino' },
+                { key: 'trans', header: 'Transportista', render: e =>
+                  transportistas.find(t => t.transportistaId === e.transportistaId)?.nombre
+                    ?? <span className="text-amber-600 text-xs font-medium">Sin asignar</span>
+                },
+                { key: 'fechaProg', header: 'F. Programada', render: e => e.fechaProgramada || '-' },
+                { key: 'flete', header: 'Flete', render: e => <Currency value={e.costoFlete} /> },
+                { key: 'estatus', header: 'Estatus', render: e => <StatusBadge status={e.estatus} /> },
+                {
+                  key: 'acc', header: '', render: e => (
+                    <button className="btn btn-secondary btn-sm" onClick={() => openViewEmb(e)}>Ver</button>
+                  )
+                },
+              ]}
+            />
+          )}
         </div>
       )}
 
@@ -263,76 +302,115 @@ export function LogisticsPage() {
         </div>
       )}
 
-      {/* ══ MODALES EMBARQUE ════════════════════════════════════════════════ */}
-
-      {/* Nuevo embarque */}
-      {embModal === 'new_emb' && (
-        <Modal title="Nuevo Embarque" onClose={() => setEmbModal(null)}
-          footer={<><button className="btn-secondary" onClick={() => setEmbModal(null)}>Cancelar</button><button className="btn-primary" onClick={handleSaveEmb}>Guardar</button></>}
-        >
-          <div className="form-grid">
-            <div className="form-group">
-              <label className="label">Pedido (opcional)</label>
-              <select className="select" value={formEmb.pedidoId ?? ''} onChange={e => setFormEmb(f => ({ ...f, pedidoId: e.target.value || undefined }))}>
-                <option value="">— Sin pedido —</option>
-                {orders.map(o => <option key={o.pedidoId} value={o.pedidoId}>{o.folio}</option>)}
-              </select>
+      {/* ══ MODAL VER / GESTIONAR EMBARQUE ══════════════════════════════════ */}
+      {embModal === 'view_emb' && selEmb && (
+        <Modal
+          title={`Embarque ${selEmb.folio}`}
+          onClose={() => { setEmbModal(null); setSelEmb(null); setConfirmCxP(false) }}
+          footer={
+            <div className="flex gap-2 flex-wrap justify-end">
+              <button className="btn-secondary" onClick={() => { setEmbModal(null); setSelEmb(null); setConfirmCxP(false) }}>
+                Cerrar
+              </button>
+              {/* Botón guardar transportista solo si cambió */}
+              {editTransId !== (selEmb.transportistaId ?? '') && (
+                <button className="btn btn-warning" onClick={handleSaveTransportista}>
+                  <Edit2 size={13} /> Guardar Transportista
+                </button>
+              )}
+              {/* Enviar a CxP — solo si está entregado y tiene OCs */}
+              {selEmb.estatus === 'entregado' && (selEmb.ordenesIds?.length ?? 0) > 0 && !confirmCxP && (
+                <button className="btn btn-primary" onClick={() => setConfirmCxP(true)}>
+                  <Send size={13} /> Enviar a CxP
+                </button>
+              )}
+              {confirmCxP && (
+                <>
+                  <span className="text-xs text-amber-700 self-center font-medium">¿Confirmar envío a CxP?</span>
+                  <button className="btn-secondary" onClick={() => setConfirmCxP(false)}>No</button>
+                  <button className="btn btn-primary" onClick={handleEnviarCxP}>
+                    <CheckCircle size={13} /> Sí, enviar
+                  </button>
+                </>
+              )}
             </div>
-            <div className="form-group">
-              <label className="label">Transportista *</label>
-              <select className="select" value={formEmb.transportistaId} onChange={FEmb('transportistaId')}>
-                <option value="">— Seleccionar —</option>
+          }
+          size="lg"
+        >
+          <div className="space-y-5">
+            {/* Info del embarque */}
+            <div className="grid grid-cols-2 gap-3 text-sm p-4 bg-gray-50 rounded-xl border border-gray-200">
+              <div>
+                <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">Origen</span>
+                <span className="text-gray-800">{selEmb.origen}</span>
+              </div>
+              <div>
+                <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">Destino</span>
+                <span className="text-gray-800">{selEmb.destino}</span>
+              </div>
+              <div>
+                <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">Flete</span>
+                <span className="text-gray-800"><Currency value={selEmb.costoFlete} /></span>
+              </div>
+              <div>
+                <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">F. Programada</span>
+                <span className="text-gray-800">{selEmb.fechaProgramada || '—'}</span>
+              </div>
+              <div>
+                <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">Estatus</span>
+                <StatusBadge status={selEmb.estatus} />
+              </div>
+              {(selEmb.ordenesIds?.length ?? 0) > 0 && (
+                <div>
+                  <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">OC(s)</span>
+                  <span className="text-xs font-mono text-blue-700">{selEmb.ordenesIds!.map(r => r.folio).join(', ')}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Editar transportista */}
+            <div className="space-y-1">
+              <label className="label">Transportista</label>
+              <select
+                className="select"
+                value={editTransId}
+                onChange={e => setEditTransIdEmb(e.target.value)}
+              >
+                <option value="">— Sin asignar —</option>
                 {transportistas.filter(t => t.activo).map(t => (
                   <option key={t.transportistaId} value={t.transportistaId}>
-                    {t.nombre} — {t.tarifaBase.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}
+                    {t.nombre}{t.tarifaBase > 0 ? ` — ${t.tarifaBase.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}` : ''}
                   </option>
                 ))}
               </select>
+              {editTransId !== (selEmb.transportistaId ?? '') && (
+                <p className="text-xs text-amber-600">Cambio pendiente — presiona "Guardar Transportista" para confirmar.</p>
+              )}
             </div>
-            <div className="form-group sm:col-span-2">
-              <label className="label">Origen</label>
-              <input className="input" value={formEmb.origen} onChange={FEmb('origen')} />
-            </div>
-            <div className="form-group sm:col-span-2">
-              <label className="label">Destino *</label>
-              <input className="input" value={formEmb.destino} onChange={FEmb('destino')} />
-            </div>
-            <div className="form-group">
-              <label className="label">Fecha Programada</label>
-              <input type="date" className="input" value={formEmb.fechaProgramada} onChange={FEmb('fechaProgramada')} />
-            </div>
-            <div className="form-group">
-              <label className="label">Costo Flete (MXN)</label>
-              <input type="number" className="input" value={formEmb.costoFlete} onChange={FEmb('costoFlete')} min={0} />
-            </div>
-          </div>
-        </Modal>
-      )}
 
-      {/* Ver / cambiar estatus embarque */}
-      {embModal === 'view_emb' && selEmb && (
-        <Modal title={`Embarque ${selEmb.folio}`} onClose={() => setEmbModal(null)}
-          footer={<button className="btn-secondary" onClick={() => setEmbModal(null)}>Cerrar</button>}
-        >
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div><span className="text-gray-500">Origen:</span> {selEmb.origen}</div>
-              <div><span className="text-gray-500">Destino:</span> {selEmb.destino}</div>
-              <div><span className="text-gray-500">Transportista:</span> {transportistas.find(t => t.transportistaId === selEmb.transportistaId)?.nombre ?? '—'}</div>
-              <div><span className="text-gray-500">Flete:</span> <Currency value={selEmb.costoFlete} /></div>
-              <div><span className="text-gray-500">F. Programada:</span> {selEmb.fechaProgramada || '—'}</div>
-              <div><span className="text-gray-500">Estatus:</span> <StatusBadge status={selEmb.estatus} /></div>
-            </div>
-            <div>
-              <p className="label mb-2">Cambiar estatus</p>
+            {/* Cambiar estatus */}
+            <div className="space-y-2">
+              <p className="label">Cambiar estatus</p>
               <div className="flex flex-wrap gap-2">
-                {ESTADOS.map(e => (
-                  <button key={e} className={`btn btn-sm ${selEmb.estatus === e ? 'btn-primary' : 'btn-secondary'}`}
-                    onClick={() => { updateEmbarque(selEmb.embarqueId, { estatus: e }); setEmbModal(null); setSelEmb(null) }}>
-                    <StatusBadge status={e} />
+                {ESTADOS_ACTIVOS.map(est => (
+                  <button
+                    key={est}
+                    className={`btn btn-sm ${selEmb.estatus === est ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={() => void handleCambiarEstatus(est)}
+                  >
+                    <StatusBadge status={est} />
                   </button>
                 ))}
               </div>
+              {selEmb.estatus === 'entregado' && (selEmb.ordenesIds?.length ?? 0) > 0 && (
+                <div className="flex items-start gap-2 p-3 bg-green-50 border border-green-200 rounded-lg text-green-800 text-xs mt-2">
+                  <CheckCircle size={14} className="flex-shrink-0 mt-0.5" />
+                  <span>
+                    Embarque entregado. Presiona <strong>"Enviar a CxP"</strong> para cerrar el embarque
+                    y mover la(s) OC(s) a Cuentas por Pagar.
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         </Modal>
