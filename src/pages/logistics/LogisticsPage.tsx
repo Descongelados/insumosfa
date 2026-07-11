@@ -137,12 +137,6 @@ export function LogisticsPage() {
       return { ordenCompraId: id, folio: oc.folio, kgEmbarcados: selOCs[id] }
     })
 
-    // Si alguna OC es parcial el embarque arranca directo en enTransito
-    const hayParcial = ordenesRefs.some(ref => {
-      const oc = ocsLogistica.find(o => o.ordenCompraId === ref.ordenCompraId)!
-      return ref.kgEmbarcados < ocTotalKg(oc)
-    })
-
     await addEmbarque({
       pedidoId: undefined,
       ordenesIds: ordenesRefs,
@@ -151,7 +145,7 @@ export function LogisticsPage() {
       transportistaId: formTransId,
       fechaProgramada: formFecha,
       costoFlete: formFlete,
-      estatus: hayParcial ? 'enTransito' : 'solicitado',
+      estatus: 'solicitado',
       notas: formNotas,
     })
 
