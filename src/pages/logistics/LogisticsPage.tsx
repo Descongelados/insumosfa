@@ -314,21 +314,32 @@ export function LogisticsPage() {
                           Total: {totalKg.toLocaleString()} kg · F. Entrega esperada: {oc.fechaEntregaEsperada || '—'}
                         </div>
                       </div>
-                      <button
-                        className="btn btn-primary btn-sm shrink-0"
-                        onClick={() => {
-                          setSelOCs({ [oc.ordenCompraId]: totalKg })
-                          setFormTransId(transportistas[0]?.transportistaId ?? '')
-                          setFormOrigen('Almacén Central')
-                          setFormDestino('')
-                          setFormFecha('')
-                          setFormFlete(0)
-                          setFormNotas('')
-                          setEmbModal('new_emb')
-                        }}
-                      >
-                        <Truck size={13} /> Embarcar
-                      </button>
+                      <div className="flex flex-col gap-1 shrink-0">
+                        <button
+                          className="btn btn-primary btn-sm"
+                          onClick={() => {
+                            setSelOCs({ [oc.ordenCompraId]: totalKg })
+                            setFormTransId(transportistas[0]?.transportistaId ?? '')
+                            setFormOrigen('Almacén Central')
+                            setFormDestino('')
+                            setFormFecha('')
+                            setFormFlete(0)
+                            setFormNotas('')
+                            setEmbModal('new_emb')
+                          }}
+                        >
+                          <Truck size={13} /> Embarcar
+                        </button>
+                        <button
+                          className="btn btn-danger btn-sm"
+                          onClick={async () => {
+                            await updateOrdenCompra(oc.ordenCompraId, { estatus: 'confirmada' })
+                            toast.success(`${oc.folio} regresada a Compras.`)
+                          }}
+                        >
+                          <XCircle size={13} /> Regresar a Compras
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )
