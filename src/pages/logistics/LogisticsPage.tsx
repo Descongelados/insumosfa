@@ -159,6 +159,7 @@ export function LogisticsPage() {
 
     toast.success(`Embarque creado con ${ordenesRefs.length} OC(s).`)
     setEmbModal(null)
+    setTab('embarques')
   }
 
   // ── handlers transportista ───────────────────────────────────────────────
@@ -348,7 +349,17 @@ export function LogisticsPage() {
               { key: 'estatus', header: 'Estatus', render: e => <StatusBadge status={e.estatus} /> },
               {
                 key: 'acc', header: '', render: e => (
-                  <button className="btn btn-secondary btn-sm" onClick={() => { setSelEmb(e); setEmbModal('view_emb') }}>Ver</button>
+                  <div className="flex gap-1">
+                    <button className="btn btn-secondary btn-sm" onClick={() => { setSelEmb(e); setEmbModal('view_emb') }}>Ver</button>
+                    {['solicitado', 'programado', 'recolectado'].includes(e.estatus) && (
+                      <button
+                        className="btn btn-success btn-sm"
+                        onClick={() => { updateEmbarque(e.embarqueId, { estatus: 'enTransito' }); toast.success(`EMB ${e.folio} → En tránsito`) }}
+                      >
+                        <Truck size={13} /> En tránsito
+                      </button>
+                    )}
+                  </div>
                 )
               },
             ]}
