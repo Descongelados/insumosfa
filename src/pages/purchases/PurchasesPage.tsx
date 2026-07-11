@@ -3,6 +3,7 @@ import { usePurchasesStore } from '../../store/purchasesStore'
 import { useSuppliersStore } from '../../store/suppliersStore'
 import { useProductsStore } from '../../store/productsStore'
 import { useInventoryStore } from '../../store/inventoryStore'
+import { useLogisticsStore } from '../../store/logisticsStore'
 import { useAuthStore } from '../../store/authStore'
 import { hasRole } from '../../store/usersStore'
 import { DataTable } from '../../components/ui/DataTable'
@@ -12,7 +13,7 @@ import { Modal } from '../../components/ui/Modal'
 import { Currency } from '../../components/ui/Currency'
 import { toast } from '../../store/toastStore'
 import type { OrdenCompra, OrdenCompraItem, OrdenCompraEstatus } from '../../types'
-import { ClipboardList, Plus, Truck, Trash2, Pencil } from 'lucide-react'
+import { ClipboardList, Plus, Truck, CreditCard, Trash2, Pencil } from 'lucide-react'
 
 const OC_ESTADOS: OrdenCompraEstatus[] = ['borrador', 'emitida', 'confirmada', 'enviarLogistica', 'parcialLogistica', 'cerrada']
 const IVA_OPCIONES: OrdenCompra['ivaPct'][] = [16, 8, 0]
@@ -40,6 +41,7 @@ export function PurchasesPage() {
   const { suppliers, loadSuppliers, subscribeRealtime: subSuppliers } = useSuppliersStore()
   const { products, loadProducts, subscribeRealtime: subProducts } = useProductsStore()
   const { loadInventory, subscribeRealtime: subInventory } = useInventoryStore()
+  const { addEmbarque } = useLogisticsStore()
   const { user } = useAuthStore()
 
   useEffect(() => {
@@ -66,7 +68,7 @@ export function PurchasesPage() {
   const isDirector = user ? hasRole(user, 'director') : false
 
   const filteredOC = ordenesCompra.filter((o) => {
-    if (['enviarLogistica', 'parcialLogistica'].includes(o.estatus)) return false
+    if (['enviarLogistica', 'parcialLogistica', 'enviarPago', 'cerrada'].includes(o.estatus)) return false
     const sup = suppliers.find(s => s.supplierId === o.supplierId)
     return [o.folio, sup?.razonSocial ?? ''].join(' ').toLowerCase().includes(q.toLowerCase())
   })
@@ -138,9 +140,29 @@ export function PurchasesPage() {
     setSelOC(null)
   }
 
-  function handleEnviarLogistica(oc: OrdenCompra) {
-    updateOrdenCompra(oc.ordenCompraId, { estatus: 'enviarLogistica' })
-    toast.success(`OC ${oc.folio} enviada a Logística.`)
+  function handleEnviarCxP(oc: OrdenCompra) {
+    void updateOrdenCompra(oc.ordenCompraId, { estatus: 'enviarPago' })
+    toast.success(`OC ${oc.folio} enviada a CxP para proceso de pago.`)
+    setModal(null)
+    setSelOC(null)
+  }
+
+  async function handleEnviarCxPLogistica(oc: OrdenCompra) {
+    const totalKg = oc.items.reduce((a, it) => a + it.cantidad, 0)
+    const supplier = suppliers.find(s => s.supplierId === oc.supplierId)
+    await addEmbarque({
+      pedidoId: undefined,
+      ordenesIds: [{ ordenCompraId: oc.ordenCompraId, folio: oc.folio, kgEmbarcados: totalKg }],
+      origen: supplier?.razonSocial ?? '',
+      destino: '',
+      transportistaId: '',
+      fechaProgramada: oc.fechaEntregaEsperada ?? '',
+      costoFlete: 0,
+      estatus: 'solicitado',
+      notas: '',
+    })
+    await updateOrdenCompra(oc.ordenCompraId, { estatus: 'enviarLogistica' })
+    toast.success(`OC ${oc.folio} → Embarque creado en Logística y OC enviada a CxP.`)
     setModal(null)
     setSelOC(null)
   }
@@ -255,9 +277,14 @@ export function PurchasesPage() {
                       </button>
                     )}
                     {o.estatus === 'confirmada' && (
-                      <button className="btn btn-success btn-sm" onClick={() => handleEnviarLogistica(o)}>
-                        <Truck size={13} /> Enviar a Logística
-                      </button>
+                      <>
+                        <button className="btn btn-success btn-sm" onClick={() => handleEnviarCxP(o)} title="Solo CxP — sin logística">
+                          <CreditCard size={13} /> CxP
+                        </button>
+                        <button className="btn btn-primary btn-sm" onClick={() => { void handleEnviarCxPLogistica(o) }} title="CxP + crear embarque en Logística">
+                          <Truck size={13} /> CxP & Logística
+                        </button>
+                      </>
                     )}
                     {o.estatus === 'parcialLogistica' && (
                       <span className="text-xs font-medium text-amber-600 px-2 py-1 bg-amber-50 rounded-full border border-amber-200">
@@ -394,9 +421,14 @@ export function PurchasesPage() {
               <div className="flex gap-2">
                 <button className="btn-secondary" onClick={() => setModal(null)}>Cerrar</button>
                 {selOC.estatus === 'confirmada' && (
-                  <button className="btn-success" onClick={() => handleEnviarLogistica(selOC)}>
-                    <Truck size={15} /> Enviar a Logística
-                  </button>
+                  <>
+                    <button className="btn-success" onClick={() => handleEnviarCxP(selOC)}>
+                      <CreditCard size={15} /> Enviar a CxP
+                    </button>
+                    <button className="btn-primary" onClick={() => { void handleEnviarCxPLogistica(selOC) }}>
+                      <Truck size={15} /> CxP & Logística
+                    </button>
+                  </>
                 )}
               </div>
             }
