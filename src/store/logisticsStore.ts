@@ -11,6 +11,8 @@ type DbShipment = {
   destino: string; transportista_id: string; fecha_programada: string
   fecha_entrega: string | null; costo_flete: number; estatus: string; notas: string
   ordenes_ids: unknown
+  // Bug 1 fix: columna agregada en migración 20260712000000
+  kg_original: number | null
 }
 
 function toCarrier(r: DbCarrier): Transportista {
@@ -19,24 +21,26 @@ function toCarrier(r: DbCarrier): Transportista {
     telefono: r.telefono, tarifaBase: r.tarifa_base, activo: r.activo,
   }
 }
-function toShipment(r: DbShipment): Embarque {
+function toShipment(r: DbShipment): Embarque & { kgOriginal?: number } {
   return {
     embarqueId: r.id, folio: r.folio, pedidoId: r.pedido_id ?? undefined,
     ordenesIds: (r.ordenes_ids as import('../types').EmbarqueOCRef[]) ?? [],
     origen: r.origen, destino: r.destino, transportistaId: r.transportista_id,
     fechaProgramada: r.fecha_programada, fechaEntrega: r.fecha_entrega ?? undefined,
     costoFlete: r.costo_flete, estatus: r.estatus as Embarque['estatus'], notas: r.notas,
+    // Campo extra para el split: cantidad original solicitada en este embarque
+    kgOriginal: r.kg_original ?? 0,
   }
 }
 
 interface LogisticsState {
-  embarques: Embarque[]
+  embarques: (Embarque & { kgOriginal?: number })[]
   transportistas: Transportista[]
   loading: boolean
   loadLogistics: () => Promise<void>
   subscribeRealtime: () => () => void
-  addEmbarque: (e: Omit<Embarque, 'embarqueId' | 'folio'>) => Promise<void>
-  updateEmbarque: (id: string, data: Partial<Embarque>) => Promise<void>
+  addEmbarque: (e: Omit<Embarque, 'embarqueId' | 'folio'> & { kgOriginal?: number }) => Promise<void>
+  updateEmbarque: (id: string, data: Partial<Embarque> & { kgOriginal?: number }) => Promise<void>
   addTransportista: (t: Omit<Transportista, 'transportistaId'>) => Promise<void>
   updateTransportista: (id: string, data: Partial<Transportista>) => Promise<void>
   deleteTransportista: (id: string) => Promise<void>
@@ -71,12 +75,16 @@ export const useLogisticsStore = create<LogisticsState>()((set, get) => ({
   async addEmbarque(data) {
     const { count } = await supabase.from('erp_shipments').select('*', { count: 'exact', head: true })
     const folio = `EMB-${String((count ?? 0) + 1).padStart(4, '0')}`
+    // Calcular kg_original al crear: suma de kgEmbarcados de las OC refs
+    const kgOriginal = data.kgOriginal
+      ?? (data.ordenesIds ?? []).reduce((a, r) => a + r.kgEmbarcados, 0)
     await supabase.from('erp_shipments').insert({
       folio, pedido_id: data.pedidoId ?? null, origen: data.origen,
       destino: data.destino, transportista_id: data.transportistaId,
       fecha_programada: data.fechaProgramada, fecha_entrega: data.fechaEntrega ?? null,
       costo_flete: data.costoFlete, estatus: data.estatus, notas: data.notas ?? '',
       ordenes_ids: data.ordenesIds ?? [],
+      kg_original: kgOriginal,
     })
     await get().loadLogistics()
   },
@@ -93,6 +101,8 @@ export const useLogisticsStore = create<LogisticsState>()((set, get) => ({
     if (data.estatus !== undefined) patch.estatus = data.estatus
     if (data.notas !== undefined) patch.notas = data.notas
     if (data.ordenesIds !== undefined) patch.ordenes_ids = data.ordenesIds
+    // Bug 1 fix: persistir kg_original si se pasa en el patch
+    if ((data as any).kgOriginal !== undefined) patch.kg_original = (data as any).kgOriginal
     await supabase.from('erp_shipments').update(patch).eq('id', id)
     await get().loadLogistics()
   },
