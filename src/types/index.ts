@@ -175,7 +175,7 @@ export interface SalesOrder {
 
 // ─── Purchases ─────────────────────────────────────────────────────────────
 export type SolicitudEstatus = 'creada' | 'enRevision' | 'aprobada' | 'rechazada'
-export type OrdenCompraEstatus = 'borrador' | 'emitida' | 'confirmada' | 'recibida' | 'cerrada'
+export type OrdenCompraEstatus = 'borrador' | 'emitida' | 'confirmada' | 'enviarLogistica' | 'parcialLogistica' | 'cerrada'
 
 export interface SolicitudCompra {
   solicitudId: string
@@ -220,10 +220,17 @@ export interface Transportista {
   activo: boolean
 }
 
+export interface EmbarqueOCRef {
+  ordenCompraId: string
+  folio: string
+  kgEmbarcados: number  // cantidad que se embarca de esta OC
+}
+
 export interface Embarque {
   embarqueId: string
   folio: string
-  pedidoId?: string
+  pedidoId?: string        // legacy — se mantiene por compatibilidad
+  ordenesIds: EmbarqueOCRef[]  // múltiples OCs con sus KGs
   origen: string
   destino: string
   transportistaId: string

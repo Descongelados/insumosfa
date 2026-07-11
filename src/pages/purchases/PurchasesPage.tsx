@@ -12,9 +12,9 @@ import { Modal } from '../../components/ui/Modal'
 import { Currency } from '../../components/ui/Currency'
 import { toast } from '../../store/toastStore'
 import type { OrdenCompra, OrdenCompraItem, OrdenCompraEstatus } from '../../types'
-import { ClipboardList, Plus, CircleCheck as CheckCircle, Trash2, Pencil } from 'lucide-react'
+import { ClipboardList, Plus, Truck, Trash2, Pencil } from 'lucide-react'
 
-const OC_ESTADOS: OrdenCompraEstatus[] = ['borrador', 'emitida', 'confirmada', 'recibida', 'cerrada']
+const OC_ESTADOS: OrdenCompraEstatus[] = ['borrador', 'emitida', 'confirmada', 'enviarLogistica', 'parcialLogistica', 'cerrada']
 const IVA_OPCIONES: OrdenCompra['ivaPct'][] = [16, 8, 0]
 
 const MXN = (v: number) => v.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })
@@ -39,7 +39,7 @@ export function PurchasesPage() {
   const { solicitudes, updateSolicitud, deleteSolicitud, ordenesCompra, loadPurchases, subscribeRealtime: subPurchases, addOrdenCompra, updateOrdenCompra, deleteOrdenCompra } = usePurchasesStore()
   const { suppliers, loadSuppliers, subscribeRealtime: subSuppliers } = useSuppliersStore()
   const { products, loadProducts, subscribeRealtime: subProducts } = useProductsStore()
-  const { applyMovimiento, loadInventory, subscribeRealtime: subInventory } = useInventoryStore()
+  const { loadInventory, subscribeRealtime: subInventory } = useInventoryStore()
   const { user } = useAuthStore()
 
   useEffect(() => {
@@ -137,19 +137,9 @@ export function PurchasesPage() {
     setSelOC(null)
   }
 
-  function handleRecibir(oc: OrdenCompra) {
-    oc.items.forEach((it) => {
-      applyMovimiento({
-        productId: it.productId,
-        tipo: 'EntradaCompra',
-        cantidad: it.cantidad,
-        documentoOrigen: oc.folio,
-        usuario: user?.email ?? 'sistema',
-        notas: `Recepción ${oc.folio}`,
-      })
-    })
-    updateOrdenCompra(oc.ordenCompraId, { estatus: 'recibida' })
-    toast.success(`OC ${oc.folio} recibida — inventario actualizado.`)
+  function handleEnviarLogistica(oc: OrdenCompra) {
+    updateOrdenCompra(oc.ordenCompraId, { estatus: 'enviarLogistica' })
+    toast.success(`OC ${oc.folio} enviada a Logística.`)
     setModal(null)
     setSelOC(null)
   }
@@ -264,9 +254,14 @@ export function PurchasesPage() {
                       </button>
                     )}
                     {o.estatus === 'confirmada' && (
-                      <button className="btn btn-success btn-sm" onClick={() => handleRecibir(o)}>
-                        <CheckCircle size={13} /> Recibir
+                      <button className="btn btn-success btn-sm" onClick={() => handleEnviarLogistica(o)}>
+                        <Truck size={13} /> Enviar a Logística
                       </button>
+                    )}
+                    {o.estatus === 'parcialLogistica' && (
+                      <span className="text-xs font-medium text-amber-600 px-2 py-1 bg-amber-50 rounded-full border border-amber-200">
+                        Parcialmente entregado
+                      </span>
                     )}
                     {['borrador', 'emitida'].includes(o.estatus) && (
                       <button className="btn btn-secondary btn-sm" onClick={() => { updateOrdenCompra(o.ordenCompraId, { estatus: o.estatus === 'borrador' ? 'emitida' : 'confirmada' }); toast.info(`OC ${o.folio} → ${o.estatus === 'borrador' ? 'emitida' : 'confirmada'}`) }}>
@@ -398,8 +393,8 @@ export function PurchasesPage() {
               <div className="flex gap-2">
                 <button className="btn-secondary" onClick={() => setModal(null)}>Cerrar</button>
                 {selOC.estatus === 'confirmada' && (
-                  <button className="btn-success" onClick={() => handleRecibir(selOC)}>
-                    <CheckCircle size={15} /> Marcar como Recibida
+                  <button className="btn-success" onClick={() => handleEnviarLogistica(selOC)}>
+                    <Truck size={15} /> Enviar a Logística
                   </button>
                 )}
               </div>
