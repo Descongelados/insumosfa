@@ -87,6 +87,12 @@ export function LogisticsPage() {
   // confirmación "enviar a CxP"
   const [confirmCxP, setConfirmCxP] = useState(false)
 
+  // ── modal recolección ────────────────────────────────────────────────────
+  const [showRecolModal, setShowRecolModal] = useState(false)
+  const [recolKg, setRecolKg] = useState<number>(0)
+  const [recolFlete, setRecolFlete] = useState<number>(0)
+  const [recolFecha, setRecolFecha] = useState<string>('')
+
   // ── modal transportista ──────────────────────────────────────────────────
   type TransModal = 'new_trans' | 'edit_trans' | 'del_trans' | null
   const [transModal, setTransModal] = useState<TransModal>(null)
@@ -164,41 +170,66 @@ export function LogisticsPage() {
   async function handleCambiarEstatus(est: EmbarqueEstatus) {
     if (!selEmb) return
 
-    // Al pasar a "recolectado" verificar si hay KG parciales
+    // Al pasar a "recolectado" mostrar modal para capturar KG reales y flete
     if (est === 'recolectado') {
       const totalKgOC = (selEmb.ordenesIds ?? []).reduce((a, r) => a + r.kgEmbarcados, 0)
-      if (totalKgOC > 0 && editCantidad < totalKgOC) {
-        const pendiente = totalKgOC - editCantidad
-        if (editCantidad <= 0) { toast.error('Los KG recolectados deben ser mayor a cero.'); return }
-        // Actualizar el embarque actual con los kg reales
-        const idsActualizados = (selEmb.ordenesIds ?? []).map(r => ({
-          ...r, kgEmbarcados: Math.round(editCantidad * (r.kgEmbarcados / totalKgOC)),
-        }))
-        await updateEmbarque(selEmb.embarqueId, { estatus: 'recolectado', ordenesIds: idsActualizados })
-        // Crear nuevo embarque pendiente
-        const idsPendiente = (selEmb.ordenesIds ?? []).map(r => ({
-          ...r, kgEmbarcados: Math.round(pendiente * (r.kgEmbarcados / totalKgOC)),
-        }))
-        await addEmbarqueStore({
-          pedidoId: selEmb.pedidoId,
-          ordenesIds: idsPendiente,
-          origen: selEmb.origen,
-          destino: selEmb.destino,
-          transportistaId: selEmb.transportistaId,
-          fechaProgramada: selEmb.fechaProgramada,
-          costoFlete: 0,
-          estatus: 'solicitado',
-          notas: `Pendiente de ${pendiente} kg — split de ${selEmb.folio}`,
-        })
-        toast.success(`${editCantidad} kg recolectados. Nuevo embarque creado con ${pendiente} kg pendientes.`)
-        setEmbModal(null); setSelEmb(null)
-        return
-      }
+      setRecolKg(totalKgOC)
+      setRecolFlete(selEmb.costoFlete ?? 0)
+      setRecolFecha(new Date().toISOString().split('T')[0])
+      setShowRecolModal(true)
+      return
     }
 
     await updateEmbarque(selEmb.embarqueId, { estatus: est })
     setSelEmb(prev => prev ? { ...prev, estatus: est } : prev)
     toast.success(`Estatus actualizado: ${est}`)
+  }
+
+  async function handleConfirmarRecoleccion() {
+    if (!selEmb) return
+    if (recolKg <= 0) { toast.error('Los KG recolectados deben ser mayor a cero.'); return }
+
+    const totalKgOC = (selEmb.ordenesIds ?? []).reduce((a, r) => a + r.kgEmbarcados, 0)
+
+    if (totalKgOC > 0 && recolKg < totalKgOC) {
+      // Recolección parcial — split de embarque
+      const pendiente = totalKgOC - recolKg
+      const idsActualizados = (selEmb.ordenesIds ?? []).map(r => ({
+        ...r, kgEmbarcados: Math.round(recolKg * (r.kgEmbarcados / totalKgOC)),
+      }))
+      await updateEmbarque(selEmb.embarqueId, {
+        estatus: 'recolectado',
+        costoFlete: recolFlete,
+        ordenesIds: idsActualizados,
+      })
+      const idsPendientes = (selEmb.ordenesIds ?? []).map(r => ({
+        ...r, kgEmbarcados: Math.round(pendiente * (r.kgEmbarcados / totalKgOC)),
+      }))
+      await addEmbarqueStore({
+        pedidoId: selEmb.pedidoId,
+        ordenesIds: idsPendientes,
+        origen: selEmb.origen, destino: selEmb.destino,
+        transportistaId: selEmb.transportistaId,
+        fechaProgramada: selEmb.fechaProgramada,
+        costoFlete: 0,
+        estatus: 'solicitado',
+        notas: `Pendiente de ${pendiente} kg — split de ${selEmb.folio}`,
+      })
+      toast.success(`${recolKg} kg recolectados. Nuevo embarque creado con ${pendiente} kg pendientes.`)
+    } else {
+      // Recolección total
+      await updateEmbarque(selEmb.embarqueId, {
+        estatus: 'recolectado',
+        costoFlete: recolFlete,
+        fechaEntrega: recolFecha || undefined,
+      })
+      setSelEmb(prev => prev ? { ...prev, estatus: 'recolectado', costoFlete: recolFlete } : prev)
+      toast.success(`Embarque recolectado. Flete: $${recolFlete.toLocaleString('es-MX')}.`)
+    }
+
+    setShowRecolModal(false)
+    setEmbModal(null)
+    setSelEmb(null)
   }
 
   // ── enviar a CxP ─────────────────────────────────────────────────────────
@@ -676,6 +707,59 @@ export function LogisticsPage() {
             <div className="form-group">
               <label className="label">Tarifa Base (MXN)</label>
               <input type="number" className="input" value={formTrans.tarifaBase} onChange={FTrans('tarifaBase')} min={0} />
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Modal recolección: KG reales + flete ────────────────────────── */}
+      {showRecolModal && selEmb && (
+        <Modal
+          title={`Recolección — ${selEmb.folio}`}
+          onClose={() => setShowRecolModal(false)}
+          footer={
+            <>
+              <button className="btn-secondary" onClick={() => setShowRecolModal(false)}>Cancelar</button>
+              <button className="btn-primary" onClick={() => void handleConfirmarRecoleccion()}>
+                <CheckCircle size={14} /> Confirmar recolección
+              </button>
+            </>
+          }
+        >
+          <div className="space-y-4 text-sm">
+            <p className="text-gray-600">Ingresa los datos reales de la recolección antes de confirmar.</p>
+            <div className="form-grid">
+              <div className="form-group">
+                <label className="label">KG recolectados *</label>
+                <input
+                  type="number" min={1} className="input"
+                  value={recolKg}
+                  onChange={e => setRecolKg(Number(e.target.value))}
+                />
+                {recolKg < (selEmb.ordenesIds ?? []).reduce((a, r) => a + r.kgEmbarcados, 0) && recolKg > 0 && (
+                  <p className="text-xs text-amber-600 mt-1">
+                    Recolección parcial — se creará un nuevo embarque con los {(selEmb.ordenesIds ?? []).reduce((a, r) => a + r.kgEmbarcados, 0) - recolKg} kg restantes.
+                  </p>
+                )}
+              </div>
+              <div className="form-group">
+                <label className="label">Fecha de recolección</label>
+                <input
+                  type="date" className="input"
+                  value={recolFecha}
+                  onChange={e => setRecolFecha(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="label">Costo del flete (MXN)</label>
+              <input
+                type="number" min={0} step="0.01" className="input"
+                value={recolFlete}
+                onChange={e => setRecolFlete(Number(e.target.value))}
+                placeholder="0.00"
+              />
+              <p className="text-xs text-gray-400 mt-1">Este monto se usará para generar la factura de flete al cerrar el embarque.</p>
             </div>
           </div>
         </Modal>
