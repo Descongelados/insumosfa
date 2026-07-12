@@ -6,6 +6,7 @@ import { useSalesOrdersStore } from '../../store/salesOrdersStore'
 import { useProductsStore } from '../../store/productsStore'
 import { usePurchasesStore } from '../../store/purchasesStore'
 import { useLogisticsStore } from '../../store/logisticsStore'
+import { useInventoryStore } from '../../store/inventoryStore'
 import { useAuthStore } from '../../store/authStore'
 import { hasRole } from '../../store/usersStore'
 import { DataTable } from '../../components/ui/DataTable'
@@ -50,6 +51,7 @@ export function FinancePage() {
   const { products } = useProductsStore()
   const { ordenesCompra, loadPurchases, subscribeRealtime: subPurchases, updateOrdenCompra } = usePurchasesStore()
   const { embarques, loadLogistics, subscribeRealtime: subLogistics } = useLogisticsStore()
+  const { applyMovimiento } = useInventoryStore()
   const { user: me } = useAuthStore()
 
   useEffect(() => {
@@ -162,10 +164,10 @@ export function FinancePage() {
     if (!fp) return
     if (pagoForm.monto <= 0) { toast.error('El monto debe ser mayor a cero.'); return }
     await addPagoProveedor({ facturaProvId: selFp, supplierId: fp.supplierId, fecha: today(), ...pagoForm })
-    // Si el pago liquida la factura → registrar automáticamente como gasto del mes
     const saldoRestante = Math.max(0, fp.saldoPendiente - pagoForm.monto)
     if (saldoRestante === 0) {
       const prov = suppliers.find(s => s.supplierId === fp.supplierId)
+      // Gasto del mes
       await addGasto({
         fecha: today(),
         categoria: 'Suministros',
@@ -175,6 +177,22 @@ export function FinancePage() {
         referencia: pagoForm.referencia,
         notas: `Generado automáticamente al liquidar ${fp.folio}`,
       })
+      // Entrada al inventario — solo para facturas vinculadas a una OC (no fletes)
+      if (fp.ordenCompraId) {
+        const oc = ordenesCompra.find(o => o.ordenCompraId === fp.ordenCompraId)
+        if (oc) {
+          for (const item of oc.items) {
+            await applyMovimiento({
+              productId: item.productId,
+              tipo: 'EntradaCompra',
+              cantidad: item.cantidad,
+              documentoOrigen: oc.folio,
+              usuario: me?.name ?? 'CxP',
+              notas: `Pago liquidado: ${fp.folio}`,
+            })
+          }
+        }
+      }
     }
     toast.success(`Pago a proveedor registrado: ${MXN(pagoForm.monto)}.`)
     setModal(null)
