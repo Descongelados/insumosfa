@@ -38,10 +38,10 @@ const BLANK_GASTO: Omit<GastoNegocio, 'gastoId'> = {
 export function FinancePage() {
   const {
     facturasVenta, pagosClientes,
-    facturasProveedor, bancos, gastos,
+    facturasProveedor, pagosProveedores, bancos, gastos,
     loadFinance, subscribeRealtime: subFinance,
     addPagoCliente, addPagoProveedor,
-    addFacturaProveedor, deleteFacturaProveedor,
+    addFacturaProveedor,
     addBanco, updateBanco, deleteBanco,
     addGasto, updateGasto, deleteGasto,
   } = useFinanceStore()
@@ -121,7 +121,6 @@ export function FinancePage() {
   const gastosMes      = gastos.filter(g => g.fecha.startsWith(mesActual))
   const totalGastosMes = gastosMes.reduce((a, g) => a + g.monto, 0)
 
-  const { pagosProveedores } = useFinanceStore()
   const pagosMes      = pagosProveedores.filter(p => p.fecha.startsWith(mesActual))
   const totalPagosMes = pagosMes.reduce((a, p) => a + p.monto, 0)
 

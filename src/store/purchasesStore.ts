@@ -105,7 +105,7 @@ export const usePurchasesStore = create<PurchasesState>()((set, get) => ({
       .insert({
         folio, supplier_id: data.supplierId, fecha: data.fecha,
         fecha_entrega_esperada: data.fechaEntregaEsperada,
-        monto: data.monto, estatus: data.estatus, items: data.items, notas: data.notas,
+        monto: data.monto, iva_pct: data.ivaPct, estatus: data.estatus, items: data.items, notas: data.notas,
       })
       .select('*')
       .maybeSingle()

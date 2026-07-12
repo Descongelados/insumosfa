@@ -3,7 +3,6 @@ import { useLogisticsStore } from '../../store/logisticsStore'
 import { useFinanceStore } from '../../store/financeStore'
 import { useAuthStore } from '../../store/authStore'
 import { hasRole } from '../../store/usersStore'
-import { useSalesOrdersStore } from '../../store/salesOrdersStore'
 import { usePurchasesStore } from '../../store/purchasesStore'
 import { toast } from '../../store/toastStore'
 import { DataTable } from '../../components/ui/DataTable'
@@ -16,7 +15,6 @@ import { Truck, Plus, CreditCard as Edit2, Trash2, CircleAlert as AlertCircle, T
 
 // ─── constantes ────────────────────────────────────────────────────────────
 const ESTADOS_ACTIVOS: EmbarqueEstatus[] = ['solicitado', 'programado', 'recolectado', 'enTransito', 'entregado']
-const ESTADOS: EmbarqueEstatus[] = ['solicitado', 'programado', 'recolectado', 'enTransito', 'entregado', 'cerrado']
 
 const BLANK_TRANS: Omit<Transportista, 'transportistaId'> = {
   nombre: '', contacto: '', telefono: '', tarifaBase: 0, activo: true,
@@ -31,19 +29,16 @@ export function LogisticsPage() {
     addEmbarque: addEmbarqueStore, updateEmbarque, deleteEmbarque,
     addTransportista, updateTransportista, deleteTransportista,
   } = useLogisticsStore()
-  const { orders, loadOrders, subscribeRealtime: subOrders } = useSalesOrdersStore()
   const { ordenesCompra, loadPurchases, subscribeRealtime: subPurchases, updateOrdenCompra } = usePurchasesStore()
   const { addFacturaProveedor } = useFinanceStore()
   const { user: me } = useAuthStore()
 
   useEffect(() => {
     void loadLogistics()
-    void loadOrders()
     void loadPurchases()
     const u1 = subLogistics()
-    const u2 = subOrders()
-    const u3 = subPurchases()
-    return () => { u1(); u2(); u3() }
+    const u2 = subPurchases()
+    return () => { u1(); u2() }
   }, [])
 
   const canManageTrans  = me ? hasRole(me, ...TRANS_MANAGE_ROLES) : false
