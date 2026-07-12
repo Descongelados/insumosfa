@@ -236,10 +236,9 @@ export function LogisticsPage() {
   async function handleEnviarCxP() {
     if (!selEmb) return
     await updateEmbarque(selEmb.embarqueId, { estatus: 'cerrado' })
-    const ocs = selEmb.ordenesIds ?? []
-    for (const ref of ocs) {
-      const oc = ordenesCompra.find(o => o.ordenCompraId === ref.ordenCompraId)
-      if (oc) await updateOrdenCompra(oc.ordenCompraId, { estatus: 'enviarPago' })
+    // Actualizar cada OC directamente por su ID (sin depender del estado local)
+    for (const ref of (selEmb.ordenesIds ?? [])) {
+      await updateOrdenCompra(ref.ordenCompraId, { estatus: 'enviarPago' })
     }
     toast.success(`Embarque ${selEmb.folio} cerrado → OC(s) enviadas a CxP.`)
     setEmbModal(null)
