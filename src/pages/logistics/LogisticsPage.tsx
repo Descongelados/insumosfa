@@ -61,7 +61,7 @@ export function LogisticsPage() {
   const [editTransId, setEditTransIdEmb] = useState<string>('')
   const [editOrigen, setEditOrigen] = useState<string>('')
 
-  // campos editables solo en estatus "solicitado"
+  // campos editables en estatus "solicitado"
   const [editDestino, setEditDestino] = useState('')
   const [editCantidad, setEditCantidad] = useState<number>(0)
   const [editFechaProgramada, setEditFechaProgramada] = useState('')
@@ -69,6 +69,11 @@ export function LogisticsPage() {
 
   // confirmación "enviar a CxP"
   const [confirmCxP, setConfirmCxP] = useState(false)
+
+  // ── modal confirmación recolectado ────────────────────────────────────────
+  const [confirmRecolectado, setConfirmRecolectado] = useState(false)
+  const [recolKg, setRecolKg] = useState<number>(0)
+  const [recolFlete, setRecolFlete] = useState<number>(0)
 
   // ── modal transportista ──────────────────────────────────────────────────
   type TransModal = 'new_trans' | 'edit_trans' | 'del_trans' | null
@@ -103,15 +108,17 @@ export function LogisticsPage() {
     setEditFechaProgramada(e.fechaProgramada ?? '')
     setEditCostoFlete(e.costoFlete ?? 0)
     setConfirmCxP(false)
+    setConfirmRecolectado(false)
     setEmbModal('view_emb')
   }
 
-  // ── guardar transportista y origen ────────────────────────────────────────
+  // ── guardar transportista, origen y destino ───────────────────────────────
   async function handleSaveTransportista() {
     if (!selEmb) return
     const patch: Partial<Embarque> = {}
     if (editTransId !== (selEmb.transportistaId ?? '')) patch.transportistaId = editTransId
     if (editOrigen !== (selEmb.origen ?? '')) patch.origen = editOrigen
+    if (editDestino !== (selEmb.destino ?? '')) patch.destino = editDestino
     if (Object.keys(patch).length === 0) return
     await updateEmbarque(selEmb.embarqueId, patch)
     setSelEmb(prev => prev ? { ...prev, ...patch } : prev)
@@ -122,7 +129,6 @@ export function LogisticsPage() {
   async function handleGuardarSolicitado() {
     if (!selEmb) return
 
-    // Los kg editados actualizan la OC ref existente (OC no cambia)
     let nuevasOCs: EmbarqueOCRef[] = selEmb.ordenesIds ?? []
     if (nuevasOCs.length > 0) {
       nuevasOCs = [{ ...nuevasOCs[0], kgEmbarcados: editCantidad }, ...nuevasOCs.slice(1)]
@@ -143,42 +149,71 @@ export function LogisticsPage() {
     toast.success('Datos del embarque actualizados.')
   }
 
+  // ── abrir modal confirmación recolectado ──────────────────────────────────
+  function openConfirmRecolectado() {
+    if (!selEmb) return
+    const totalKg = (selEmb.ordenesIds ?? []).reduce((a, r) => a + r.kgEmbarcados, 0)
+    setRecolKg(totalKg)
+    setRecolFlete(selEmb.costoFlete ?? 0)
+    setConfirmRecolectado(true)
+  }
+
+  // ── confirmar recolectado con kg reales y flete final ─────────────────────
+  async function handleConfirmRecolectado() {
+    if (!selEmb) return
+    if (recolKg <= 0) { toast.error('Los KG recolectados deben ser mayor a cero.'); return }
+
+    const totalKgOC = (selEmb.ordenesIds ?? []).reduce((a, r) => a + r.kgEmbarcados, 0)
+
+    if (totalKgOC > 0 && recolKg < totalKgOC) {
+      // KG parciales: actualizar embarque actual y crear uno nuevo con el pendiente
+      const pendiente = totalKgOC - recolKg
+      const idsActualizados = (selEmb.ordenesIds ?? []).map(r => ({
+        ...r, kgEmbarcados: Math.round(recolKg * (r.kgEmbarcados / totalKgOC)),
+      }))
+      await updateEmbarque(selEmb.embarqueId, {
+        estatus: 'recolectado',
+        costoFlete: recolFlete,
+        ordenesIds: idsActualizados,
+      })
+      const idsPendiente = (selEmb.ordenesIds ?? []).map(r => ({
+        ...r, kgEmbarcados: Math.round(pendiente * (r.kgEmbarcados / totalKgOC)),
+      }))
+      await addEmbarqueStore({
+        pedidoId: selEmb.pedidoId,
+        ordenesIds: idsPendiente,
+        origen: selEmb.origen,
+        destino: selEmb.destino,
+        transportistaId: selEmb.transportistaId,
+        fechaProgramada: selEmb.fechaProgramada,
+        costoFlete: 0,
+        estatus: 'solicitado',
+        notas: `Pendiente de ${pendiente} kg — split de ${selEmb.folio}`,
+      })
+      toast.success(`${recolKg} kg recolectados. Nuevo embarque creado con ${pendiente} kg pendientes.`)
+    } else {
+      // KG completos: solo actualizar estatus y flete
+      await updateEmbarque(selEmb.embarqueId, {
+        estatus: 'recolectado',
+        costoFlete: recolFlete,
+      })
+      setSelEmb(prev => prev ? { ...prev, estatus: 'recolectado', costoFlete: recolFlete } : prev)
+      toast.success('Estatus actualizado: recolectado')
+    }
+
+    setConfirmRecolectado(false)
+    setEmbModal(null)
+    setSelEmb(null)
+  }
+
   // ── cambiar estatus del embarque ──────────────────────────────────────────
   async function handleCambiarEstatus(est: EmbarqueEstatus) {
     if (!selEmb) return
-
-    // Al pasar a "recolectado" verificar si hay KG parciales
+    // "recolectado" usa su propio modal de confirmación
     if (est === 'recolectado') {
-      const totalKgOC = (selEmb.ordenesIds ?? []).reduce((a, r) => a + r.kgEmbarcados, 0)
-      if (totalKgOC > 0 && editCantidad < totalKgOC) {
-        const pendiente = totalKgOC - editCantidad
-        if (editCantidad <= 0) { toast.error('Los KG recolectados deben ser mayor a cero.'); return }
-        // Actualizar el embarque actual con los kg reales
-        const idsActualizados = (selEmb.ordenesIds ?? []).map(r => ({
-          ...r, kgEmbarcados: Math.round(editCantidad * (r.kgEmbarcados / totalKgOC)),
-        }))
-        await updateEmbarque(selEmb.embarqueId, { estatus: 'recolectado', ordenesIds: idsActualizados })
-        // Crear nuevo embarque pendiente
-        const idsPendiente = (selEmb.ordenesIds ?? []).map(r => ({
-          ...r, kgEmbarcados: Math.round(pendiente * (r.kgEmbarcados / totalKgOC)),
-        }))
-        await addEmbarqueStore({
-          pedidoId: selEmb.pedidoId,
-          ordenesIds: idsPendiente,
-          origen: selEmb.origen,
-          destino: selEmb.destino,
-          transportistaId: selEmb.transportistaId,
-          fechaProgramada: selEmb.fechaProgramada,
-          costoFlete: 0,
-          estatus: 'solicitado',
-          notas: `Pendiente de ${pendiente} kg — split de ${selEmb.folio}`,
-        })
-        toast.success(`${editCantidad} kg recolectados. Nuevo embarque creado con ${pendiente} kg pendientes.`)
-        setEmbModal(null); setSelEmb(null)
-        return
-      }
+      openConfirmRecolectado()
+      return
     }
-
     await updateEmbarque(selEmb.embarqueId, { estatus: est })
     setSelEmb(prev => prev ? { ...prev, estatus: est } : prev)
     toast.success(`Estatus actualizado: ${est}`)
@@ -404,10 +439,10 @@ export function LogisticsPage() {
       {embModal === 'view_emb' && selEmb && (
         <Modal
           title={`Embarque ${selEmb.folio}`}
-          onClose={() => { setEmbModal(null); setSelEmb(null); setConfirmCxP(false) }}
+          onClose={() => { setEmbModal(null); setSelEmb(null); setConfirmCxP(false); setConfirmRecolectado(false) }}
           footer={
             <div className="flex gap-2 flex-wrap justify-end">
-              <button className="btn-secondary" onClick={() => { setEmbModal(null); setSelEmb(null); setConfirmCxP(false) }}>
+              <button className="btn-secondary" onClick={() => { setEmbModal(null); setSelEmb(null); setConfirmCxP(false); setConfirmRecolectado(false) }}>
                 Cerrar
               </button>
               {/* Guardar campos de embarque solicitado */}
@@ -416,8 +451,12 @@ export function LogisticsPage() {
                   <Save size={13} /> Guardar cambios
                 </button>
               )}
-              {/* Guardar transportista / origen cuando NO está en solicitado */}
-              {selEmb.estatus !== 'solicitado' && (editTransId !== (selEmb.transportistaId ?? '') || editOrigen !== (selEmb.origen ?? '')) && (
+              {/* Guardar transportista / origen / destino cuando NO está en solicitado */}
+              {selEmb.estatus !== 'solicitado' && (
+                editTransId !== (selEmb.transportistaId ?? '') ||
+                editOrigen !== (selEmb.origen ?? '') ||
+                editDestino !== (selEmb.destino ?? '')
+              ) && (
                 <button className="btn btn-warning" onClick={() => void handleSaveTransportista()}>
                   <Edit2 size={13} /> Guardar cambios
                 </button>
@@ -556,16 +595,27 @@ export function LogisticsPage() {
               </div>
             )}
 
-            {/* Editar origen + transportista (cuando no es solicitado) */}
+            {/* Editar origen + destino + transportista (cuando no es solicitado) */}
             {selEmb.estatus !== 'solicitado' && (
-              <div className="space-y-1">
-                <label className="label">Origen del envío</label>
-                <input
-                  className="input"
-                  value={editOrigen}
-                  onChange={e => setEditOrigen(e.target.value)}
-                  placeholder="Ej. Bodega Tepatitlán, Jalisco"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="label">Origen del envío</label>
+                  <input
+                    className="input"
+                    value={editOrigen}
+                    onChange={e => setEditOrigen(e.target.value)}
+                    placeholder="Ej. Bodega Tepatitlán, Jalisco"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="label">Destino</label>
+                  <input
+                    className="input"
+                    value={editDestino}
+                    onChange={e => setEditDestino(e.target.value)}
+                    placeholder="Dirección o ciudad de destino"
+                  />
+                </div>
               </div>
             )}
             <div className="space-y-1">
@@ -582,7 +632,9 @@ export function LogisticsPage() {
                   </option>
                 ))}
               </select>
-              {(editTransId !== (selEmb.transportistaId ?? '') || (selEmb.estatus !== 'solicitado' && editOrigen !== (selEmb.origen ?? ''))) && (
+              {(editTransId !== (selEmb.transportistaId ?? '') ||
+                editOrigen !== (selEmb.origen ?? '') ||
+                editDestino !== (selEmb.destino ?? '')) && selEmb.estatus !== 'solicitado' && (
                 <p className="text-xs text-amber-600">Cambios pendientes — presiona "Guardar cambios" para confirmar.</p>
               )}
             </div>
@@ -610,6 +662,66 @@ export function LogisticsPage() {
                   </span>
                 </div>
               )}
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ══ MODAL CONFIRMAR RECOLECTADO ══════════════════════════════════════ */}
+      {confirmRecolectado && selEmb && (
+        <Modal
+          title="Confirmar recolección"
+          onClose={() => setConfirmRecolectado(false)}
+          footer={
+            <div className="flex gap-2 justify-end">
+              <button className="btn-secondary" onClick={() => setConfirmRecolectado(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={() => void handleConfirmRecolectado()}>
+                <CheckCircle size={13} /> Confirmar recolección
+              </button>
+            </div>
+          }
+        >
+          <div className="space-y-4 text-sm">
+            <p className="text-gray-600">
+              Confirma los datos reales de la recolección para el embarque <span className="font-semibold text-gray-900">{selEmb.folio}</span>.
+            </p>
+
+            {/* Resumen del embarque */}
+            <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 text-xs text-gray-600 space-y-1">
+              <div><span className="font-medium">OC(s):</span> {selEmb.ordenesIds?.map(r => `${r.folio} (${r.kgEmbarcados} kg)`).join(', ') || '—'}</div>
+              <div><span className="font-medium">KG programados:</span> {(selEmb.ordenesIds ?? []).reduce((a, r) => a + r.kgEmbarcados, 0).toLocaleString('es-MX')} kg</div>
+              <div><span className="font-medium">Flete estimado:</span> {(selEmb.costoFlete ?? 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}</div>
+            </div>
+
+            <div className="form-grid">
+              {/* KG reales cargados */}
+              <div className="form-group">
+                <label className="label">KG reales cargados</label>
+                <input
+                  type="number"
+                  className="input"
+                  value={recolKg}
+                  min={1}
+                  onChange={e => setRecolKg(Number(e.target.value))}
+                />
+                {recolKg < (selEmb.ordenesIds ?? []).reduce((a, r) => a + r.kgEmbarcados, 0) && recolKg > 0 && (
+                  <p className="text-xs text-amber-600 mt-1">
+                    Carga parcial — se creará un nuevo embarque con los {(selEmb.ordenesIds ?? []).reduce((a, r) => a + r.kgEmbarcados, 0) - recolKg} kg restantes.
+                  </p>
+                )}
+              </div>
+
+              {/* Costo final del flete */}
+              <div className="form-group">
+                <label className="label">Costo final del flete (MXN)</label>
+                <input
+                  type="number"
+                  className="input"
+                  value={recolFlete}
+                  min={0}
+                  onChange={e => setRecolFlete(Number(e.target.value))}
+                />
+              </div>
             </div>
           </div>
         </Modal>
