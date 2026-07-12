@@ -89,7 +89,7 @@ export function FinancePage() {
   const [selFp, setSelFp] = useState<string>('')
   const [pagoForm, setPagoForm] = useState({ monto: 0, formaPago: 'Transferencia', referencia: '' })
 
-  const BLANK_FP = { supplierId: '', fecha: today(), fechaVencimiento: '', monto: 0, notas: '' }
+  const BLANK_FP = { supplierId: '', fecha: today(), fechaVencimiento: '', monto: 0, notas: '', ordenCompraId: undefined as string | undefined }
   const [fpForm, setFpForm] = useState(BLANK_FP)
 
   const BLANK_BANCO: Omit<Banco, 'bancoId'> = { banco: '', cuenta: '', saldo: 0, moneda: 'MXN', activo: true }
@@ -183,6 +183,7 @@ export function FinancePage() {
     const impuestos = fpForm.monto - subtotal
     const fp = await addFacturaProveedor({
       supplierId: fpForm.supplierId,
+      ordenCompraId: fpForm.ordenCompraId,
       fecha: fpForm.fecha,
       fechaVencimiento: fpForm.fechaVencimiento,
       subtotal, impuestos,
@@ -628,12 +629,13 @@ export function FinancePage() {
                           className="btn btn-primary btn-sm"
                           onClick={async () => {
                             setFpForm({
-                              supplierId: oc.supplierId,
-                              fecha: today(),
-                              fechaVencimiento: oc.fechaEntregaEsperada || today(),
-                              monto: oc.monto,
-                              notas: `OC ${oc.folio}`,
-                            })
+                                supplierId: oc.supplierId,
+                                ordenCompraId: oc.ordenCompraId,
+                                fecha: today(),
+                                fechaVencimiento: oc.fechaEntregaEsperada || today(),
+                                monto: oc.monto,
+                                notas: `OC ${oc.folio}`,
+                              })
                             await updateOrdenCompra(oc.ordenCompraId, { estatus: 'cerrada' })
                             setModal('new_fp')
                             toast.success(`OC ${oc.folio} → iniciando proceso de pago`)

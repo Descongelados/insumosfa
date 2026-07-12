@@ -160,8 +160,9 @@ export function PurchasesPage() {
       estatus: 'solicitado',
       notas: '',
     })
-    await updateOrdenCompra(oc.ordenCompraId, { estatus: 'enviarPago' })
-    toast.success(`OC ${oc.folio} → Embarque creado en Logística y OC disponible en CxP para pago.`)
+    // La OC pasa a enviarLogistica — el embarque la moverá a CxP al cerrarse
+    await updateOrdenCompra(oc.ordenCompraId, { estatus: 'enviarLogistica' })
+    toast.success(`OC ${oc.folio} → Embarque creado en Logística. Se enviará a CxP al cerrar el embarque.`)
     setModal(null)
     setSelOC(null)
   }
