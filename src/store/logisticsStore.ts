@@ -37,6 +37,7 @@ interface LogisticsState {
   subscribeRealtime: () => () => void
   addEmbarque: (e: Omit<Embarque, 'embarqueId' | 'folio'>) => Promise<void>
   updateEmbarque: (id: string, data: Partial<Embarque>) => Promise<void>
+  deleteEmbarque: (id: string) => Promise<void>
   addTransportista: (t: Omit<Transportista, 'transportistaId'>) => Promise<void>
   updateTransportista: (id: string, data: Partial<Transportista>) => Promise<void>
   deleteTransportista: (id: string) => Promise<void>
@@ -95,6 +96,11 @@ export const useLogisticsStore = create<LogisticsState>()((set, get) => ({
     if (data.ordenesIds !== undefined) patch.ordenes_ids = data.ordenesIds
     await supabase.from('erp_shipments').update(patch).eq('id', id)
     await get().loadLogistics()
+  },
+
+  async deleteEmbarque(id) {
+    await supabase.from('erp_shipments').delete().eq('id', id)
+    set(s => ({ embarques: s.embarques.filter(e => e.embarqueId !== id) }))
   },
 
   async addTransportista(data) {

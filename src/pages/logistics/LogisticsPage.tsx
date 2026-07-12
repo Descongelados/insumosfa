@@ -27,7 +27,7 @@ const TRANS_MANAGE_ROLES = ['director', 'operaciones', 'almacen'] as const
 export function LogisticsPage() {
   const {
     embarques, transportistas, loadLogistics, subscribeRealtime: subLogistics,
-    addEmbarque: addEmbarqueStore, updateEmbarque,
+    addEmbarque: addEmbarqueStore, updateEmbarque, deleteEmbarque,
     addTransportista, updateTransportista, deleteTransportista,
   } = useLogisticsStore()
   const { orders, loadOrders, subscribeRealtime: subOrders } = useSalesOrdersStore()
@@ -44,13 +44,28 @@ export function LogisticsPage() {
     return () => { u1(); u2(); u3() }
   }, [])
 
-  const canManageTrans = me ? hasRole(me, ...TRANS_MANAGE_ROLES) : false
+  const canManageTrans  = me ? hasRole(me, ...TRANS_MANAGE_ROLES) : false
+  const canDeleteEmbarque = me ? hasRole(me, 'director', 'operaciones') : false
 
   // ── estado de pestañas ───────────────────────────────────────────────────
   const [tab, setTab] = useState<'embarques' | 'transportistas'>('embarques')
 
   // ── búsqueda ─────────────────────────────────────────────────────────────
   const [q, setQ] = useState('')
+
+  // ── eliminar embarque ────────────────────────────────────────────────────
+  const [delEmb, setDelEmb] = useState<Embarque | null>(null)
+
+  async function handleDeleteEmbarque() {
+    if (!delEmb) return
+    // Revertir OCs asociadas a confirmada para que vuelvan a Compras
+    for (const ref of delEmb.ordenesIds ?? []) {
+      await updateOrdenCompra(ref.ordenCompraId, { estatus: 'confirmada' })
+    }
+    await deleteEmbarque(delEmb.embarqueId)
+    toast.success(`Embarque ${delEmb.folio} eliminado.`)
+    setDelEmb(null)
+  }
 
   // ── modal embarque ───────────────────────────────────────────────────────
   type EmbModal = 'view_emb' | null
@@ -325,7 +340,14 @@ export function LogisticsPage() {
                 { key: 'estatus', header: 'Estatus', render: e => <StatusBadge status={e.estatus} /> },
                 {
                   key: 'acc', header: '', render: e => (
-                    <button className="btn btn-secondary btn-sm" onClick={() => openViewEmb(e)}>Ver</button>
+                    <div className="flex gap-1">
+                      <button className="btn btn-secondary btn-sm" onClick={() => openViewEmb(e)}>Ver</button>
+                      {canDeleteEmbarque && e.estatus === 'solicitado' && (
+                        <button className="btn btn-danger btn-sm" title="Eliminar embarque" onClick={() => setDelEmb(e)}>
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </div>
                   )
                 },
               ]}
@@ -628,6 +650,36 @@ export function LogisticsPage() {
             <div className="form-group">
               <label className="label">Tarifa Base (MXN)</label>
               <input type="number" className="input" value={formTrans.tarifaBase} onChange={FTrans('tarifaBase')} min={0} />
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Confirmar eliminar embarque */}
+      {delEmb && (
+        <Modal
+          title="Eliminar embarque"
+          onClose={() => setDelEmb(null)}
+          footer={
+            <>
+              <button className="btn-secondary" onClick={() => setDelEmb(null)}>Cancelar</button>
+              <button className="btn-danger" onClick={() => void handleDeleteEmbarque()}>
+                <Trash2 size={14} /> Eliminar definitivamente
+              </button>
+            </>
+          }
+        >
+          <div className="space-y-3 text-sm text-gray-700">
+            <p>¿Estás seguro de que deseas eliminar el embarque:</p>
+            <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-1">
+              <div className="font-semibold text-gray-900">{delEmb.folio}</div>
+              {(delEmb.ordenesIds?.length ?? 0) > 0 && (
+                <div className="text-gray-500 font-mono text-xs">OC(s): {delEmb.ordenesIds!.map(r => r.folio).join(', ')}</div>
+              )}
+            </div>
+            <div className="flex items-start gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800">
+              <AlertCircle size={15} className="flex-shrink-0 mt-0.5" />
+              <span>Las OC(s) asociadas regresarán a Compras con estatus <strong>confirmada</strong>. Esta acción no se puede deshacer.</span>
             </div>
           </div>
         </Modal>
