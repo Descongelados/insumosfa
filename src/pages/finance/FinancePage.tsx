@@ -5,6 +5,7 @@ import { useSuppliersStore } from '../../store/suppliersStore'
 import { useSalesOrdersStore } from '../../store/salesOrdersStore'
 import { useProductsStore } from '../../store/productsStore'
 import { usePurchasesStore } from '../../store/purchasesStore'
+import { useLogisticsStore } from '../../store/logisticsStore'
 import { useAuthStore } from '../../store/authStore'
 import { hasRole } from '../../store/usersStore'
 import { DataTable } from '../../components/ui/DataTable'
@@ -13,7 +14,7 @@ import { Modal } from '../../components/ui/Modal'
 import { Currency } from '../../components/ui/Currency'
 import { toast } from '../../store/toastStore'
 import type { FacturaVenta, SalesOrder, Banco, GastoNegocio } from '../../types'
-import { DollarSign, CreditCard, Building, Eye, CircleCheck as CheckCircle, Clock, FileText, Plus, CreditCard as Edit2, Trash2, History, CirclePlus as PlusCircle, Receipt, ShoppingCart, XCircle } from 'lucide-react'
+import { DollarSign, CreditCard, Building, Eye, CircleCheck as CheckCircle, Clock, FileText, Plus, CreditCard as Edit2, Trash2, History, CirclePlus as PlusCircle, Receipt, ShoppingCart, XCircle, Truck } from 'lucide-react'
 
 const MXN = (v: number) => v.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })
 const FORMAS_PAGO = ['Transferencia', 'Cheque', 'Efectivo', 'Tarjeta']
@@ -48,6 +49,7 @@ export function FinancePage() {
   const { orders } = useSalesOrdersStore()
   const { products } = useProductsStore()
   const { ordenesCompra, loadPurchases, subscribeRealtime: subPurchases, updateOrdenCompra } = usePurchasesStore()
+  const { embarques, loadLogistics, subscribeRealtime: subLogistics } = useLogisticsStore()
   const { user: me } = useAuthStore()
 
   useEffect(() => {
@@ -55,11 +57,13 @@ export function FinancePage() {
     void loadClients()
     void loadSuppliers()
     void loadPurchases()
+    void loadLogistics()
     const u1 = subFinance()
     const u2 = subClients()
     const u3 = subSuppliers()
     const u4 = subPurchases()
-    return () => { u1(); u2(); u3(); u4() }
+    const u5 = subLogistics()
+    return () => { u1(); u2(); u3(); u4(); u5() }
   }, [])
 
   const canManageBancos  = me ? hasRole(me, 'director', 'administracion') : false
@@ -101,6 +105,8 @@ export function FinancePage() {
 
   // ── derived ──────────────────────────────────────────────────────────────────
   const ocsPendientesPago = ordenesCompra.filter(o => o.estatus === 'enviarPago')
+  // Facturas de proveedor cuyo origen es un flete de embarque
+  const facturasFleteProveedor = facturasProveedor.filter(f => f.embarqueId)
 
   const porCobrar = facturasVenta.filter(f => f.saldoPendiente > 0)
   const pagadas   = facturasVenta.filter(f => f.saldoPendiente === 0 && f.estatus === 'pagada')
@@ -644,6 +650,52 @@ export function FinancePage() {
                           <Plus size={13} /> Iniciar Pago
                         </button>
                       </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Fletes pendientes de pago */}
+          {facturasFleteProveedor.filter(f => f.saldoPendiente > 0).length > 0 && (
+            <div className="card space-y-3">
+              <div className="flex items-center gap-2">
+                <Truck size={17} className="text-orange-500" />
+                <div>
+                  <h3 className="font-semibold text-gray-900">Fletes pendientes de pago</h3>
+                  <p className="text-xs text-gray-500 mt-0.5">Facturas de flete generadas al cerrar embarques</p>
+                </div>
+                <span className="ml-auto text-xs font-bold text-white bg-orange-500 px-2 py-0.5 rounded-full">
+                  {facturasFleteProveedor.filter(f => f.saldoPendiente > 0).length}
+                </span>
+              </div>
+              <div className="space-y-2">
+                {facturasFleteProveedor.filter(f => f.saldoPendiente > 0).map(fp => {
+                  const emb = embarques.find(e => e.embarqueId === fp.embarqueId)
+                  const prov = suppliers.find(s => s.supplierId === fp.supplierId)
+                  return (
+                    <div key={fp.facturaProvId} className="flex items-center justify-between gap-3 p-3 rounded-lg bg-orange-50 border border-orange-200">
+                      <div className="space-y-0.5 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono font-bold text-orange-700 text-sm">{fp.folio}</span>
+                          <span className="text-xs text-gray-500">Embarque: <span className="font-mono text-blue-700">{emb?.folio ?? fp.embarqueId}</span></span>
+                          <span className="text-xs text-gray-500">{prov?.razonSocial ?? '—'}</span>
+                        </div>
+                        <div className="text-sm font-semibold text-gray-800">
+                          Flete: <Currency value={fp.total} />
+                        </div>
+                      </div>
+                      <button
+                        className="btn btn-success btn-sm shrink-0"
+                        onClick={() => {
+                          setSelFp(fp.facturaProvId)
+                          setPagoForm({ monto: fp.saldoPendiente, formaPago: 'Transferencia', referencia: '' })
+                          setModal('pago_prov')
+                        }}
+                      >
+                        <Plus size={13} /> Pagar flete
+                      </button>
                     </div>
                   )
                 })}

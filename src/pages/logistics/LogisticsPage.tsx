@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useLogisticsStore } from '../../store/logisticsStore'
+import { useFinanceStore } from '../../store/financeStore'
 import { useAuthStore } from '../../store/authStore'
 import { hasRole } from '../../store/usersStore'
 import { useSalesOrdersStore } from '../../store/salesOrdersStore'
@@ -32,6 +33,7 @@ export function LogisticsPage() {
   } = useLogisticsStore()
   const { orders, loadOrders, subscribeRealtime: subOrders } = useSalesOrdersStore()
   const { ordenesCompra, loadPurchases, subscribeRealtime: subPurchases, updateOrdenCompra } = usePurchasesStore()
+  const { addFacturaProveedor } = useFinanceStore()
   const { user: me } = useAuthStore()
 
   useEffect(() => {
@@ -203,12 +205,36 @@ export function LogisticsPage() {
   async function handleEnviarCxP() {
     if (!selEmb) return
     await updateEmbarque(selEmb.embarqueId, { estatus: 'cerrado' })
+
+    // Mover OCs a enviarPago (pago de producto) — solo las que aún no estén cerradas/pagadas
     const ocs = selEmb.ordenesIds ?? []
     for (const ref of ocs) {
       const oc = ordenesCompra.find(o => o.ordenCompraId === ref.ordenCompraId)
-      if (oc) await updateOrdenCompra(oc.ordenCompraId, { estatus: 'enviarPago' })
+      if (oc && !['cerrada', 'enviarPago'].includes(oc.estatus)) {
+        await updateOrdenCompra(oc.ordenCompraId, { estatus: 'enviarPago' })
+      }
     }
-    toast.success(`Embarque ${selEmb.folio} cerrado → OC(s) enviadas a CxP.`)
+
+    // Crear factura de flete independiente si el embarque tiene costo
+    if (selEmb.costoFlete > 0) {
+      // Usar el supplierId de la primera OC como referencia del proveedor del flete
+      const firstOC = ocs.length > 0 ? ordenesCompra.find(o => o.ordenCompraId === ocs[0].ordenCompraId) : undefined
+      const supplierId = firstOC?.supplierId ?? ''
+      const today = new Date().toISOString().split('T')[0]
+      await addFacturaProveedor({
+        supplierId,
+        embarqueId: selEmb.embarqueId,
+        fecha: today,
+        fechaVencimiento: today,
+        subtotal: selEmb.costoFlete / 1.16,
+        impuestos: selEmb.costoFlete - selEmb.costoFlete / 1.16,
+        total: selEmb.costoFlete,
+        saldoPendiente: selEmb.costoFlete,
+        estatus: 'recibida',
+      })
+    }
+
+    toast.success(`Embarque ${selEmb.folio} cerrado → OC(s) en CxP${selEmb.costoFlete > 0 ? ' + factura de flete generada' : ''}.`)
     setEmbModal(null)
     setSelEmb(null)
   }
