@@ -11,7 +11,7 @@ import { StatusBadge } from '../../components/ui/StatusBadge'
 import { Modal } from '../../components/ui/Modal'
 import { Currency } from '../../components/ui/Currency'
 import type { Embarque, EmbarqueEstatus, EmbarqueOCRef, Transportista } from '../../types'
-import { Truck, Plus, CreditCard as Edit2, Trash2, CircleAlert as AlertCircle, ToggleLeft, ToggleRight, CheckCircle, Send, Save } from 'lucide-react'
+import { Truck, Plus, CreditCard as Edit2, Trash2, CircleAlert as AlertCircle, ToggleLeft, ToggleRight, CheckCircle, Send, Save, XCircle } from 'lucide-react'
 
 // ─── constantes ────────────────────────────────────────────────────────────
 const ESTADOS_ACTIVOS: EmbarqueEstatus[] = ['solicitado', 'programado', 'recolectado', 'enTransito', 'entregado']
@@ -75,6 +75,9 @@ export function LogisticsPage() {
   const [recolKg, setRecolKg] = useState<number>(0)
   const [recolFlete, setRecolFlete] = useState<number>(0)
 
+  // ── modal cancelar embarque ───────────────────────────────────────────────
+  const [confirmCancelar, setConfirmCancelar] = useState(false)
+
   // ── modal transportista ──────────────────────────────────────────────────
   type TransModal = 'new_trans' | 'edit_trans' | 'del_trans' | null
   const [transModal, setTransModal] = useState<TransModal>(null)
@@ -83,7 +86,7 @@ export function LogisticsPage() {
   const [editTransIdTrans, setEditTransIdTrans] = useState<string | null>(null)
 
   // ── embarques activos (no cerrados) ─────────────────────────────────────
-  const embarquesActivos = embarques.filter(e => e.estatus !== 'cerrado')
+  const embarquesActivos = embarques.filter(e => e.estatus !== 'cerrado' && e.estatus !== 'cancelado')
 
   // ── filtros ──────────────────────────────────────────────────────────────
   const filteredEmb = embarquesActivos.filter(e =>
@@ -217,6 +220,16 @@ export function LogisticsPage() {
     await updateEmbarque(selEmb.embarqueId, { estatus: est })
     setSelEmb(prev => prev ? { ...prev, estatus: est } : prev)
     toast.success(`Estatus actualizado: ${est}`)
+  }
+
+  // ── cancelar embarque ────────────────────────────────────────────────────
+  async function handleCancelarEmbarque() {
+    if (!selEmb) return
+    await updateEmbarque(selEmb.embarqueId, { estatus: 'cancelado' })
+    toast.success(`Embarque ${selEmb.folio} cancelado.`)
+    setConfirmCancelar(false)
+    setEmbModal(null)
+    setSelEmb(null)
   }
 
   // ── enviar a CxP ─────────────────────────────────────────────────────────
@@ -663,6 +676,18 @@ export function LogisticsPage() {
                 </div>
               )}
             </div>
+
+            {/* Cancelar embarque */}
+            {selEmb.estatus !== 'entregado' && selEmb.estatus !== 'cerrado' && selEmb.estatus !== 'cancelado' && (
+              <div className="pt-2 border-t border-gray-200">
+                <button
+                  className="btn btn-sm btn-danger flex items-center gap-1"
+                  onClick={() => setConfirmCancelar(true)}
+                >
+                  <XCircle size={13} /> Cancelar embarque
+                </button>
+              </div>
+            )}
           </div>
         </Modal>
       )}
@@ -722,6 +747,35 @@ export function LogisticsPage() {
                   onChange={e => setRecolFlete(Number(e.target.value))}
                 />
               </div>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ══ MODAL CONFIRMAR CANCELAR EMBARQUE ═══════════════════════════════ */}
+      {confirmCancelar && selEmb && (
+        <Modal
+          title="Cancelar embarque"
+          onClose={() => setConfirmCancelar(false)}
+          footer={
+            <div className="flex gap-2 justify-end">
+              <button className="btn-secondary" onClick={() => setConfirmCancelar(false)}>No, volver</button>
+              <button className="btn btn-danger" onClick={() => void handleCancelarEmbarque()}>
+                <XCircle size={13} /> Sí, cancelar embarque
+              </button>
+            </div>
+          }
+        >
+          <div className="space-y-3 text-sm text-gray-700">
+            <p>¿Estás seguro de que deseas cancelar el embarque <span className="font-semibold text-gray-900">{selEmb.folio}</span>?</p>
+            <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-1 text-xs">
+              <div><span className="font-medium">OC(s):</span> {selEmb.ordenesIds?.map(r => r.folio).join(', ') || '—'}</div>
+              <div><span className="font-medium">Destino:</span> {selEmb.destino || '—'}</div>
+              <div><span className="font-medium">Estatus actual:</span> {selEmb.estatus}</div>
+            </div>
+            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-xs">
+              <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
+              <span>El embarque quedará cancelado y desaparecerá de la lista activa. Esta acción no se puede deshacer.</span>
             </div>
           </div>
         </Modal>
@@ -791,3 +845,4 @@ export function LogisticsPage() {
     </div>
   )
 }
+
