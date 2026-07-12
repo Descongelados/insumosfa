@@ -50,7 +50,7 @@ export function FinancePage() {
   const { orders } = useSalesOrdersStore()
   const { products } = useProductsStore()
   const { ordenesCompra, loadPurchases, subscribeRealtime: subPurchases, updateOrdenCompra } = usePurchasesStore()
-  const { embarques, loadLogistics, subscribeRealtime: subLogistics } = useLogisticsStore()
+  const { embarques, transportistas, loadLogistics, subscribeRealtime: subLogistics } = useLogisticsStore()
   const { applyMovimiento } = useInventoryStore()
   const { user: me } = useAuthStore()
 
@@ -691,14 +691,14 @@ export function FinancePage() {
               <div className="space-y-2">
                 {facturasFleteProveedor.filter(f => f.saldoPendiente > 0).map(fp => {
                   const emb = embarques.find(e => e.embarqueId === fp.embarqueId)
-                  const prov = suppliers.find(s => s.supplierId === fp.supplierId)
+                  const trans = transportistas.find(t => t.transportistaId === fp.transportistaId)
                   return (
                     <div key={fp.facturaProvId} className="flex items-center justify-between gap-3 p-3 rounded-lg bg-orange-50 border border-orange-200">
                       <div className="space-y-0.5 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-mono font-bold text-orange-700 text-sm">{fp.folio}</span>
                           <span className="text-xs text-gray-500">Embarque: <span className="font-mono text-blue-700">{emb?.folio ?? fp.embarqueId}</span></span>
-                          <span className="text-xs text-gray-500">{prov?.razonSocial ?? '—'}</span>
+                          <span className="text-xs text-gray-500">{trans?.nombre ?? '—'}</span>
                         </div>
                         <div className="text-sm font-semibold text-gray-800">
                           Flete: <Currency value={fp.total} />

@@ -15,7 +15,7 @@ type DbPC = {
 }
 type DbFP = {
   id: string; folio: string; supplier_id: string; orden_compra_id: string | null
-  embarque_id: string | null
+  embarque_id: string | null; transportista_id: string | null
   fecha: string; fecha_vencimiento: string; subtotal: number; impuestos: number
   total: number; saldo_pendiente: number; estatus: string
 }
@@ -51,6 +51,7 @@ function toFP(r: DbFP): FacturaProveedor {
     facturaProvId: r.id, folio: r.folio, supplierId: r.supplier_id,
     ordenCompraId: r.orden_compra_id ?? undefined,
     embarqueId: r.embarque_id ?? undefined,
+    transportistaId: r.transportista_id ?? undefined,
     fecha: r.fecha, fechaVencimiento: r.fecha_vencimiento, subtotal: r.subtotal,
     impuestos: r.impuestos, total: r.total, saldoPendiente: r.saldo_pendiente,
     estatus: r.estatus as FacturaProveedor['estatus'],
@@ -187,6 +188,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
         folio, supplier_id: data.supplierId,
         orden_compra_id: data.ordenCompraId ?? null,
         embarque_id: data.embarqueId ?? null,
+        transportista_id: data.transportistaId ?? null,
         fecha: data.fecha, fecha_vencimiento: data.fechaVencimiento,
         subtotal: data.subtotal, impuestos: data.impuestos, total: data.total,
         saldo_pendiente: data.saldoPendiente, estatus: data.estatus,

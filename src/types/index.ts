@@ -275,6 +275,7 @@ export interface FacturaProveedor {
   supplierId: string
   ordenCompraId?: string
   embarqueId?: string        // presente cuando es factura de flete
+  transportistaId?: string   // presente cuando es factura de flete
   fecha: string
   fechaVencimiento: string
   subtotal: number

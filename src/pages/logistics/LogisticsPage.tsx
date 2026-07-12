@@ -248,13 +248,11 @@ export function LogisticsPage() {
 
     // Crear factura de flete independiente si el embarque tiene costo
     if (selEmb.costoFlete > 0) {
-      // Usar el supplierId de la primera OC como referencia del proveedor del flete
-      const firstOC = ocs.length > 0 ? ordenesCompra.find(o => o.ordenCompraId === ocs[0].ordenCompraId) : undefined
-      const supplierId = firstOC?.supplierId ?? ''
       const today = new Date().toISOString().split('T')[0]
       await addFacturaProveedor({
-        supplierId,
+        supplierId: '',               // flete — no aplica proveedor de mercancía
         embarqueId: selEmb.embarqueId,
+        transportistaId: selEmb.transportistaId,
         fecha: today,
         fechaVencimiento: today,
         subtotal: selEmb.costoFlete / 1.16,
