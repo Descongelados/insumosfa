@@ -314,12 +314,26 @@ export function LogisticsPage() {
                   ? <span className="text-xs font-mono text-gray-600">{e.ordenesIds.map(r => r.folio).join(', ')}</span>
                   : <span className="text-gray-400 text-xs">—</span>
                 },
-                { key: 'origen', header: 'Origen', render: e => <span className="text-xs text-gray-600">{e.origen}</span> },
-                { key: 'destino', header: 'Destino' },
+                { key: 'origen', header: 'Origen', render: e =>
+                  e.origen
+                    ? <span className="text-xs text-gray-700">{e.origen}</span>
+                    : <span className="text-gray-400 text-xs italic">Sin definir</span>
+                },
+                { key: 'destino', header: 'Destino', render: e =>
+                  e.destino
+                    ? <span className="text-xs text-gray-700">{e.destino}</span>
+                    : <span className="text-gray-400 text-xs italic">Sin definir</span>
+                },
                 { key: 'trans', header: 'Transportista', render: e =>
                   transportistas.find(t => t.transportistaId === e.transportistaId)?.nombre
                     ?? <span className="text-amber-600 text-xs font-medium">Sin asignar</span>
                 },
+                { key: 'kg', header: 'KG', render: e => {
+                  const totalKg = (e.ordenesIds ?? []).reduce((sum, r) => sum + (r.kgEmbarcados ?? 0), 0)
+                  return totalKg > 0
+                    ? <span className="text-xs font-medium text-gray-700">{totalKg.toLocaleString('es-MX')} kg</span>
+                    : <span className="text-gray-400 text-xs">—</span>
+                }},
                 { key: 'fechaProg', header: 'F. Programada', render: e => e.fechaProgramada || '-' },
                 { key: 'flete', header: 'Flete', render: e => <Currency value={e.costoFlete} /> },
                 { key: 'estatus', header: 'Estatus', render: e => <StatusBadge status={e.estatus} /> },
@@ -432,7 +446,7 @@ export function LogisticsPage() {
             <div className="grid grid-cols-2 gap-3 text-sm p-4 bg-gray-50 rounded-xl border border-gray-200">
               <div>
                 <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">Origen</span>
-                <span className="text-gray-800">{selEmb.origen}</span>
+                <span className="text-gray-800">{selEmb.origen || '—'}</span>
               </div>
               <div>
                 <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">Estatus</span>
@@ -442,7 +456,7 @@ export function LogisticsPage() {
                 <>
                   <div>
                     <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">Destino</span>
-                    <span className="text-gray-800">{selEmb.destino}</span>
+                    <span className="text-gray-800">{selEmb.destino || '—'}</span>
                   </div>
                   <div>
                     <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">Flete</span>
