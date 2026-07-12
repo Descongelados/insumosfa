@@ -11,7 +11,7 @@ import { StatusBadge } from '../../components/ui/StatusBadge'
 import { Modal } from '../../components/ui/Modal'
 import { Currency } from '../../components/ui/Currency'
 import type { Embarque, EmbarqueEstatus, EmbarqueOCRef, Transportista } from '../../types'
-import { Truck, Plus, CreditCard as Edit2, Trash2, CircleAlert as AlertCircle, ToggleLeft, ToggleRight, CheckCircle, Send, Save, XCircle } from 'lucide-react'
+import { Truck, Plus, CreditCard as Edit2, Trash2, CircleAlert as AlertCircle, ToggleLeft, ToggleRight, CheckCircle, Send, Save } from 'lucide-react'
 
 // ─── constantes ────────────────────────────────────────────────────────────
 const ESTADOS_ACTIVOS: EmbarqueEstatus[] = ['solicitado', 'programado', 'recolectado', 'enTransito', 'entregado']
@@ -53,7 +53,7 @@ export function LogisticsPage() {
   const [q, setQ] = useState('')
 
   // ── modal embarque ───────────────────────────────────────────────────────
-  type EmbModal = 'view_emb' | 'recolectar' | null
+  type EmbModal = 'view_emb' | null
   const [embModal, setEmbModal] = useState<EmbModal>(null)
   const [selEmb, setSelEmb] = useState<Embarque | null>(null)
 
@@ -70,12 +70,6 @@ export function LogisticsPage() {
   // confirmación "enviar a CxP"
   const [confirmCxP, setConfirmCxP] = useState(false)
 
-  // confirmación "cancelar embarque"
-  const [confirmCancel, setConfirmCancel] = useState(false)
-
-  // ── modal recolección ────────────────────────────────────────────────────
-  const [recolectarKg, setRecolectarKg] = useState<number>(0)
-
   // ── modal transportista ──────────────────────────────────────────────────
   type TransModal = 'new_trans' | 'edit_trans' | 'del_trans' | null
   const [transModal, setTransModal] = useState<TransModal>(null)
@@ -83,8 +77,8 @@ export function LogisticsPage() {
   const [formTrans, setFormTrans] = useState(BLANK_TRANS)
   const [editTransIdTrans, setEditTransIdTrans] = useState<string | null>(null)
 
-  // ── embarques activos (excluye cerrados y cancelados) ────────────────────
-  const embarquesActivos = embarques.filter(e => e.estatus !== 'cerrado' && e.estatus !== 'cancelado')
+  // ── embarques activos (no cerrados) ─────────────────────────────────────
+  const embarquesActivos = embarques.filter(e => e.estatus !== 'cerrado')
 
   // ── filtros ──────────────────────────────────────────────────────────────
   const filteredEmb = embarquesActivos.filter(e =>
@@ -99,21 +93,6 @@ export function LogisticsPage() {
   const totalEmb = embarques.filter(e => ['entregado', 'cerrado'].includes(e.estatus)).length
   const pct = totalEmb > 0 ? Math.round(onTime / totalEmb * 100) : 100
 
-  // ── helpers ───────────────────────────────────────────────────────────────
-  /** Suma de kg según los items de las OCs asociadas al embarque (fuente de verdad) */
-  function kgTotalOC(emb: Embarque): number {
-    return (emb.ordenesIds ?? []).reduce((sum, ref) => {
-      const oc = ordenesCompra.find(o => o.ordenCompraId === ref.ordenCompraId)
-      if (!oc) return sum + ref.kgEmbarcados
-      return sum + oc.items.reduce((s, it) => s + it.cantidad, 0)
-    }, 0)
-  }
-
-  /** kg registrados en el embarque (lo que se piensa embarcar) */
-  function kgEmbRegistrados(emb: Embarque): number {
-    return (emb.ordenesIds ?? []).reduce((a, r) => a + r.kgEmbarcados, 0)
-  }
-
   // ── abrir modal embarque ──────────────────────────────────────────────────
   function openViewEmb(e: Embarque) {
     setSelEmb(e)
@@ -124,7 +103,6 @@ export function LogisticsPage() {
     setEditFechaProgramada(e.fechaProgramada ?? '')
     setEditCostoFlete(e.costoFlete ?? 0)
     setConfirmCxP(false)
-    setConfirmCancel(false)
     setEmbModal('view_emb')
   }
 
@@ -165,75 +143,40 @@ export function LogisticsPage() {
     toast.success('Datos del embarque actualizados.')
   }
 
-  // ── abrir modal recolección ───────────────────────────────────────────────
-  function openRecolectarModal() {
-    if (!selEmb) return
-    setRecolectarKg(kgEmbRegistrados(selEmb))
-    setEmbModal('recolectar')
-  }
-
-  // ── confirmar recolección (con split si es parcial) ───────────────────────
-  async function handleConfirmarRecoleccion() {
-    if (!selEmb) return
-    if (recolectarKg <= 0) { toast.error('Los kg recolectados deben ser mayor a cero.'); return }
-
-    const kgRegistrados = kgEmbRegistrados(selEmb)
-    const kgTotal = kgTotalOC(selEmb)
-
-    if (recolectarKg < kgRegistrados) {
-      // Recolección parcial del embarque actual → split
-      const pendiente = kgRegistrados - recolectarKg
-      const idsActualizados = (selEmb.ordenesIds ?? []).map(r => ({
-        ...r,
-        kgEmbarcados: Math.round(recolectarKg * (r.kgEmbarcados / kgRegistrados)),
-      }))
-      await updateEmbarque(selEmb.embarqueId, {
-        estatus: 'recolectado',
-        ordenesIds: idsActualizados,
-        notas: `${selEmb.notas ?? ''} | Recolectado parcial: ${recolectarKg} kg`.trim(),
-      })
-      // Crear embarque pendiente
-      const idsPendiente = (selEmb.ordenesIds ?? []).map(r => ({
-        ...r,
-        kgEmbarcados: Math.round(pendiente * (r.kgEmbarcados / kgRegistrados)),
-      }))
-      await addEmbarqueStore({
-        pedidoId: selEmb.pedidoId,
-        ordenesIds: idsPendiente,
-        origen: selEmb.origen,
-        destino: selEmb.destino,
-        transportistaId: selEmb.transportistaId,
-        fechaProgramada: selEmb.fechaProgramada,
-        costoFlete: 0,
-        estatus: 'solicitado',
-        notas: `Pendiente de ${pendiente} kg — split de ${selEmb.folio}`,
-      })
-      // Marcar OC(s) como parcialLogistica
-      for (const ref of selEmb.ordenesIds ?? []) {
-        const oc = ordenesCompra.find(o => o.ordenCompraId === ref.ordenCompraId)
-        if (oc && oc.estatus === 'enviarLogistica') {
-          await updateOrdenCompra(oc.ordenCompraId, { estatus: 'parcialLogistica' })
-        }
-      }
-      toast.success(`${recolectarKg} kg recolectados. Nuevo embarque creado con ${pendiente} kg pendientes.`)
-    } else {
-      // Recolección completa
-      await updateEmbarque(selEmb.embarqueId, { estatus: 'recolectado' })
-      toast.success(`Estatus actualizado: recolectado`)
-    }
-
-    setEmbModal(null)
-    setSelEmb(null)
-  }
-
   // ── cambiar estatus del embarque ──────────────────────────────────────────
   async function handleCambiarEstatus(est: EmbarqueEstatus) {
     if (!selEmb) return
 
-    // "Recolectado" abre modal especial
+    // Al pasar a "recolectado" verificar si hay KG parciales
     if (est === 'recolectado') {
-      openRecolectarModal()
-      return
+      const totalKgOC = (selEmb.ordenesIds ?? []).reduce((a, r) => a + r.kgEmbarcados, 0)
+      if (totalKgOC > 0 && editCantidad < totalKgOC) {
+        const pendiente = totalKgOC - editCantidad
+        if (editCantidad <= 0) { toast.error('Los KG recolectados deben ser mayor a cero.'); return }
+        // Actualizar el embarque actual con los kg reales
+        const idsActualizados = (selEmb.ordenesIds ?? []).map(r => ({
+          ...r, kgEmbarcados: Math.round(editCantidad * (r.kgEmbarcados / totalKgOC)),
+        }))
+        await updateEmbarque(selEmb.embarqueId, { estatus: 'recolectado', ordenesIds: idsActualizados })
+        // Crear nuevo embarque pendiente
+        const idsPendiente = (selEmb.ordenesIds ?? []).map(r => ({
+          ...r, kgEmbarcados: Math.round(pendiente * (r.kgEmbarcados / totalKgOC)),
+        }))
+        await addEmbarqueStore({
+          pedidoId: selEmb.pedidoId,
+          ordenesIds: idsPendiente,
+          origen: selEmb.origen,
+          destino: selEmb.destino,
+          transportistaId: selEmb.transportistaId,
+          fechaProgramada: selEmb.fechaProgramada,
+          costoFlete: 0,
+          estatus: 'solicitado',
+          notas: `Pendiente de ${pendiente} kg — split de ${selEmb.folio}`,
+        })
+        toast.success(`${editCantidad} kg recolectados. Nuevo embarque creado con ${pendiente} kg pendientes.`)
+        setEmbModal(null); setSelEmb(null)
+        return
+      }
     }
 
     await updateEmbarque(selEmb.embarqueId, { estatus: est })
@@ -241,43 +184,15 @@ export function LogisticsPage() {
     toast.success(`Estatus actualizado: ${est}`)
   }
 
-  // ── cancelar embarque ────────────────────────────────────────────────────
-  async function handleCancelarEmbarque() {
-    if (!selEmb) return
-    await updateEmbarque(selEmb.embarqueId, { estatus: 'cancelado' as EmbarqueEstatus, notas: `${selEmb.notas ?? ''} | Cancelado`.trim() })
-    // Revertir OC(s) a "confirmada" si vienen de enviarLogistica / parcialLogistica
-    for (const ref of selEmb.ordenesIds ?? []) {
-      const oc = ordenesCompra.find(o => o.ordenCompraId === ref.ordenCompraId)
-      if (oc && (oc.estatus === 'enviarLogistica' || oc.estatus === 'parcialLogistica')) {
-        await updateOrdenCompra(oc.ordenCompraId, { estatus: 'confirmada' })
-      }
-    }
-    toast.success(`Embarque ${selEmb.folio} cancelado. OC(s) revertidas a Confirmada.`)
-    setEmbModal(null)
-    setSelEmb(null)
-  }
-
   // ── enviar a CxP ─────────────────────────────────────────────────────────
   async function handleEnviarCxP() {
     if (!selEmb) return
     await updateEmbarque(selEmb.embarqueId, { estatus: 'cerrado' })
-
-    for (const ref of selEmb.ordenesIds ?? []) {
+    const ocs = selEmb.ordenesIds ?? []
+    for (const ref of ocs) {
       const oc = ordenesCompra.find(o => o.ordenCompraId === ref.ordenCompraId)
-      if (!oc) continue
-
-      // ¿Quedan embarques activos (no cerrados/cancelados) para esta OC?
-      const embarquesRestantes = embarques.filter(e =>
-        e.embarqueId !== selEmb.embarqueId &&
-        e.estatus !== 'cerrado' &&
-        e.estatus !== 'cancelado' &&
-        (e.ordenesIds ?? []).some(r => r.ordenCompraId === oc.ordenCompraId)
-      )
-
-      const nuevoEstatus = embarquesRestantes.length > 0 ? 'parcialLogistica' : 'enviarPago'
-      await updateOrdenCompra(oc.ordenCompraId, { estatus: nuevoEstatus })
+      if (oc) await updateOrdenCompra(oc.ordenCompraId, { estatus: 'enviarPago' })
     }
-
     toast.success(`Embarque ${selEmb.folio} cerrado → OC(s) enviadas a CxP.`)
     setEmbModal(null)
     setSelEmb(null)
@@ -475,10 +390,10 @@ export function LogisticsPage() {
       {embModal === 'view_emb' && selEmb && (
         <Modal
           title={`Embarque ${selEmb.folio}`}
-          onClose={() => { setEmbModal(null); setSelEmb(null); setConfirmCxP(false); setConfirmCancel(false) }}
+          onClose={() => { setEmbModal(null); setSelEmb(null); setConfirmCxP(false) }}
           footer={
             <div className="flex gap-2 flex-wrap justify-end">
-              <button className="btn-secondary" onClick={() => { setEmbModal(null); setSelEmb(null); setConfirmCxP(false); setConfirmCancel(false) }}>
+              <button className="btn-secondary" onClick={() => { setEmbModal(null); setSelEmb(null); setConfirmCxP(false) }}>
                 Cerrar
               </button>
               {/* Guardar campos de embarque solicitado */}
@@ -493,21 +408,6 @@ export function LogisticsPage() {
                   <Edit2 size={13} /> Guardar cambios
                 </button>
               )}
-              {/* Cancelar embarque — solo en solicitado / programado */}
-              {(selEmb.estatus === 'solicitado' || selEmb.estatus === 'programado') && !confirmCancel && (
-                <button className="btn btn-danger" onClick={() => setConfirmCancel(true)}>
-                  <XCircle size={13} /> Cancelar embarque
-                </button>
-              )}
-              {confirmCancel && (
-                <>
-                  <span className="text-xs text-red-700 self-center font-medium">¿Confirmar cancelación?</span>
-                  <button className="btn-secondary" onClick={() => setConfirmCancel(false)}>No</button>
-                  <button className="btn btn-danger" onClick={() => void handleCancelarEmbarque()}>
-                    <XCircle size={13} /> Sí, cancelar
-                  </button>
-                </>
-              )}
               {/* Enviar a CxP — solo si está entregado y tiene OCs */}
               {selEmb.estatus === 'entregado' && (selEmb.ordenesIds?.length ?? 0) > 0 && !confirmCxP && (
                 <button className="btn btn-primary" onClick={() => setConfirmCxP(true)}>
@@ -518,7 +418,7 @@ export function LogisticsPage() {
                 <>
                   <span className="text-xs text-amber-700 self-center font-medium">¿Confirmar envío a CxP?</span>
                   <button className="btn-secondary" onClick={() => setConfirmCxP(false)}>No</button>
-                  <button className="btn btn-primary" onClick={() => void handleEnviarCxP()}>
+                  <button className="btn btn-primary" onClick={handleEnviarCxP}>
                     <CheckCircle size={13} /> Sí, enviar
                   </button>
                 </>
@@ -561,13 +461,6 @@ export function LogisticsPage() {
                 </>
               )}
             </div>
-
-            {/* Notas del embarque */}
-            {selEmb.notas && (
-              <div className="text-xs text-gray-500 px-1">
-                <span className="font-semibold">Notas:</span> {selEmb.notas}
-              </div>
-            )}
 
             {/* ── Edición de campos cuando estatus = "solicitado" ─────────── */}
             {selEmb.estatus === 'solicitado' && (
@@ -704,55 +597,6 @@ export function LogisticsPage() {
                 </div>
               )}
             </div>
-          </div>
-        </Modal>
-      )}
-
-      {/* ══ MODAL CONFIRMAR RECOLECCIÓN ══════════════════════════════════════ */}
-      {embModal === 'recolectar' && selEmb && (
-        <Modal
-          title={`Confirmar Recolección — ${selEmb.folio}`}
-          onClose={() => { setEmbModal('view_emb') }}
-          footer={
-            <div className="flex gap-2 justify-end">
-              <button className="btn-secondary" onClick={() => setEmbModal('view_emb')}>Cancelar</button>
-              <button className="btn btn-primary" onClick={() => void handleConfirmarRecoleccion()}>
-                <CheckCircle size={13} /> Confirmar recolección
-              </button>
-            </div>
-          }
-          size="sm"
-        >
-          <div className="space-y-4 text-sm">
-            <p className="text-gray-700">
-              Indica cuántos <strong>kg fueron recolectados</strong>. Si es menor a lo programado, se creará
-              automáticamente un embarque pendiente con el resto.
-            </p>
-            <div className="form-group">
-              <label className="label">
-                KG recolectados
-                <span className="ml-2 text-gray-400 font-normal">
-                  (programado: {kgEmbRegistrados(selEmb).toLocaleString()} kg)
-                </span>
-              </label>
-              <input
-                type="number"
-                className="input"
-                value={recolectarKg}
-                min={1}
-                max={kgEmbRegistrados(selEmb)}
-                onChange={e => setRecolectarKg(Number(e.target.value))}
-              />
-            </div>
-            {recolectarKg > 0 && recolectarKg < kgEmbRegistrados(selEmb) && (
-              <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-xs">
-                <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
-                <span>
-                  Se crearán <strong>2 embarques</strong>: este con {recolectarKg} kg (recolectado)
-                  y uno nuevo con {kgEmbRegistrados(selEmb) - recolectarKg} kg pendientes.
-                </span>
-              </div>
-            )}
           </div>
         </Modal>
       )}
