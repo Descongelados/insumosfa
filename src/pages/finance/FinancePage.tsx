@@ -351,7 +351,7 @@ export function FinancePage() {
           <CreditCard size={15} /> CxC
           <span className="ml-1 text-xs opacity-75">({porCobrar.length} pendientes)</span>
         </button>
-        <button className={`btn ${tab === 'cxp' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => { setTab('cxp'); void loadPurchases() }}>
+        <button className={`btn ${tab === 'cxp' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('cxp')}>
           <CreditCard size={15} /> CxP
           <span className="ml-1 text-xs opacity-75">
             ({facturasProveedor.filter(f => f.saldoPendiente > 0).length + ocsPendientesPago.length} pendientes)
@@ -1335,4 +1335,3 @@ export function FinancePage() {
     </div>
   )
 }
-
