@@ -166,17 +166,6 @@ export function FinancePage() {
     await addPagoProveedor({ facturaProvId: selFp, supplierId: fp.supplierId, fecha: today(), ...pagoForm })
     const saldoRestante = Math.max(0, fp.saldoPendiente - pagoForm.monto)
     if (saldoRestante === 0) {
-      const prov = suppliers.find(s => s.supplierId === fp.supplierId)
-      // Gasto del mes
-      await addGasto({
-        fecha: today(),
-        categoria: 'Suministros',
-        descripcion: `Pago OC — ${prov?.razonSocial ?? fp.folio} (${fp.folio})`,
-        monto: pagoForm.monto,
-        formaPago: pagoForm.formaPago,
-        referencia: pagoForm.referencia,
-        notas: `Generado automáticamente al liquidar ${fp.folio}`,
-      })
       // Entrada al inventario — solo para facturas vinculadas a una OC (no fletes)
       if (fp.ordenCompraId) {
         const oc = ordenesCompra.find(o => o.ordenCompraId === fp.ordenCompraId)
