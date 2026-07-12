@@ -249,13 +249,11 @@ export function LogisticsPage() {
   // ── detectar si cambió algún campo de solicitado ─────────────────────────
   function solicitadoCambiado(): boolean {
     if (!selEmb) return false
-    const cantActual = selEmb.ordenesIds?.[0]?.kgEmbarcados ?? 0
     return (
       editOrigen !== (selEmb.origen ?? '') ||
       editDestino !== (selEmb.destino ?? '') ||
       editFechaProgramada !== (selEmb.fechaProgramada ?? '') ||
-      editCostoFlete !== (selEmb.costoFlete ?? 0) ||
-      editCantidad !== cantActual
+      editCostoFlete !== (selEmb.costoFlete ?? 0)
     )
   }
 
@@ -573,11 +571,12 @@ export function LogisticsPage() {
                     <label className="label">Cantidad a transportar (kg)</label>
                     <input
                       type="number"
-                      className="input"
+                      className="input bg-gray-100 cursor-not-allowed"
                       value={editCantidad}
-                      min={0}
-                      onChange={e => setEditCantidad(Number(e.target.value))}
+                      readOnly
+                      title="La cantidad se confirma al pasar a estado Recolectado"
                     />
+                    <p className="text-xs text-gray-400 mt-1">Se confirma al pasar a Recolectado</p>
                   </div>
                   <div className="form-group">
                     <label className="label">Fecha programada</label>
@@ -729,11 +728,25 @@ export function LogisticsPage() {
                   min={1}
                   onChange={e => setRecolKg(Number(e.target.value))}
                 />
-                {recolKg < (selEmb.ordenesIds ?? []).reduce((a, r) => a + r.kgEmbarcados, 0) && recolKg > 0 && (
-                  <p className="text-xs text-amber-600 mt-1">
-                    Carga parcial — se creará un nuevo embarque con los {(selEmb.ordenesIds ?? []).reduce((a, r) => a + r.kgEmbarcados, 0) - recolKg} kg restantes.
-                  </p>
-                )}
+                {(() => {
+                  const total = (selEmb.ordenesIds ?? []).reduce((a, r) => a + r.kgEmbarcados, 0)
+                  const restantes = total - recolKg
+                  if (recolKg > 0 && restantes > 0) {
+                    return (
+                      <p className="text-xs text-amber-600 mt-1">
+                        Recolectando <strong>{recolKg.toLocaleString('es-MX')} de {total.toLocaleString('es-MX')} kg</strong> — quedan {restantes.toLocaleString('es-MX')} kg pendientes que generarán un nuevo embarque.
+                      </p>
+                    )
+                  }
+                  if (recolKg > 0 && total > 0) {
+                    return (
+                      <p className="text-xs text-green-600 mt-1">
+                        Recolectando <strong>{recolKg.toLocaleString('es-MX')} de {total.toLocaleString('es-MX')} kg</strong> — carga completa.
+                      </p>
+                    )
+                  }
+                  return null
+                })()}
               </div>
 
               {/* Costo final del flete */}
@@ -845,4 +858,5 @@ export function LogisticsPage() {
     </div>
   )
 }
+
 
