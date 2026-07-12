@@ -95,7 +95,7 @@ export function FinancePage() {
   const [selFp, setSelFp] = useState<string>('')
   const [pagoForm, setPagoForm] = useState({ monto: 0, formaPago: 'Transferencia', referencia: '' })
 
-  const BLANK_FP = { supplierId: '', fecha: today(), fechaVencimiento: '', monto: 0, notas: '', ordenCompraId: undefined as string | undefined }
+  const BLANK_FP = { supplierId: '', fecha: today(), fechaVencimiento: '', monto: 0, notas: '', ordenCompraId: undefined as string | undefined, formaPago: 'Transferencia', referencia: '' }
   const [fpForm, setFpForm] = useState(BLANK_FP)
 
   const BLANK_BANCO: Omit<Banco, 'bancoId'> = { banco: '', cuenta: '', saldo: 0, moneda: 'MXN', activo: true }
@@ -204,7 +204,34 @@ export function FinancePage() {
       saldoPendiente: fpForm.monto,
       estatus: 'recibida',
     })
-    toast.success(`Factura proveedor ${fp.folio} registrada.`)
+    // Si viene de una OC, registrar el pago en el mismo paso
+    if (fpForm.ordenCompraId && fp.facturaProvId) {
+      await addPagoProveedor({
+        facturaProvId: fp.facturaProvId,
+        supplierId: fpForm.supplierId,
+        fecha: today(),
+        monto: fpForm.monto,
+        formaPago: fpForm.formaPago,
+        referencia: fpForm.referencia,
+      })
+      // Entrada al inventario
+      const oc = ordenesCompra.find(o => o.ordenCompraId === fpForm.ordenCompraId)
+      if (oc) {
+        for (const item of oc.items) {
+          await applyMovimiento({
+            productId: item.productId,
+            tipo: 'EntradaCompra',
+            cantidad: item.cantidad,
+            documentoOrigen: oc.folio,
+            usuario: me?.name ?? 'CxP',
+            notas: `Pago liquidado: ${fp.folio}`,
+          })
+        }
+      }
+      toast.success(`OC ${oc?.folio ?? ''} pagada y productos ingresados al inventario.`)
+    } else {
+      toast.success(`Factura proveedor ${fp.folio} registrada.`)
+    }
     setModal(null)
     setFpForm(BLANK_FP)
   }
@@ -648,6 +675,8 @@ export function FinancePage() {
                                 fechaVencimiento: oc.fechaEntregaEsperada || today(),
                                 monto: oc.monto,
                                 notas: `OC ${oc.folio}`,
+                                formaPago: 'Transferencia',
+                                referencia: '',
                               })
                             await updateOrdenCompra(oc.ordenCompraId, { estatus: 'cerrada' })
                             setModal('new_fp')
@@ -1198,6 +1227,21 @@ export function FinancePage() {
                 </p>
               )}
             </div>
+            {fpForm.ordenCompraId && (
+              <>
+                <div className="form-group">
+                  <label className="label">Forma de Pago *</label>
+                  <select className="select" value={fpForm.formaPago} onChange={(e) => setFpForm(f => ({ ...f, formaPago: e.target.value }))}>
+                    {FORMAS_PAGO.map(x => <option key={x}>{x}</option>)}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="label">Referencia</label>
+                  <input className="input" value={fpForm.referencia} placeholder="TRF-20240101-001"
+                    onChange={(e) => setFpForm(f => ({ ...f, referencia: e.target.value }))} />
+                </div>
+              </>
+            )}
           </div>
         </Modal>
       )}
