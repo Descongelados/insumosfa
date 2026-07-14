@@ -3,21 +3,22 @@ import type { Role } from './types'
 /**
  * Matriz de acceso por ruta.
  * Cada entrada lista los roles que PUEDEN acceder.
- * 'director' siempre tiene acceso total — se agrega aquí
+ * 'director' siempre tiene acceso total - se agrega aquí
  * explícitamente para que sea legible y fácil de auditar.
  */
 export const ROUTE_ROLES: Record<string, Role[]> = {
   '/':                      ['director', 'administracion', 'compras', 'ventas', 'operaciones', 'almacen'],
   '/clientes-prospectos':   ['director', 'administracion', 'ventas'],
-  '/cotizaciones':['director', 'ventas'],
-  '/pedidos':     ['director', 'ventas', 'operaciones'],
-  '/productos':   ['director', 'administracion', 'compras', 'ventas', 'almacen', 'operaciones'],
-  '/inventario':  ['director', 'almacen', 'operaciones', 'compras'],
-  '/proveedores': ['director', 'administracion', 'compras'],
-  '/compras':     ['director', 'compras', 'operaciones', 'almacen'],
-  '/logistica':   ['director', 'operaciones', 'almacen'],
-  '/finanzas':    ['director', 'administracion'],
-  '/configuracion': ['director', 'administracion', 'compras', 'ventas', 'operaciones', 'almacen'], // todos ven el módulo, pero con restricciones internas
+  '/cotizaciones':          ['director', 'ventas'],
+  '/pedidos':               ['director', 'ventas', 'operaciones'],
+  '/productos':             ['director', 'administracion', 'compras', 'ventas', 'almacen', 'operaciones'],
+  '/inventario':            ['director', 'almacen', 'operaciones', 'compras'],
+  '/proveedores':           ['director', 'administracion', 'compras'],
+  '/compras':               ['director', 'compras', 'operaciones', 'almacen'],
+  '/logistica':             ['director', 'operaciones', 'almacen'],
+  '/finanzas':              ['director', 'administracion'],
+  '/reportes':              ['director', 'administracion'],
+  '/configuracion':         ['director', 'administracion', 'compras', 'ventas', 'operaciones', 'almacen'],
 }
 
 /** Devuelve true si alguno de los roles del usuario da acceso a la ruta */
@@ -30,11 +31,12 @@ export function canAccess(userRoles: Role[] | undefined | null, path: string): b
 
 /**
  * Etiquetas y metadatos de los módulos del menú.
- * 'roles' son los que tienen acceso — se filtra en el Layout.
+ * 'roles' son los que tienen acceso - se filtra en el Layout.
  */
 import {
-  LayoutDashboard, Users, UserSearch, FileText, ShoppingCart,
+  LayoutDashboard, Users, FileText, ShoppingCart,
   Package, Warehouse, Building2, ClipboardList, Truck, DollarSign, Settings, UsersRound,
+  BarChart2,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
@@ -104,6 +106,12 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Finanzas',
     icon: DollarSign,
     to: '/finanzas',
+    roles: ['director', 'administracion'],
+  },
+  {
+    label: 'Reportes',
+    icon: BarChart2,
+    to: '/reportes',
     roles: ['director', 'administracion'],
   },
   {

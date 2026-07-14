@@ -16,6 +16,7 @@ import { SuppliersPage } from './pages/suppliers/SuppliersPage'
 import { PurchasesPage } from './pages/purchases/PurchasesPage'
 import { LogisticsPage } from './pages/logistics/LogisticsPage'
 import { FinancePage } from './pages/finance/FinancePage'
+import { ReportsPage } from './pages/reports/ReportsPage'
 import { ConfigPage } from './pages/users/ConfigPage'
 import { hasLocalStorageData, migrateLocalStorageToSupabase } from './utils/migrateLocalStorage'
 
@@ -35,14 +36,14 @@ function AccesoDenegado() {
     <Layout>
       <div className="flex flex-col items-center justify-center h-full gap-4 text-center">
         <div className="w-20 h-20 rounded-full bg-red-100 flex items-center justify-center">
-          <span className="text-4xl">🔒</span>
+          <span className="text-4xl">🚫</span>
         </div>
         <h1 className="text-2xl font-bold text-gray-900">Acceso denegado</h1>
         <p className="text-gray-500 max-w-sm">
           Tu perfil no tiene permisos para ver este módulo.
           {' '}Tus roles: <strong>{user.roles.join(', ')}</strong>.
         </p>
-        <a href="/" className="btn-primary"> Ir al Dashboard</a>
+        <a href="/" className="btn-primary">Ir al Dashboard</a>
       </div>
     </Layout>
   )
@@ -103,6 +104,7 @@ export function App() {
       <Route path="/compras" element={<RequireAuth path="/compras"><PurchasesPage /></RequireAuth>} />
       <Route path="/logistica" element={<RequireAuth path="/logistica"><LogisticsPage /></RequireAuth>} />
       <Route path="/finanzas" element={<RequireAuth path="/finanzas"><FinancePage /></RequireAuth>} />
+      <Route path="/reportes" element={<RequireAuth path="/reportes"><ReportsPage /></RequireAuth>} />
       <Route path="/configuracion" element={<RequireAuth path="/configuracion"><ConfigPage /></RequireAuth>} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
