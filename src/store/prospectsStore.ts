@@ -46,6 +46,7 @@ interface ProspectsState {
   prospects: Prospect[]
   prospectNotes: ContactNote[]
   loading: boolean
+  initialized: boolean
   loadProspects: () => Promise<void>
   subscribeRealtime: () => () => void
   addProspect: (p: Omit<Prospect, 'prospectoId' | 'fechaAlta'>) => Promise<void>
@@ -57,7 +58,7 @@ interface ProspectsState {
 }
 
 export const useProspectsStore = create<ProspectsState>()((set, get) => ({
-  prospects: [], prospectNotes: [], loading: false,
+  prospects: [], prospectNotes: [], loading: false, initialized: false,
 
   subscribeRealtime() {
     const ch = supabase
@@ -73,11 +74,13 @@ export const useProspectsStore = create<ProspectsState>()((set, get) => ({
   },
 
   async loadProspects() {
+    if (get().initialized) return
     set({ loading: true })
     try {
       const [prospects, prospectNotes] = await Promise.all([fetchProspects(), fetchProspectNotes()])
       if (prospects)     set({ prospects })
       if (prospectNotes) set({ prospectNotes })
+      set({ initialized: true })
     } finally {
       set({ loading: false })
     }

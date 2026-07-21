@@ -53,6 +53,7 @@ interface ClientsState {
   contactos: ContactoCliente[]
   clientNotes: ContactNote[]
   loading: boolean
+  initialized: boolean
   loadClients: () => Promise<void>
   subscribeRealtime: () => () => void
   addClient: (c: Omit<Client, 'clientId' | 'fechaAlta'>) => Promise<string>
@@ -65,7 +66,7 @@ interface ClientsState {
 }
 
 export const useClientsStore = create<ClientsState>()((set, get) => ({
-  clients: [], contactos: [], clientNotes: [], loading: false,
+  clients: [], contactos: [], clientNotes: [], loading: false, initialized: false,
 
   // ── Realtime granular: cada tabla recarga solo su entidad ─────────────────
   subscribeRealtime() {
@@ -85,6 +86,7 @@ export const useClientsStore = create<ClientsState>()((set, get) => ({
   },
 
   async loadClients() {
+    if (get().initialized) return
     set({ loading: true })
     try {
       const [clients, contactos, clientNotes] = await Promise.all([
@@ -93,6 +95,7 @@ export const useClientsStore = create<ClientsState>()((set, get) => ({
       if (clients)     set({ clients })
       if (contactos)   set({ contactos })
       if (clientNotes) set({ clientNotes })
+      set({ initialized: true })
     } finally {
       set({ loading: false })
     }

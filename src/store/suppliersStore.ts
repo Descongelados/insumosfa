@@ -19,9 +19,15 @@ function toSupplier(r: DbSupplier): Supplier {
   }
 }
 
+async function fetchSuppliers() {
+  const { data } = await supabase.from('erp_suppliers').select('*').order('razon_social')
+  return data ? (data as DbSupplier[]).map(toSupplier) : null
+}
+
 interface SuppliersState {
   suppliers: Supplier[]
   loading: boolean
+  initialized: boolean
   loadSuppliers: () => Promise<void>
   subscribeRealtime: () => () => void
   addSupplier: (s: Omit<Supplier, 'supplierId'>) => Promise<void>
@@ -30,21 +36,24 @@ interface SuppliersState {
 }
 
 export const useSuppliersStore = create<SuppliersState>()((set, get) => ({
-  suppliers: [], loading: false,
+  suppliers: [], loading: false, initialized: false,
 
   subscribeRealtime() {
     const ch = supabase
       .channel('erp_suppliers_rt')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_suppliers' }, () => { void get().loadSuppliers() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_suppliers' }, async () => {
+        const d = await fetchSuppliers(); if (d) set({ suppliers: d })
+      })
       .subscribe()
     return () => { void supabase.removeChannel(ch) }
   },
 
   async loadSuppliers() {
+    if (get().initialized) return
     set({ loading: true })
     try {
-      const { data } = await supabase.from('erp_suppliers').select('*').order('razon_social')
-      if (data) set({ suppliers: (data as DbSupplier[]).map(toSupplier) })
+      const d = await fetchSuppliers()
+      if (d) set({ suppliers: d, initialized: true })
     } finally {
       set({ loading: false })
     }
@@ -58,7 +67,8 @@ export const useSuppliersStore = create<SuppliersState>()((set, get) => ({
       precio: data.precio, tiempo_entrega: data.tiempoEntrega,
       cumplimiento: data.cumplimiento, activo: data.activo,
     })
-    await get().loadSuppliers()
+    const d = await fetchSuppliers()
+    if (d) set({ suppliers: d })
   },
 
   async updateSupplier(id, data) {
@@ -79,7 +89,10 @@ export const useSuppliersStore = create<SuppliersState>()((set, get) => ({
     set(s => ({ suppliers: s.suppliers.map(s => s.supplierId === id ? { ...s, ...data } : s) }))
 
     const { error } = await supabase.from('erp_suppliers').update(patch).eq('id', id)
-    if (error) await get().loadSuppliers()
+    if (error) {
+      const d = await fetchSuppliers()
+      if (d) set({ suppliers: d })
+    }
   },
 
   async deleteSupplier(id) {

@@ -112,6 +112,7 @@ interface FinanceState {
   bancos: Banco[]
   gastos: GastoNegocio[]
   loading: boolean
+  initialized: boolean
   loadFinance: () => Promise<void>
   subscribeRealtime: () => () => void
   addFacturaVenta: (f: Omit<FacturaVenta, 'facturaId' | 'folio'>) => Promise<void>
@@ -131,7 +132,7 @@ interface FinanceState {
 export const useFinanceStore = create<FinanceState>()((set, get) => ({
   facturasVenta: [], pagosClientes: [],
   facturasProveedor: [], pagosProveedores: [],
-  bancos: [], gastos: [], loading: false,
+  bancos: [], gastos: [], loading: false, initialized: false,
 
   // ── Realtime granular: cada tabla recarga solo su entidad ─────────────────
   subscribeRealtime() {
@@ -160,6 +161,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
   },
 
   async loadFinance() {
+    if (get().initialized) return
     set({ loading: true })
     try {
       const [fv, pc, fp, pp, bk, gn] = await Promise.all([
@@ -176,6 +178,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
       if (pp) set({ pagosProveedores: pp })
       if (bk) set({ bancos: bk })
       if (gn) set({ gastos: gn })
+      set({ initialized: true })
     } finally {
       set({ loading: false })
     }

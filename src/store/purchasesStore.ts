@@ -30,10 +30,28 @@ function toOrden(r: DbOrden): OrdenCompra {
   }
 }
 
+// ── Helpers de recarga individual ────────────────────────────────────────────
+
+async function fetchSolicitudes() {
+  const { data } = await supabase
+    .from('erp_purchase_requests')
+    .select('*')
+    .order('created_at', { ascending: false })
+  return data ? (data as DbSolicitud[]).map(toSolicitud) : null
+}
+async function fetchOrdenes() {
+  const { data } = await supabase
+    .from('erp_purchase_orders')
+    .select('*')
+    .order('created_at', { ascending: false })
+  return data ? (data as DbOrden[]).map(toOrden) : null
+}
+
 interface PurchasesState {
   solicitudes: SolicitudCompra[]
   ordenesCompra: OrdenCompra[]
   loading: boolean
+  initialized: boolean
   loadPurchases: () => Promise<void>
   subscribeRealtime: () => () => void
   addSolicitud: (s: Omit<SolicitudCompra, 'solicitudId'>) => Promise<void>
@@ -45,26 +63,30 @@ interface PurchasesState {
 }
 
 export const usePurchasesStore = create<PurchasesState>()((set, get) => ({
-  solicitudes: [], ordenesCompra: [], loading: false,
+  solicitudes: [], ordenesCompra: [], loading: false, initialized: false,
 
+  // ── Realtime granular: cada tabla recarga solo su entidad ─────────────────
   subscribeRealtime() {
     const ch = supabase
       .channel('erp_purchases_rt')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_purchase_requests' }, () => { void get().loadPurchases() })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_purchase_orders' }, () => { void get().loadPurchases() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_purchase_requests' }, async () => {
+        const d = await fetchSolicitudes(); if (d) set({ solicitudes: d })
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_purchase_orders' }, async () => {
+        const d = await fetchOrdenes(); if (d) set({ ordenesCompra: d })
+      })
       .subscribe()
     return () => { void supabase.removeChannel(ch) }
   },
 
   async loadPurchases() {
+    if (get().initialized) return
     set({ loading: true })
     try {
-      const [{ data: sd }, { data: od }] = await Promise.all([
-        supabase.from('erp_purchase_requests').select('*').order('created_at', { ascending: false }),
-        supabase.from('erp_purchase_orders').select('*').order('created_at', { ascending: false }),
-      ])
-      if (sd) set({ solicitudes: (sd as DbSolicitud[]).map(toSolicitud) })
-      if (od) set({ ordenesCompra: (od as DbOrden[]).map(toOrden) })
+      const [solicitudes, ordenesCompra] = await Promise.all([fetchSolicitudes(), fetchOrdenes()])
+      if (solicitudes)  set({ solicitudes })
+      if (ordenesCompra) set({ ordenesCompra })
+      set({ initialized: true })
     } finally {
       set({ loading: false })
     }
@@ -76,7 +98,8 @@ export const usePurchasesStore = create<PurchasesState>()((set, get) => ({
       motivo: data.motivo, product_id: data.productId,
       cantidad: data.cantidad, estatus: data.estatus,
     })
-    await get().loadPurchases()
+    const d = await fetchSolicitudes()
+    if (d) set({ solicitudes: d })
   },
 
   async updateSolicitud(id, data) {
@@ -93,7 +116,10 @@ export const usePurchasesStore = create<PurchasesState>()((set, get) => ({
     set(s => ({ solicitudes: s.solicitudes.map(sc => sc.solicitudId === id ? { ...sc, ...data } : sc) }))
 
     const { error } = await supabase.from('erp_purchase_requests').update(patch).eq('id', id)
-    if (error) await get().loadPurchases()
+    if (error) {
+      const d = await fetchSolicitudes()
+      if (d) set({ solicitudes: d })
+    }
   },
 
   async deleteSolicitud(id) {
@@ -116,7 +142,8 @@ export const usePurchasesStore = create<PurchasesState>()((set, get) => ({
       })
       .select('*')
       .maybeSingle()
-    await get().loadPurchases()
+    const d = await fetchOrdenes()
+    if (d) set({ ordenesCompra: d })
     return row ? toOrden(row as DbOrden) : { ...data, ordenCompraId: '', folio }
   },
 
@@ -134,7 +161,10 @@ export const usePurchasesStore = create<PurchasesState>()((set, get) => ({
     set(s => ({ ordenesCompra: s.ordenesCompra.map(oc => oc.ordenCompraId === id ? { ...oc, ...data } : oc) }))
 
     const { error } = await supabase.from('erp_purchase_orders').update(patch).eq('id', id)
-    if (error) await get().loadPurchases()
+    if (error) {
+      const d = await fetchOrdenes()
+      if (d) set({ ordenesCompra: d })
+    }
   },
 
   async deleteOrdenCompra(id) {

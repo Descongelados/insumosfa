@@ -29,10 +29,28 @@ function toShipment(r: DbShipment): Embarque {
   }
 }
 
+// ── Helpers de recarga individual ────────────────────────────────────────────
+
+async function fetchEmbarques() {
+  const { data } = await supabase
+    .from('erp_shipments')
+    .select('*')
+    .order('created_at', { ascending: false })
+  return data ? (data as DbShipment[]).map(toShipment) : null
+}
+async function fetchCarriers() {
+  const { data } = await supabase
+    .from('erp_carriers')
+    .select('*')
+    .order('nombre')
+  return data ? (data as DbCarrier[]).map(toCarrier) : null
+}
+
 interface LogisticsState {
   embarques: Embarque[]
   transportistas: Transportista[]
   loading: boolean
+  initialized: boolean
   loadLogistics: () => Promise<void>
   subscribeRealtime: () => () => void
   addEmbarque: (e: Omit<Embarque, 'embarqueId' | 'folio'>) => Promise<void>
@@ -44,26 +62,30 @@ interface LogisticsState {
 }
 
 export const useLogisticsStore = create<LogisticsState>()((set, get) => ({
-  embarques: [], transportistas: [], loading: false,
+  embarques: [], transportistas: [], loading: false, initialized: false,
 
+  // ── Realtime granular ─────────────────────────────────────────────────────
   subscribeRealtime() {
     const ch = supabase
       .channel('erp_logistics_rt')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_shipments' }, () => { void get().loadLogistics() })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_carriers' }, () => { void get().loadLogistics() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_shipments' }, async () => {
+        const d = await fetchEmbarques(); if (d) set({ embarques: d })
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_carriers' }, async () => {
+        const d = await fetchCarriers(); if (d) set({ transportistas: d })
+      })
       .subscribe()
     return () => { void supabase.removeChannel(ch) }
   },
 
   async loadLogistics() {
+    if (get().initialized) return
     set({ loading: true })
     try {
-      const [{ data: sd }, { data: cd }] = await Promise.all([
-        supabase.from('erp_shipments').select('*').order('created_at', { ascending: false }),
-        supabase.from('erp_carriers').select('*').order('nombre'),
-      ])
-      if (sd) set({ embarques: (sd as DbShipment[]).map(toShipment) })
-      if (cd) set({ transportistas: (cd as DbCarrier[]).map(toCarrier) })
+      const [embarques, transportistas] = await Promise.all([fetchEmbarques(), fetchCarriers()])
+      if (embarques)       set({ embarques })
+      if (transportistas)  set({ transportistas })
+      set({ initialized: true })
     } finally {
       set({ loading: false })
     }
@@ -82,7 +104,8 @@ export const useLogisticsStore = create<LogisticsState>()((set, get) => ({
       costo_flete: data.costoFlete, estatus: data.estatus, notas: data.notas ?? '',
       ordenes_ids: data.ordenesIds ?? [],
     })
-    await get().loadLogistics()
+    const d = await fetchEmbarques()
+    if (d) set({ embarques: d })
   },
 
   async updateEmbarque(id, data) {
@@ -102,7 +125,10 @@ export const useLogisticsStore = create<LogisticsState>()((set, get) => ({
     set(s => ({ embarques: s.embarques.map(e => e.embarqueId === id ? { ...e, ...data } : e) }))
 
     const { error } = await supabase.from('erp_shipments').update(patch).eq('id', id)
-    if (error) await get().loadLogistics()
+    if (error) {
+      const d = await fetchEmbarques()
+      if (d) set({ embarques: d })
+    }
   },
 
   async deleteEmbarque(id) {
@@ -115,7 +141,8 @@ export const useLogisticsStore = create<LogisticsState>()((set, get) => ({
       nombre: data.nombre, contacto: data.contacto, telefono: data.telefono,
       tarifa_base: data.tarifaBase, activo: data.activo,
     })
-    await get().loadLogistics()
+    const d = await fetchCarriers()
+    if (d) set({ transportistas: d })
   },
 
   async updateTransportista(id, data) {
@@ -130,7 +157,10 @@ export const useLogisticsStore = create<LogisticsState>()((set, get) => ({
     set(s => ({ transportistas: s.transportistas.map(t => t.transportistaId === id ? { ...t, ...data } : t) }))
 
     const { error } = await supabase.from('erp_carriers').update(patch).eq('id', id)
-    if (error) await get().loadLogistics()
+    if (error) {
+      const d = await fetchCarriers()
+      if (d) set({ transportistas: d })
+    }
   },
 
   async deleteTransportista(id) {

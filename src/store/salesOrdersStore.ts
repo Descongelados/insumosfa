@@ -23,6 +23,7 @@ function toOrder(r: DbOrder): SalesOrder {
 interface SalesOrdersState {
   orders: SalesOrder[]
   loading: boolean
+  initialized: boolean
   loadOrders: () => Promise<void>
   subscribeRealtime: () => () => void
   addOrder: (o: Omit<SalesOrder, 'pedidoId' | 'folio'>) => Promise<SalesOrder>
@@ -31,7 +32,7 @@ interface SalesOrdersState {
 }
 
 export const useSalesOrdersStore = create<SalesOrdersState>()((set, get) => ({
-  orders: [], loading: false,
+  orders: [], loading: false, initialized: false,
 
   subscribeRealtime() {
     const ch = supabase
@@ -42,10 +43,11 @@ export const useSalesOrdersStore = create<SalesOrdersState>()((set, get) => ({
   },
 
   async loadOrders() {
+    if (get().initialized) return
     set({ loading: true })
     try {
       const { data } = await supabase.from('erp_sales_orders').select('*').order('created_at', { ascending: false })
-      if (data) set({ orders: (data as DbOrder[]).map(toOrder) })
+      if (data) set({ orders: (data as DbOrder[]).map(toOrder), initialized: true })
     } finally {
       set({ loading: false })
     }

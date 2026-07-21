@@ -33,10 +33,14 @@ function toKardex(r: DbKardex): KardexMovimiento {
 interface InventoryState {
   inventario: Inventario[]
   kardex: KardexMovimiento[]
+  /** Producto cuyo kardex está cargado actualmente (para Realtime selectivo). */
+  activeProductId: string | null
   loading: boolean
+  initialized: boolean
   loadInventory: () => Promise<void>
   /** Carga el historial de movimientos de un producto específico (lazy). */
   loadKardexByProduct: (productId: string) => Promise<void>
+  setActiveProductId: (id: string | null) => void
   subscribeRealtime: () => () => void
   applyMovimiento: (params: {
     productId: string; tipo: MovimientoTipo; cantidad: number
@@ -47,13 +51,22 @@ interface InventoryState {
 }
 
 export const useInventoryStore = create<InventoryState>()((set, get) => ({
-  inventario: [], kardex: [], loading: false,
+  inventario: [], kardex: [], activeProductId: null, loading: false, initialized: false,
+
+  setActiveProductId(id) { set({ activeProductId: id }) },
 
   subscribeRealtime() {
     const ch = supabase
       .channel('erp_inventory_rt')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_inventory' }, () => { void get().loadInventory() })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_kardex' }, () => { void get().loadInventory() })
+      // Cambios en stock → recargar inventario completo
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_inventory' }, () => {
+        void get().loadInventory()
+      })
+      // Cambios en kardex → recargar solo el producto actualmente en vista
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_kardex' }, () => {
+        const pid = get().activeProductId
+        if (pid) void get().loadKardexByProduct(pid)
+      })
       .subscribe()
     return () => { void supabase.removeChannel(ch) }
   },
@@ -63,18 +76,19 @@ export const useInventoryStore = create<InventoryState>()((set, get) => ({
   },
 
   async loadInventory() {
+    if (get().initialized) return
     set({ loading: true })
     try {
-      // Solo carga el inventario en la carga inicial; el kardex se carga bajo demanda por producto.
       const { data: id } = await supabase.from('erp_inventory').select('*')
-      if (id) set({ inventario: (id as DbInv[]).map(toInv) })
+      if (id) set({ inventario: (id as DbInv[]).map(toInv), initialized: true })
     } finally {
       set({ loading: false })
     }
   },
 
-  /** Carga el kardex de un producto específico (máx. 200 mov.) — llamar al abrir el detalle. */
+  /** Limpia el kardex anterior, carga el del producto (máx. 200 mov.) y lo marca como activo. */
   async loadKardexByProduct(productId) {
+    set({ kardex: [], activeProductId: productId })
     const { data: kd } = await supabase
       .from('erp_kardex')
       .select('*')
@@ -88,14 +102,14 @@ export const useInventoryStore = create<InventoryState>()((set, get) => ({
     const existing = get().inventario.find(i => i.productId === productId)
     const anterior = existing?.cantidadDisponible ?? 0
 
-    // Optimistic update del inventario
+    // Optimistic update
     set(s => ({
       inventario: s.inventario.map(i =>
         i.productId === productId ? { ...i, cantidadDisponible: nuevaCantidad } : i,
       ),
     }))
 
-    // updated_at lo maneja el trigger en BD (no se envía desde el cliente)
+    // updated_at lo maneja el trigger en BD
     const { error } = await supabase
       .from('erp_inventory')
       .update({ cantidad_disponible: nuevaCantidad })

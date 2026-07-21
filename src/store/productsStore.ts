@@ -16,9 +16,15 @@ function toProduct(r: DbProduct): Product {
   }
 }
 
+async function fetchProducts() {
+  const { data } = await supabase.from('erp_products').select('*').order('descripcion')
+  return data ? (data as DbProduct[]).map(toProduct) : null
+}
+
 interface ProductsState {
   products: Product[]
   loading: boolean
+  initialized: boolean
   loadProducts: () => Promise<void>
   subscribeRealtime: () => () => void
   addProduct: (p: Omit<Product, 'productId'>) => Promise<void>
@@ -28,21 +34,24 @@ interface ProductsState {
 }
 
 export const useProductsStore = create<ProductsState>()((set, get) => ({
-  products: [], loading: false,
+  products: [], loading: false, initialized: false,
 
   subscribeRealtime() {
     const ch = supabase
       .channel('erp_products_rt')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_products' }, () => { void get().loadProducts() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_products' }, async () => {
+        const d = await fetchProducts(); if (d) set({ products: d })
+      })
       .subscribe()
     return () => { void supabase.removeChannel(ch) }
   },
 
   async loadProducts() {
+    if (get().initialized) return
     set({ loading: true })
     try {
-      const { data } = await supabase.from('erp_products').select('*').order('descripcion')
-      if (data) set({ products: (data as DbProduct[]).map(toProduct) })
+      const d = await fetchProducts()
+      if (d) set({ products: d, initialized: true })
     } finally {
       set({ loading: false })
     }
@@ -54,7 +63,8 @@ export const useProductsStore = create<ProductsState>()((set, get) => ({
       marca: data.marca, unidad_medida: data.unidadMedida,
       costo_promedio: data.costoPromedio, precio_venta: data.precioVenta, activo: data.activo,
     })
-    await get().loadProducts()
+    const d = await fetchProducts()
+    if (d) set({ products: d })
   },
 
   async updateProduct(id, data) {
@@ -72,7 +82,10 @@ export const useProductsStore = create<ProductsState>()((set, get) => ({
     set(s => ({ products: s.products.map(p => p.productId === id ? { ...p, ...data } : p) }))
 
     const { error } = await supabase.from('erp_products').update(patch).eq('id', id)
-    if (error) await get().loadProducts()
+    if (error) {
+      const d = await fetchProducts()
+      if (d) set({ products: d })
+    }
   },
 
   async deleteProduct(id) {
