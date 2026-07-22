@@ -32,6 +32,7 @@ const ORIGENES = ['Referido', 'LinkedIn', 'Expo', 'Web', 'Llamada', 'Visita', 'O
 const BLANK_PROSPECT: Omit<Prospect, 'prospectoId' | 'fechaAlta'> = {
   empresa: '', contacto: '', correo: '', telefono: '',
   origen: ORIGENES[0], estatus: 'nuevo', valorPotencial: 0, creadoPor: '',
+  ciudad: '', productosActividad: '',
 }
 const BLANK_FISCAL: DatosFiscales = {
   rfc: '', regimenFiscal: REGIMENES[0], direccionFiscal: '', limiteCredito: 0,
@@ -286,6 +287,8 @@ export function ClientsProspectsPage() {
                 { key: 'empresa', header: 'Empresa' },
                 { key: 'correo', header: 'Correo' },
                 { key: 'telefono', header: 'Teléfono' },
+                { key: 'ciudad', header: 'Ciudad' },
+                { key: 'productosActividad', header: 'Productos / Actividad' },
                 { key: 'origen', header: 'Origen' },
                 { key: 'valorPotencial', header: 'Valor Potencial', render: (p) => <Currency value={p.valorPotencial} /> },
                 { key: 'estatus', header: 'Estatus', render: (p) => <StatusBadge status={p.estatus} /> },
@@ -410,6 +413,14 @@ export function ClientsProspectsPage() {
             <div className="form-group">
               <label className="label">Teléfono</label>
               <input className="input" value={pForm.telefono} onChange={FP('telefono')} />
+            </div>
+            <div className="form-group">
+              <label className="label">Ciudad</label>
+              <input className="input" value={pForm.ciudad} onChange={FP('ciudad')} />
+            </div>
+            <div className="form-group sm:col-span-2">
+              <label className="label">Productos / Actividad</label>
+              <input className="input" value={pForm.productosActividad} onChange={FP('productosActividad')} />
             </div>
             <div className="form-group">
               <label className="label">Origen</label>
