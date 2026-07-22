@@ -286,6 +286,7 @@ export function ClientsProspectsPage() {
                 { key: 'empresa', header: 'Empresa' },
                 { key: 'contacto', header: 'Contacto' },
                 { key: 'correo', header: 'Correo' },
+                { key: 'telefono', header: 'Teléfono' },
                 { key: 'origen', header: 'Origen' },
                 { key: 'valorPotencial', header: 'Valor Potencial', render: (p) => <Currency value={p.valorPotencial} /> },
                 { key: 'estatus', header: 'Estatus', render: (p) => <StatusBadge status={p.estatus} /> },
