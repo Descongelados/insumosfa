@@ -284,7 +284,6 @@ export function ClientsProspectsPage() {
               rowKey={(p) => p.prospectoId}
               columns={[
                 { key: 'empresa', header: 'Empresa' },
-                { key: 'contacto', header: 'Contacto' },
                 { key: 'correo', header: 'Correo' },
                 { key: 'telefono', header: 'Teléfono' },
                 { key: 'origen', header: 'Origen' },
