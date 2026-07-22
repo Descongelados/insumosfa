@@ -31,7 +31,7 @@ const ORIGENES = ['Referido', 'LinkedIn', 'Expo', 'Web', 'Llamada', 'Visita', 'O
 
 const BLANK_PROSPECT: Omit<Prospect, 'prospectoId' | 'fechaAlta'> = {
   empresa: '', contacto: '', correo: '', telefono: '',
-  origen: ORIGENES[0], estatus: 'nuevo', valorPotencial: 0,
+  origen: ORIGENES[0], estatus: 'nuevo', valorPotencial: 0, creadoPor: '',
 }
 const BLANK_FISCAL: DatosFiscales = {
   rfc: '', regimenFiscal: REGIMENES[0], direccionFiscal: '', limiteCredito: 0,
@@ -147,7 +147,7 @@ export function ClientsProspectsPage() {
   function handleSaveProspect() {
     if (!pForm.empresa.trim()) { toast.error('La empresa es obligatoria.'); return }
     if (pEditId) { updateProspect(pEditId, pForm); toast.success('Prospecto actualizado.') }
-    else { addProspect(pForm); toast.success('Prospecto creado.') }
+    else { addProspect({ ...pForm, creadoPor: me?.name ?? '' }); toast.success('Prospecto creado.') }
     setPModal(null)
   }
 
@@ -290,6 +290,7 @@ export function ClientsProspectsPage() {
                 { key: 'valorPotencial', header: 'Valor Potencial', render: (p) => <Currency value={p.valorPotencial} /> },
                 { key: 'estatus', header: 'Estatus', render: (p) => <StatusBadge status={p.estatus} /> },
                 { key: 'fechaAlta', header: 'Fecha Alta' },
+                { key: 'creadoPor', header: 'Contactado por' },
                 {
                   key: 'acc', header: '', render: (p) => (
                     <div className="flex gap-1 flex-wrap">
