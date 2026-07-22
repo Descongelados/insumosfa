@@ -59,6 +59,8 @@ export interface Prospect {
   valorPotencial: number
   fechaAlta: string
   creadoPor: string
+  ciudad: string
+  productosActividad: string
 }
 
 // ─── Products ──────────────────────────────────────────────────────────────
