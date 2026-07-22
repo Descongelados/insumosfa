@@ -11,6 +11,7 @@ type DbProspect = {
   id: string; empresa: string; contacto: string; correo: string
   telefono: string; origen: string; estatus: string
   valor_potencial: number; fecha_alta: string; creado_por: string
+  ciudad: string; productos_actividad: string
 }
 type DbProspectNote = {
   id: string; prospecto_id: string; fecha: string; texto: string
@@ -23,6 +24,7 @@ function toProspect(r: DbProspect): Prospect {
     estatus: r.estatus as Prospect['estatus'],
     valorPotencial: r.valor_potencial, fechaAlta: r.fecha_alta,
     creadoPor: r.creado_por ?? '',
+    ciudad: r.ciudad ?? '', productosActividad: r.productos_actividad ?? '',
   }
 }
 function toProspectNote(r: DbProspectNote): ContactNote {
@@ -74,6 +76,7 @@ export const useProspectsStore = create<ProspectsState>()((set, get) => ({
       empresa: data.empresa, contacto: data.contacto, correo: data.correo,
       telefono: data.telefono, origen: data.origen, estatus: data.estatus,
       valor_potencial: data.valorPotencial, creado_por: data.creadoPor ?? '',
+      ciudad: data.ciudad ?? '', productos_actividad: data.productosActividad ?? '',
     })
     await get().loadProspects()
   },
@@ -87,6 +90,8 @@ export const useProspectsStore = create<ProspectsState>()((set, get) => ({
     if (data.origen !== undefined) patch.origen = data.origen
     if (data.estatus !== undefined) patch.estatus = data.estatus
     if (data.valorPotencial !== undefined) patch.valor_potencial = data.valorPotencial
+    if (data.ciudad !== undefined) patch.ciudad = data.ciudad
+    if (data.productosActividad !== undefined) patch.productos_actividad = data.productosActividad
     await supabase.from('erp_prospects').update(patch).eq('id', id)
     await get().loadProspects()
   },
