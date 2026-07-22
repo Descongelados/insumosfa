@@ -58,6 +58,7 @@ export interface Prospect {
   estatus: ProspectoEstatus
   valorPotencial: number
   fechaAlta: string
+  creadoPor: string
 }
 
 // ─── Products ──────────────────────────────────────────────────────────────
