@@ -10,7 +10,7 @@ export interface DatosFiscales {
 type DbProspect = {
   id: string; empresa: string; contacto: string; correo: string
   telefono: string; origen: string; estatus: string
-  valor_potencial: number; fecha_alta: string
+  valor_potencial: number; fecha_alta: string; creado_por: string
 }
 type DbProspectNote = {
   id: string; prospecto_id: string; fecha: string; texto: string
@@ -22,6 +22,7 @@ function toProspect(r: DbProspect): Prospect {
     correo: r.correo, telefono: r.telefono, origen: r.origen,
     estatus: r.estatus as Prospect['estatus'],
     valorPotencial: r.valor_potencial, fechaAlta: r.fecha_alta,
+    creadoPor: r.creado_por ?? '',
   }
 }
 function toProspectNote(r: DbProspectNote): ContactNote {
@@ -72,7 +73,7 @@ export const useProspectsStore = create<ProspectsState>()((set, get) => ({
     await supabase.from('erp_prospects').insert({
       empresa: data.empresa, contacto: data.contacto, correo: data.correo,
       telefono: data.telefono, origen: data.origen, estatus: data.estatus,
-      valor_potencial: data.valorPotencial,
+      valor_potencial: data.valorPotencial, creado_por: data.creadoPor ?? '',
     })
     await get().loadProspects()
   },
