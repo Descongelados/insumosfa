@@ -302,6 +302,7 @@ export function ClientsProspectsPage() {
             </div>
             <DataTable
               data={filteredProspects}
+              emptyMessage={qP ? `Sin resultados para "${qP}"` : 'Sin prospectos registrados.'}
               rowKey={(p) => p.prospectoId}
               columns={[
                 { key: 'empresa', header: 'Empresa' },
@@ -371,6 +372,7 @@ export function ClientsProspectsPage() {
             </div>
             <DataTable
               data={filteredClients}
+              emptyMessage={qC ? `Sin resultados para "${qC}"` : 'Sin clientes registrados.'}
               rowKey={(c) => c.clientId}
               columns={[
                 { key: 'razonSocial', header: 'Razón Social' },
