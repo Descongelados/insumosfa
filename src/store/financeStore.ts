@@ -80,22 +80,22 @@ function toGasto(r: DbGasto): GastoNegocio {
 // ── Helpers de recarga individual ────────────────────────────────────────────
 
 async function fetchFacturasVenta() {
-  const { data, error } = await supabase.from('erp_invoices_sale').select('*').order('created_at', { ascending: false })
+  const { data, error } = await supabase.from('erp_invoices_sale').select('*').order('created_at', { ascending: false }).limit(200)
   if (error) return null
   return (data as DbFV[]).map(toFV)
 }
 async function fetchPagosClientes() {
-  const { data, error } = await supabase.from('erp_payments_client').select('*').order('created_at', { ascending: false })
+  const { data, error } = await supabase.from('erp_payments_client').select('*').order('created_at', { ascending: false }).limit(200)
   if (error) return null
   return (data as DbPC[]).map(toPC)
 }
 async function fetchFacturasProveedor() {
-  const { data, error } = await supabase.from('erp_invoices_supplier').select('*').order('created_at', { ascending: false })
+  const { data, error } = await supabase.from('erp_invoices_supplier').select('*').order('created_at', { ascending: false }).limit(200)
   if (error) return null
   return (data as DbFP[]).map(toFP)
 }
 async function fetchPagosProveedores() {
-  const { data, error } = await supabase.from('erp_payments_supplier').select('*').order('created_at', { ascending: false })
+  const { data, error } = await supabase.from('erp_payments_supplier').select('*').order('created_at', { ascending: false }).limit(200)
   if (error) return null
   return (data as DbPP[]).map(toPP)
 }

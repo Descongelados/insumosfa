@@ -7,9 +7,11 @@ import { SearchBar } from '../../components/ui/SearchBar'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { Modal } from '../../components/ui/Modal'
 import { Currency } from '../../components/ui/Currency'
+import { CsvImportModal, type CsvColumn } from '../../components/ui/CsvImportModal'
 import { toast } from '../../store/toastStore'
+import { exportToCsv } from '../../utils/exportCsv'
 import type { Product } from '../../types'
-import { Plus, CreditCard as Edit2, Trash2, Package, ToggleLeft, ToggleRight, CircleAlert as AlertCircle } from 'lucide-react'
+import { Plus, CreditCard as Edit2, Trash2, Package, ToggleLeft, ToggleRight, CircleAlert as AlertCircle, Download, Upload } from 'lucide-react'
 
 // Roles que pueden eliminar productos
 const DELETE_ROLES = ['director', 'administracion', 'compras'] as const
@@ -39,6 +41,40 @@ export function ProductsPage() {
   const [editId, setEditId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [showImport, setShowImport] = useState(false)
+
+  const CSV_COLUMNS: CsvColumn[] = [
+    { key: 'sku',          label: 'SKU',             required: true },
+    { key: 'descripcion',  label: 'Descripcion',     required: true },
+    { key: 'categoria',    label: 'Presentacion' },
+    { key: 'marca',        label: 'Marca' },
+    { key: 'unidadMedida', label: 'Unidad Medida' },
+    { key: 'costoPromedio', label: 'Costo Promedio',  transform: v => parseFloat(v) || 0 },
+    { key: 'precioVenta',  label: 'Precio Venta',     transform: v => parseFloat(v) || 0 },
+  ]
+
+  async function handleCsvImport(rows: Record<string, unknown>[]) {
+    for (const row of rows) {
+      await addProduct({
+        sku:          String(row.sku          ?? ''),
+        descripcion:  String(row.descripcion  ?? ''),
+        categoria:    String(row.categoria    ?? ''),
+        marca:        String(row.marca        ?? ''),
+        unidadMedida: String(row.unidadMedida ?? UNIDADES[0]),
+        costoPromedio: Number(row.costoPromedio ?? 0),
+        precioVenta:  Number(row.precioVenta  ?? 0),
+        activo: true,
+      })
+    }
+  }
+
+  function handleExport() {
+    exportToCsv(
+      filtered,
+      { sku: 'SKU', descripcion: 'Descripcion', categoria: 'Presentacion', marca: 'Marca', unidadMedida: 'Unidad Medida', costoPromedio: 'Costo Promedio', precioVenta: 'Precio Venta', activo: 'Activo' },
+      `productos_${new Date().toISOString().slice(0,10)}`
+    )
+  }
 
   const cats = ['Todos', ...Array.from(new Set(products.map((p) => p.categoria)))]
 
@@ -90,7 +126,11 @@ export function ProductsPage() {
           <h1 className="page-title flex items-center gap-2"><Package size={24} /> Productos</h1>
           <p className="page-subtitle">{products.filter(p => p.activo).length} activos / {products.length} total</p>
         </div>
-        <button className="btn-primary" onClick={openNew}><Plus size={16} /> Nuevo Producto</button>
+        <div className="flex gap-2">
+          <button className="btn-secondary" onClick={handleExport} title="Exportar CSV"><Download size={15} /> CSV</button>
+          <button className="btn-secondary" onClick={() => setShowImport(true)} title="Importar CSV"><Upload size={15} /> Importar</button>
+          <button className="btn-primary" onClick={openNew}><Plus size={16} /> Nuevo Producto</button>
+        </div>
       </div>
 
       <div className="card">
@@ -208,6 +248,16 @@ export function ProductsPage() {
             </div>
           </div>
         </Modal>
+      )}
+
+      {showImport && (
+        <CsvImportModal
+          title="Productos"
+          columns={CSV_COLUMNS}
+          exampleRow={{ sku: 'SKU-001', descripcion: 'Producto ejemplo', categoria: 'Caja', marca: 'Marca', unidadMedida: 'PZA', costoPromedio: '100', precioVenta: '150' }}
+          onImport={handleCsvImport}
+          onClose={() => setShowImport(false)}
+        />
       )}
     </div>
   )

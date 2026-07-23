@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { useAuthStore } from './store/authStore'
 import { useConfigStore } from './store/configStore'
@@ -61,10 +61,13 @@ function PageLoader() {
 
 export function App() {
   const { loadCompany } = useConfigStore()
+  const { refreshRoles } = useAuthStore()
 
-  // Cargar datos de empresa desde Supabase al iniciar la app
-  // (useEffect en el nivel de App se ejecuta una sola vez)
-  void loadCompany()
+  useEffect(() => {
+    void loadCompany()
+    // Refresh roles from DB on every app mount to detect role changes / deactivations
+    void refreshRoles()
+  }, [])
 
   return (
     <>

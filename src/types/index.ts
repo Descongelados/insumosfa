@@ -11,7 +11,7 @@ export interface User {
 }
 
 export interface AuthUser extends User {
-  token: string
+  token?: string   // optional — no longer stored/used for auth
 }
 
 // ─── Clients ───────────────────────────────────────────────────────────────

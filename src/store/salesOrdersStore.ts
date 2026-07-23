@@ -24,7 +24,10 @@ function toOrder(r: DbOrder): SalesOrder {
 }
 
 async function fetchOrders() {
-  const { data, error } = await supabase.from('erp_sales_orders').select('*').order('created_at', { ascending: false })
+  const { data, error } = await supabase
+    .from('erp_sales_orders').select('*')
+    .order('created_at', { ascending: false })
+    .limit(200)
   if (error) { toast.error('Error al cargar pedidos.'); return null }
   return (data as DbOrder[]).map(toOrder)
 }

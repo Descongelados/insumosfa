@@ -6,9 +6,11 @@ import { DataTable } from '../../components/ui/DataTable'
 import { SearchBar } from '../../components/ui/SearchBar'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { Modal } from '../../components/ui/Modal'
+import { CsvImportModal, type CsvColumn } from '../../components/ui/CsvImportModal'
 import { toast } from '../../store/toastStore'
+import { exportToCsv } from '../../utils/exportCsv'
 import type { Supplier } from '../../types'
-import { Plus, CreditCard as Edit2, Trash2, Building2, Star, CircleAlert as AlertCircle } from 'lucide-react'
+import { Plus, CreditCard as Edit2, Trash2, Building2, Star, CircleAlert as AlertCircle, Download, Upload } from 'lucide-react'
 
 // Roles que pueden eliminar proveedores
 const DELETE_ROLES = ['director', 'administracion', 'compras'] as const
@@ -48,6 +50,38 @@ export function SuppliersPage() {
   const [editId, setEditId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Supplier | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [showImport, setShowImport] = useState(false)
+
+  const CSV_COLUMNS: CsvColumn[] = [
+    { key: 'razonSocial',     label: 'Razon Social',      required: true },
+    { key: 'rfc',             label: 'RFC' },
+    { key: 'contacto',        label: 'Contacto' },
+    { key: 'correo',          label: 'Correo' },
+    { key: 'telefono',        label: 'Telefono' },
+    { key: 'condicionesPago', label: 'Condiciones Pago' },
+    { key: 'calidad',         label: 'Calidad',    transform: v => Math.min(10, Math.max(1, parseInt(v) || 8)) },
+    { key: 'precio',          label: 'Precio',     transform: v => Math.min(10, Math.max(1, parseInt(v) || 8)) },
+    { key: 'tiempoEntrega',   label: 'Tiempo Entrega', transform: v => Math.min(10, Math.max(1, parseInt(v) || 7)) },
+    { key: 'cumplimiento',    label: 'Cumplimiento', transform: v => Math.min(10, Math.max(1, parseInt(v) || 8)) },
+  ]
+
+  async function handleCsvImport(rows: Record<string, unknown>[]) {
+    for (const row of rows) {
+      await addSupplier({
+        razonSocial:     String(row.razonSocial     ?? ''),
+        rfc:             String(row.rfc             ?? ''),
+        contacto:        String(row.contacto        ?? ''),
+        correo:          String(row.correo          ?? ''),
+        telefono:        String(row.telefono        ?? ''),
+        condicionesPago: String(row.condicionesPago ?? CONDICIONES[1]),
+        calidad:         Number(row.calidad         ?? 8),
+        precio:          Number(row.precio          ?? 8),
+        tiempoEntrega:   Number(row.tiempoEntrega   ?? 7),
+        cumplimiento:    Number(row.cumplimiento    ?? 8),
+        activo: true,
+      })
+    }
+  }
 
   const filtered = suppliers.filter((s) =>
     [s.razonSocial, s.rfc, s.contacto].join(' ').toLowerCase().includes(q.toLowerCase())
@@ -92,7 +126,11 @@ export function SuppliersPage() {
           <h1 className="page-title flex items-center gap-2"><Building2 size={24} /> Proveedores</h1>
           <p className="page-subtitle">{suppliers.filter(s => s.activo).length} proveedores activos</p>
         </div>
-        <button className="btn-primary" onClick={openNew}><Plus size={16} /> Nuevo Proveedor</button>
+        <div className="flex gap-2">
+          <button className="btn-secondary" onClick={() => exportToCsv(filtered, { razonSocial: 'Razon Social', rfc: 'RFC', contacto: 'Contacto', correo: 'Correo', telefono: 'Telefono', condicionesPago: 'Condiciones Pago' }, `proveedores_${new Date().toISOString().slice(0,10)}`)} title="Exportar CSV"><Download size={15} /> CSV</button>
+          <button className="btn-secondary" onClick={() => setShowImport(true)} title="Importar CSV"><Upload size={15} /> Importar</button>
+          <button className="btn-primary" onClick={openNew}><Plus size={16} /> Nuevo Proveedor</button>
+        </div>
       </div>
 
       <div className="card">
@@ -213,6 +251,16 @@ export function SuppliersPage() {
             </div>
           </div>
         </Modal>
+      )}
+
+      {showImport && (
+        <CsvImportModal
+          title="Proveedores"
+          columns={CSV_COLUMNS}
+          exampleRow={{ razonSocial: 'Empresa SA', rfc: 'EMP123456ABC', contacto: 'Juan García', correo: 'juan@empresa.com', telefono: '55 1234 5678', condicionesPago: 'Net 30', calidad: '9', precio: '8', tiempoEntrega: '7', cumplimiento: '9' }}
+          onImport={handleCsvImport}
+          onClose={() => setShowImport(false)}
+        />
       )}
     </div>
   )

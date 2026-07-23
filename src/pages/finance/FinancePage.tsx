@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useFinanceStore } from '../../store/financeStore'
 import { useClientsStore } from '../../store/clientsStore'
 import { useSuppliersStore } from '../../store/suppliersStore'
@@ -15,7 +15,8 @@ import { Modal } from '../../components/ui/Modal'
 import { Currency } from '../../components/ui/Currency'
 import { toast } from '../../store/toastStore'
 import type { FacturaVenta, SalesOrder, Banco, GastoNegocio } from '../../types'
-import { DollarSign, CreditCard, Building, Eye, CircleCheck as CheckCircle, Clock, FileText, Plus, CreditCard as Edit2, Trash2, History, CirclePlus as PlusCircle, Receipt, ShoppingCart, XCircle, Truck } from 'lucide-react'
+import { DollarSign, CreditCard, Building, Eye, CircleCheck as CheckCircle, Clock, FileText, Plus, CreditCard as Edit2, Trash2, History, CirclePlus as PlusCircle, Receipt, ShoppingCart, XCircle, Truck, Download } from 'lucide-react'
+import { exportToCsv } from '../../utils/exportCsv'
 
 const MXN = (v: number) => v.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })
 const FORMAS_PAGO = ['Transferencia', 'Cheque', 'Efectivo', 'Tarjeta']
@@ -75,6 +76,12 @@ export function FinancePage() {
   const [tab, setTab] = useState<'pagos' | 'cxc' | 'cxp' | 'bancos' | 'gastos'>('pagos')
   const [cxcTab, setCxcTab] = useState<'cobrar' | 'pagadas'>('cobrar')
 
+  // ── Filtros de búsqueda ───────────────────────────────────────────────────
+  const [qCxc, setQCxc] = useState('')
+  const [qCxp, setQCxp] = useState('')
+  const [qGastos, setQGastos] = useState('')
+  const [gastoCatFilter, setGastoCatFilter] = useState<string>('todas')
+
   type ModalType =
     | 'pago_cli'
     | 'pago_prov'
@@ -123,6 +130,28 @@ export function FinancePage() {
 
   const pagosMes      = pagosProveedores.filter(p => p.fecha.startsWith(mesActual))
   const totalPagosMes = pagosMes.reduce((a, p) => a + p.monto, 0)
+
+  // ── Listas filtradas para búsqueda ────────────────────────────────────────
+  const filteredPorCobrar = useMemo(() => porCobrar.filter(f => {
+    const cli = clients.find(c => c.clientId === f.clienteId)?.razonSocial ?? ''
+    return [f.folio, cli].join(' ').toLowerCase().includes(qCxc.toLowerCase())
+  }), [porCobrar, clients, qCxc])
+
+  const filteredPagadas = useMemo(() => pagadas.filter(f => {
+    const cli = clients.find(c => c.clientId === f.clienteId)?.razonSocial ?? ''
+    return [f.folio, cli].join(' ').toLowerCase().includes(qCxc.toLowerCase())
+  }), [pagadas, clients, qCxc])
+
+  const filteredCxp = useMemo(() => facturasProveedor.filter(f => {
+    const sup = suppliers.find(s => s.supplierId === f.supplierId)?.razonSocial ?? ''
+    return [f.folio, sup].join(' ').toLowerCase().includes(qCxp.toLowerCase())
+  }), [facturasProveedor, suppliers, qCxp])
+
+  const filteredGastos = useMemo(() => gastos.filter(g => {
+    const matchQ = [g.descripcion, g.referencia, g.categoria].join(' ').toLowerCase().includes(qGastos.toLowerCase())
+    const matchCat = gastoCatFilter === 'todas' || g.categoria === gastoCatFilter
+    return matchQ && matchCat
+  }), [gastos, qGastos, gastoCatFilter])
 
   // ── helpers ──────────────────────────────────────────────────────────────────
   function getOrder(pedidoId?: string): SalesOrder | undefined {
@@ -584,13 +613,26 @@ export function FinancePage() {
                   Usa <strong>Abonar</strong> para pagos parciales o <strong>Cobrar</strong> para liquidar el saldo completo.
                 </p>
               </div>
-              {porCobrar.length === 0 ? (
+              <div className="flex flex-wrap gap-2 mb-2">
+                <input
+                  className="input text-sm py-1 flex-1 min-w-[160px]"
+                  placeholder="Buscar folio o cliente..."
+                  value={qCxc}
+                  onChange={e => setQCxc(e.target.value)}
+                />
+                <button className="btn btn-secondary btn-sm" onClick={() => exportToCsv(
+                  filteredPorCobrar.map(f => ({ folio: f.folio, cliente: clients.find(c=>c.clientId===f.clienteId)?.razonSocial??'-', fecha: f.fecha, vencimiento: f.fechaVencimiento, total: f.total, saldo: f.saldoPendiente, estatus: f.estatus })),
+                  { folio:'Folio', cliente:'Cliente', fecha:'Fecha', vencimiento:'Vencimiento', total:'Total', saldo:'Saldo', estatus:'Estatus' },
+                  `cxc_${new Date().toISOString().slice(0,10)}`
+                )} title="Exportar CSV"><Download size={13} /> CSV</button>
+              </div>
+              {filteredPorCobrar.length === 0 ? (
                 <div className="text-center py-10 text-gray-400">
                   <Clock size={32} className="mx-auto mb-3 opacity-40" />
-                  <p className="text-sm">No hay facturas pendientes de cobro.</p>
+                  <p className="text-sm">{qCxc ? 'Sin resultados para esa búsqueda.' : 'No hay facturas pendientes de cobro.'}</p>
                 </div>
               ) : (
-                <DataTable data={porCobrar} rowKey={(f) => f.facturaId} columns={cxcColumns(true)} />
+                <DataTable data={filteredPorCobrar} rowKey={(f) => f.facturaId} columns={cxcColumns(true)} />
               )}
             </div>
           )}
@@ -602,17 +644,17 @@ export function FinancePage() {
                 <div>
                   <h3 className="font-semibold text-gray-900">Facturas Pagadas</h3>
                   <p className="text-xs text-gray-500 mt-0.5">
-                    {pagadas.length} factura(s) cobradas &middot; {MXN(pagadas.reduce((a, f) => a + f.total, 0))} en total
+                    {filteredPagadas.length} factura(s) cobradas &middot; {MXN(filteredPagadas.reduce((a, f) => a + f.total, 0))} en total
                   </p>
                 </div>
               </div>
-              {pagadas.length === 0 ? (
+              {filteredPagadas.length === 0 ? (
                 <div className="text-center py-10 text-gray-400">
                   <CheckCircle size={32} className="mx-auto mb-3 opacity-40" />
-                  <p className="text-sm">Aun no hay facturas pagadas.</p>
+                  <p className="text-sm">{qCxc ? 'Sin resultados para esa búsqueda.' : 'Aun no hay facturas pagadas.'}</p>
                 </div>
               ) : (
-                <DataTable data={pagadas} rowKey={(f) => f.facturaId} columns={cxcColumns(false)} />
+                <DataTable data={filteredPagadas} rowKey={(f) => f.facturaId} columns={cxcColumns(false)} />
               )}
             </div>
           )}
@@ -749,14 +791,27 @@ export function FinancePage() {
                 <Plus size={15} /> Registrar Factura Proveedor
               </button>
             </div>
-            {facturasProveedor.length === 0 ? (
+            <div className="flex flex-wrap gap-2 mb-2">
+              <input
+                className="input text-sm py-1 flex-1 min-w-[160px]"
+                placeholder="Buscar folio o proveedor..."
+                value={qCxp}
+                onChange={e => setQCxp(e.target.value)}
+              />
+              <button className="btn btn-secondary btn-sm" onClick={() => exportToCsv(
+                filteredCxp.map(f => ({ folio: f.folio, proveedor: suppliers.find(s=>s.supplierId===f.supplierId)?.razonSocial??'-', fecha: f.fecha, vencimiento: f.fechaVencimiento, total: f.total, saldo: f.saldoPendiente, estatus: f.estatus })),
+                { folio:'Folio', proveedor:'Proveedor', fecha:'Fecha', vencimiento:'Vencimiento', total:'Total', saldo:'Saldo', estatus:'Estatus' },
+                `cxp_${new Date().toISOString().slice(0,10)}`
+              )} title="Exportar CSV"><Download size={13} /> CSV</button>
+            </div>
+            {filteredCxp.length === 0 ? (
               <div className="text-center py-10 text-gray-400">
                 <FileText size={32} className="mx-auto mb-3 opacity-40" />
-                <p className="text-sm">No hay facturas de proveedor registradas.</p>
+                <p className="text-sm">{qCxp ? 'Sin resultados para esa búsqueda.' : 'No hay facturas de proveedor registradas.'}</p>
               </div>
             ) : (
               <DataTable
-                data={facturasProveedor}
+                data={filteredCxp}
                 rowKey={(f) => f.facturaProvId}
                 columns={[
                   { key: 'folio', header: 'Folio', render: (f) => <span className="font-mono font-semibold text-blue-700">{f.folio}</span> },
@@ -950,14 +1005,31 @@ export function FinancePage() {
               )}
             </div>
 
-            {gastos.length === 0 ? (
+            <div className="flex flex-wrap gap-2 mb-3">
+              <input
+                className="input text-sm py-1 flex-1 min-w-[160px]"
+                placeholder="Buscar descripción, referencia..."
+                value={qGastos}
+                onChange={e => setQGastos(e.target.value)}
+              />
+              <select className="select w-auto text-sm" value={gastoCatFilter} onChange={e => setGastoCatFilter(e.target.value)}>
+                <option value="todas">Todas las categorías</option>
+                {CATEGORIAS_GASTO.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <button className="btn btn-secondary btn-sm" onClick={() => exportToCsv(
+                filteredGastos.map(g => ({ fecha: g.fecha, categoria: g.categoria, descripcion: g.descripcion, monto: g.monto, formaPago: g.formaPago, referencia: g.referencia })),
+                { fecha:'Fecha', categoria:'Categoria', descripcion:'Descripcion', monto:'Monto', formaPago:'Forma Pago', referencia:'Referencia' },
+                `gastos_${new Date().toISOString().slice(0,10)}`
+              )} title="Exportar CSV"><Download size={13} /> CSV</button>
+            </div>
+            {filteredGastos.length === 0 ? (
               <div className="text-center py-10 text-gray-400">
                 <Receipt size={32} className="mx-auto mb-3 opacity-40" />
-                <p className="text-sm">No hay gastos registrados.</p>
+                <p className="text-sm">{qGastos || gastoCatFilter !== 'todas' ? 'Sin resultados para ese filtro.' : 'No hay gastos registrados.'}</p>
               </div>
             ) : (
               <DataTable
-                data={gastos}
+                data={filteredGastos}
                 rowKey={(g) => g.gastoId}
                 columns={[
                   { key: 'fecha', header: 'Fecha', render: (g: GastoNegocio) => <span className="font-medium">{g.fecha}</span> },

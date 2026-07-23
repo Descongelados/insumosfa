@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react'
+import { useRef, useState, useEffect, useMemo } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { useQuotesStore } from '../../store/quotesStore'
 import { useSalesOrdersStore } from '../../store/salesOrdersStore'
@@ -16,6 +16,7 @@ import { QuotePDF } from '../../components/QuotePDF'
 import { toast } from '../../store/toastStore'
 import type { Quote, QuoteItem, CotizacionEstatus, Client, Product } from '../../types'
 import { Plus, FileText, ArrowRight, Trash2, Eye, Download, Share2, X, Copy, Check, UserCheck, User } from 'lucide-react'
+import { exportToCsv } from '../../utils/exportCsv'
 
 const TAX = 0.16
 const ESTADOS: CotizacionEstatus[] = ['borrador', 'enviada', 'aceptada', 'rechazada', 'vencida']
@@ -109,6 +110,7 @@ export function QuotesPage() {
   const [saving, setSaving]       = useState(false)
   // ── estados ───────────────────────────────────────────────────────────────
   const [q, setQ]                 = useState('')
+  const [statusFilter, setStatusFilter] = useState<CotizacionEstatus | 'todas'>('todas')
   const [modal, setModal]         = useState<'new' | 'preview' | 'del' | null>(null)
   const [selQuote, setSelQuote]   = useState<Quote | null>(null)
   const [delTarget, setDelTarget] = useState<Quote | null>(null)
@@ -119,10 +121,30 @@ export function QuotesPage() {
   const shareRef = useRef<HTMLDivElement>(null)
 
   // ── búsqueda — incluye clientes eventuales ────────────────────────────────
-  const filtered = quotes.filter(qt => {
+  const filtered = useMemo(() => quotes.filter(qt => {
     const nombre = resolveNombre(qt, clients).toLowerCase()
-    return [qt.folio, nombre].join(' ').toLowerCase().includes(q.toLowerCase())
-  })
+    const matchQ = [qt.folio, nombre].join(' ').toLowerCase().includes(q.toLowerCase())
+    const matchS = statusFilter === 'todas' || qt.estatus === statusFilter
+    return matchQ && matchS
+  }), [quotes, clients, q, statusFilter])
+
+  function handleExport() {
+    exportToCsv(
+      filtered.map(qt => ({
+        folio: qt.folio,
+        cliente: resolveNombre(qt, clients),
+        fecha: qt.fecha,
+        vigencia: qt.vigencia,
+        subtotal: qt.subtotal,
+        impuestos: qt.impuestos,
+        total: qt.total,
+        estatus: qt.estatus,
+        notas: qt.notas,
+      })),
+      { folio: 'Folio', cliente: 'Cliente', fecha: 'Fecha', vigencia: 'Vigencia', subtotal: 'Subtotal', impuestos: 'IVA', total: 'Total', estatus: 'Estatus', notas: 'Notas' },
+      `cotizaciones_${new Date().toISOString().slice(0,10)}`
+    )
+  }
 
   // ── helpers de form ───────────────────────────────────────────────────────
   function calcTotals(items: QuoteItem[]) {
@@ -289,19 +311,26 @@ export function QuotesPage() {
           <h1 className="page-title flex items-center gap-2"><FileText size={24} /> Cotizaciones</h1>
           <p className="page-subtitle">{quotes.length} cotizaciones registradas</p>
         </div>
-        <button className="btn-primary" onClick={() => {
-          setForm({ ...BLANK_FORM, clienteId: clients.filter(c => c.estatus === 'activo')[0]?.clientId ?? '' })
-          void loadProducts()
-          setModal('new')
-        }}>
-          <Plus size={16} /> Nueva Cotización
-        </button>
+        <div className="flex gap-2">
+          <button className="btn-secondary" onClick={handleExport} title="Exportar CSV"><Download size={15} /> CSV</button>
+          <button className="btn-primary" onClick={() => {
+            setForm({ ...BLANK_FORM, clienteId: clients.filter(c => c.estatus === 'activo')[0]?.clientId ?? '' })
+            void loadProducts()
+            setModal('new')
+          }}>
+            <Plus size={16} /> Nueva Cotización
+          </button>
+        </div>
       </div>
 
       {/* ── Tabla ───────────────────────────────────────────────────────── */}
       <div className="card">
-        <div className="flex justify-between mb-4">
+        <div className="flex flex-wrap gap-3 mb-4">
           <SearchBar value={q} onChange={setQ} placeholder="Buscar folio o cliente..." />
+          <select className="select w-auto text-sm" value={statusFilter} onChange={e => setStatusFilter(e.target.value as CotizacionEstatus | 'todas')}>
+            <option value="todas">Todos los estatus</option>
+            {ESTADOS.map(e => <option key={e} value={e}>{e.charAt(0).toUpperCase() + e.slice(1)}</option>)}
+          </select>
         </div>
         <DataTable
           data={filtered}

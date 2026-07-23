@@ -61,6 +61,7 @@ async function fetchQuotes() {
     .from('erp_quotes')
     .select(LIST_COLUMNS)
     .order('created_at', { ascending: false })
+    .limit(200)
   if (error) { toast.error('Error al cargar cotizaciones.'); return null }
   // items viene null al usar columnas explícitas; inicializamos vacío
   return (data as unknown as DbQuoteBase[]).map(r => toQuote({ ...r, items: [] }))

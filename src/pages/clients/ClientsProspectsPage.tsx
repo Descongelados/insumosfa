@@ -9,9 +9,11 @@ import { SearchBar } from '../../components/ui/SearchBar'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { Modal } from '../../components/ui/Modal'
 import { Currency } from '../../components/ui/Currency'
+import { CsvImportModal, type CsvColumn } from '../../components/ui/CsvImportModal'
 import { toast } from '../../store/toastStore'
+import { exportToCsv } from '../../utils/exportCsv'
 import type { Client, Prospect, ProspectoEstatus } from '../../types'
-import { Users, UserSearch, Plus, CreditCard as Edit2, Trash2, UserCheck, ArrowRight, Info, CircleAlert as AlertCircle, MessageSquare, Send } from 'lucide-react'
+import { Users, UserSearch, Plus, CreditCard as Edit2, Trash2, UserCheck, ArrowRight, Info, CircleAlert as AlertCircle, MessageSquare, Send, Download, Upload } from 'lucide-react'
 
 // ── Shared constants ─────────────────────────────────────────────────────────
 const REGIMENES = [
@@ -82,6 +84,36 @@ export function ClientsProspectsPage() {
 
   // ── saving state ───────────────────────────────────────────────────────────
   const [saving, setSaving] = useState(false)
+  const [showImportProspects, setShowImportProspects] = useState(false)
+  const [showImportClients, setShowImportClients] = useState(false)
+
+  const PROSPECT_CSV_COLS: CsvColumn[] = [
+    { key: 'empresa',          label: 'Empresa',          required: true },
+    { key: 'contacto',         label: 'Contacto' },
+    { key: 'correo',           label: 'Correo' },
+    { key: 'telefono',         label: 'Telefono' },
+    { key: 'origen',           label: 'Origen' },
+    { key: 'ciudad',           label: 'Ciudad' },
+    { key: 'productosActividad', label: 'Productos Actividad' },
+    { key: 'valorPotencial',   label: 'Valor Potencial', transform: v => parseFloat(v) || 0 },
+  ]
+
+  async function handleImportProspects(rows: Record<string, unknown>[]) {
+    for (const row of rows) {
+      await addProspect({
+        empresa:          String(row.empresa          ?? ''),
+        contacto:         String(row.contacto         ?? ''),
+        correo:           String(row.correo           ?? ''),
+        telefono:         String(row.telefono         ?? ''),
+        origen:           String(row.origen           ?? ORIGENES[0]),
+        ciudad:           String(row.ciudad           ?? ''),
+        productosActividad: String(row.productosActividad ?? ''),
+        valorPotencial:   Number(row.valorPotencial   ?? 0),
+        estatus: 'nuevo',
+        creadoPor: me?.email ?? '',
+      })
+    }
+  }
 
   // ── prospect state ─────────────────────────────────────────────────────────
   type PModal = 'new' | 'edit' | 'del' | 'convert' | 'marcar_ganado' | null
@@ -243,9 +275,16 @@ export function ClientsProspectsPage() {
           </p>
         </div>
         {tab === 'prospectos' && (
-          <button className="btn-primary" onClick={openNewProspect}>
-            <Plus size={16} /> Nuevo Prospecto
-          </button>
+          <div className="flex gap-2">
+            <button className="btn-secondary" onClick={() => exportToCsv(filteredProspects, { empresa:'Empresa', contacto:'Contacto', correo:'Correo', telefono:'Telefono', origen:'Origen', estatus:'Estatus', ciudad:'Ciudad', valorPotencial:'Valor Potencial' }, `prospectos_${new Date().toISOString().slice(0,10)}`)} title="Exportar CSV"><Download size={15} /> CSV</button>
+            <button className="btn-secondary" onClick={() => setShowImportProspects(true)} title="Importar CSV"><Upload size={15} /> Importar</button>
+            <button className="btn-primary" onClick={openNewProspect}><Plus size={16} /> Nuevo Prospecto</button>
+          </div>
+        )}
+        {tab === 'clientes' && (
+          <div className="flex gap-2">
+            <button className="btn-secondary" onClick={() => exportToCsv(filteredClients, { razonSocial:'Razon Social', rfc:'RFC', correo:'Correo', telefono:'Telefono', ciudad:'Ciudad', estatus:'Estatus' }, `clientes_${new Date().toISOString().slice(0,10)}`)} title="Exportar CSV"><Download size={15} /> CSV</button>
+          </div>
         )}
       </div>
 
@@ -676,6 +715,16 @@ export function ClientsProspectsPage() {
             </div>
           </div>
         </Modal>
+      )}
+
+      {showImportProspects && (
+        <CsvImportModal
+          title="Prospectos"
+          columns={PROSPECT_CSV_COLS}
+          exampleRow={{ empresa: 'Empresa SA', contacto: 'Juan García', correo: 'juan@empresa.com', telefono: '55 1234 5678', origen: 'LinkedIn', ciudad: 'CDMX', productosActividad: 'Insumos industriales', valorPotencial: '50000' }}
+          onImport={handleImportProspects}
+          onClose={() => setShowImportProspects(false)}
+        />
       )}
     </div>
   )

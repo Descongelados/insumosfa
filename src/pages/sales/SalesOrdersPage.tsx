@@ -10,8 +10,9 @@ import { StatusBadge } from '../../components/ui/StatusBadge'
 import { Modal } from '../../components/ui/Modal'
 import { Currency } from '../../components/ui/Currency'
 import { toast } from '../../store/toastStore'
+import { exportToCsv } from '../../utils/exportCsv'
 import type { SalesOrder, SalesOrderItem, PedidoEstatus } from '../../types'
-import { ShoppingCart, CreditCard as Edit2, Plus, Trash2 } from 'lucide-react'
+import { ShoppingCart, CreditCard as Edit2, Plus, Trash2, Download } from 'lucide-react'
 
 // 'facturado' moves to Finance — excluded from active pipeline display
 const ESTADOS: PedidoEstatus[] = ['nuevo', 'confirmado', 'surtiendo', 'embarcado', 'entregado', 'facturado', 'cerrado']
@@ -109,7 +110,14 @@ export function SalesOrdersPage() {
           <h1 className="page-title flex items-center gap-2"><ShoppingCart size={24} /> Pedidos de Venta</h1>
           <p className="page-subtitle">{activeOrders.length} pedidos activos en pipeline</p>
         </div>
-        <button className="btn-primary" onClick={openNew}><Plus size={16} /> Nuevo Pedido</button>
+        <div className="flex gap-2">
+          <button className="btn-secondary" onClick={() => exportToCsv(
+            filtered.map(o => ({ folio: o.folio, cliente: clients.find(c => c.clientId === o.clienteId)?.razonSocial ?? '-', fecha: o.fechaPedido, entrega: o.fechaEntrega, total: o.total, estatus: o.estatus })),
+            { folio: 'Folio', cliente: 'Cliente', fecha: 'Fecha Pedido', entrega: 'Fecha Entrega', total: 'Total', estatus: 'Estatus' },
+            `pedidos_${new Date().toISOString().slice(0,10)}`
+          )} title="Exportar CSV"><Download size={15} /> CSV</button>
+          <button className="btn-primary" onClick={openNew}><Plus size={16} /> Nuevo Pedido</button>
+        </div>
       </div>
 
       {/* Pipeline status counters — only active statuses */}
