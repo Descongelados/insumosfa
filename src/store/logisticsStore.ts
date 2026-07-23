@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { toast } from './toastStore'
+import { refChannel } from './realtimeChannel'
 import type { Embarque, Transportista } from '../types'
 import { supabase } from '../lib/supabase'
 
@@ -67,16 +68,14 @@ export const useLogisticsStore = create<LogisticsState>()((set, get) => ({
 
   // ── Realtime granular ─────────────────────────────────────────────────────
   subscribeRealtime() {
-    const ch = supabase
-      .channel('erp_logistics_rt')
+    return refChannel('erp_logistics_rt', (ch) => ch
       .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_shipments' }, async () => {
         const d = await fetchEmbarques(); if (d) set({ embarques: d })
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_carriers' }, async () => {
         const d = await fetchCarriers(); if (d) set({ transportistas: d })
       })
-      .subscribe()
-    return () => { void supabase.removeChannel(ch) }
+    )
   },
 
   async loadLogistics() {

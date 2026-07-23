@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { toast } from './toastStore'
+import { refChannel } from './realtimeChannel'
 import type { FacturaVenta, PagoCliente, FacturaProveedor, PagoProveedor, Banco, GastoNegocio } from '../types'
 import { supabase } from '../lib/supabase'
 
@@ -137,8 +138,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
 
   // ── Realtime granular: cada tabla recarga solo su entidad ─────────────────
   subscribeRealtime() {
-    const ch = supabase
-      .channel('erp_finance_rt')
+    return refChannel('erp_finance_rt', (ch) => ch
       .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_invoices_sale' }, async () => {
         const d = await fetchFacturasVenta(); if (d) set({ facturasVenta: d })
       })
@@ -157,8 +157,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
       .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_gastos_negocio' }, async () => {
         const d = await fetchGastos(); if (d) set({ gastos: d })
       })
-      .subscribe()
-    return () => { void supabase.removeChannel(ch) }
+    )
   },
 
   async loadFinance() {

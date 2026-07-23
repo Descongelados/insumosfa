@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { toast } from './toastStore'
+import { refChannel } from './realtimeChannel'
 import type { SolicitudCompra, OrdenCompra } from '../types'
 import { supabase } from '../lib/supabase'
 
@@ -68,16 +69,14 @@ export const usePurchasesStore = create<PurchasesState>()((set, get) => ({
 
   // ── Realtime granular: cada tabla recarga solo su entidad ─────────────────
   subscribeRealtime() {
-    const ch = supabase
-      .channel('erp_purchases_rt')
+    return refChannel('erp_purchases_rt', (ch) => ch
       .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_purchase_requests' }, async () => {
         const d = await fetchSolicitudes(); if (d) set({ solicitudes: d })
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_purchase_orders' }, async () => {
         const d = await fetchOrdenes(); if (d) set({ ordenesCompra: d })
       })
-      .subscribe()
-    return () => { void supabase.removeChannel(ch) }
+    )
   },
 
   async loadPurchases() {

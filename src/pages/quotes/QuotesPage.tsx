@@ -206,7 +206,7 @@ export function QuotesPage() {
       clienteId: quote.clienteId,
       cotizacionId: quote.cotizacionId,
       fechaPedido: new Date().toISOString().split('T')[0],
-      fechaEntrega: '', estatus: 'nuevo',
+      fechaEntrega: '', estatus: 'nuevo', ivaPct: 16,
       items: quote.items.map(i => ({ ...i, detalleId: `sod${Date.now()}${Math.random()}` })),
       subtotal: quote.subtotal, impuestos: quote.impuestos, total: quote.total, notas: quote.notas,
     })

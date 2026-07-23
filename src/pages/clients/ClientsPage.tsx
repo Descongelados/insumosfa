@@ -24,6 +24,7 @@ const REGIMENES = [
 const BLANK: Omit<Client, 'clientId' | 'fechaAlta'> = {
   razonSocial: '', rfc: '', regimenFiscal: REGIMENES[0],
   direccionFiscal: '', correo: '', telefono: '', limiteCredito: 0, estatus: 'activo',
+  ciudad: '', productosActividad: '',
 }
 
 // Roles que pueden eliminar clientes

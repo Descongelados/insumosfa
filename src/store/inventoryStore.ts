@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { toast } from './toastStore'
+import { refChannel } from './realtimeChannel'
 import type { Inventario, KardexMovimiento, MovimientoTipo } from '../types'
 import { supabase } from '../lib/supabase'
 
@@ -57,8 +58,7 @@ export const useInventoryStore = create<InventoryState>()((set, get) => ({
   setActiveProductId(id) { set({ activeProductId: id }) },
 
   subscribeRealtime() {
-    const ch = supabase
-      .channel('erp_inventory_rt')
+    return refChannel('erp_inventory_rt', (ch) => ch
       // Cambios en stock → recargar inventario completo
       .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_inventory' }, () => {
         void get().loadInventory()
@@ -68,8 +68,7 @@ export const useInventoryStore = create<InventoryState>()((set, get) => ({
         const pid = get().activeProductId
         if (pid) void get().loadKardexByProduct(pid)
       })
-      .subscribe()
-    return () => { void supabase.removeChannel(ch) }
+    )
   },
 
   getStock(productId) {
