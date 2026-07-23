@@ -1,4 +1,4 @@
-import { useMemo, useEffect } from 'react'
+import { useMemo, useEffect, useState } from 'react'
 import { useClientsStore } from '../store/clientsStore'
 import { useProductsStore } from '../store/productsStore'
 import { useSalesOrdersStore } from '../store/salesOrdersStore'
@@ -51,7 +51,13 @@ export function DashboardPage() {
   const { inventario, loadInventory } = useInventoryStore()
   const { prospects, loadProspects } = useProspectsStore()
 
-  useEffect(() => { void loadClients(); void loadProducts(); void loadOrders(); void loadPurchases(); void loadFinance(); void loadInventory(); void loadProspects() }, [])
+  const [loading, setLoading] = useState(true)
+  useEffect(() => {
+    void Promise.all([
+      loadClients(), loadProducts(), loadOrders(),
+      loadPurchases(), loadFinance(), loadInventory(), loadProspects(),
+    ]).finally(() => setLoading(false))
+  }, [])
 
   const totalVentas = orders.reduce((a, o) => a + o.total, 0)
   const cxcVencidas = facturasVenta.filter((f) => f.estatus === 'vencida').reduce((a, f) => a + f.saldoPendiente, 0)
@@ -96,6 +102,12 @@ export function DashboardPage() {
   }, {} as Record<string,number>)
 
   const catData = Object.entries(categorias).map(([cat, qty]) => ({ cat, qty }))
+
+  if (loading) return (
+    <div className="flex items-center justify-center h-64">
+      <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
 
   return (
     <div className="space-y-6">

@@ -1,11 +1,10 @@
-import { lazy, Suspense, useState, useEffect } from 'react'
+import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { useAuthStore } from './store/authStore'
 import { useConfigStore } from './store/configStore'
 import { canAccess } from './rbac'
 import { Layout } from './components/Layout'
 import { Toaster } from './components/ui/Toaster'
-import { hasLocalStorageData, migrateLocalStorageToSupabase } from './utils/migrateLocalStorage'
 
 // Cada página se carga solo cuando el usuario navega a esa ruta
 const LoginPage             = lazy(() => import('./pages/Login').then(m => ({ default: m.LoginPage })))
@@ -51,30 +50,6 @@ function AccesoDenegado() {
   )
 }
 
-/** Pantalla mostrada durante la migración de datos */
-function MigrationScreen() {
-  return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <div className="bg-white rounded-2xl shadow-lg p-10 max-w-sm w-full text-center space-y-4">
-        <div className="w-14 h-14 mx-auto rounded-full bg-blue-50 flex items-center justify-center">
-          <svg className="w-7 h-7 text-blue-600 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
-          </svg>
-        </div>
-        <h2 className="text-lg font-semibold text-gray-900">Sincronizando datos</h2>
-        <p className="text-sm text-gray-500 leading-relaxed">
-          Estamos migrando tu información al sistema compartido.<br/>
-          Esto ocurre una sola vez y toma unos segundos.
-        </p>
-        <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
-          <div className="h-full bg-blue-500 rounded-full animate-pulse w-2/3" />
-        </div>
-      </div>
-    </div>
-  )
-}
-
 /** Indicador de carga mientras se descarga el chunk de la página */
 function PageLoader() {
   return (
@@ -85,18 +60,11 @@ function PageLoader() {
 }
 
 export function App() {
-  const [migrating, setMigrating] = useState(() => hasLocalStorageData())
   const { loadCompany } = useConfigStore()
 
-  useEffect(() => {
-    // Cargar datos de empresa desde Supabase al iniciar la app
-    void loadCompany()
-
-    if (!migrating) return
-    migrateLocalStorageToSupabase().finally(() => setMigrating(false))
-  }, [])
-
-  if (migrating) return <MigrationScreen />
+  // Cargar datos de empresa desde Supabase al iniciar la app
+  // (useEffect en el nivel de App se ejecuta una sola vez)
+  void loadCompany()
 
   return (
     <>

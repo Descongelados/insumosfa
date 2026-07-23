@@ -106,6 +106,7 @@ export function QuotesPage() {
 
   const canDelete = me ? hasRole(me, ...DELETE_ROLES) : false
 
+  const [saving, setSaving]       = useState(false)
   // ── estados ───────────────────────────────────────────────────────────────
   const [q, setQ]                 = useState('')
   const [modal, setModal]         = useState<'new' | 'preview' | 'del' | null>(null)
@@ -175,24 +176,28 @@ export function QuotesPage() {
       toast.error('El nombre del cliente es obligatorio.'); return
     }
     if (form.items.length === 0) { toast.error('Agrega al menos una partida.'); return }
-
-    const { subtotal, impuestos, total } = calcTotals(form.items)
-    const quote = await addQuote({
-      clienteId:        form.clienteMode === 'registrado' ? form.clienteId : '',
-      clienteNombre:    form.clienteMode === 'eventual'   ? form.clienteNombre    : '',
-      clienteRfc:       form.clienteMode === 'eventual'   ? form.clienteRfc       : '',
-      clienteCorreo:    form.clienteMode === 'eventual'   ? form.clienteCorreo    : '',
-      clienteTelefono:  form.clienteMode === 'eventual'   ? form.clienteTelefono  : '',
-      clienteDireccion: form.clienteMode === 'eventual'   ? form.clienteDireccion : '',
-      vigencia: form.vigencia, notas: form.notas, items: form.items,
-      fecha: new Date().toISOString().split('T')[0],
-      subtotal, impuestos, total, estatus: 'borrador',
-    })
-    toast.success(`Cotización ${quote.folio} creada.`)
-    setModal(null)
-    setForm(BLANK_FORM)
-    setSelQuote(quote)
-    setModal('preview')
+    setSaving(true)
+    try {
+      const { subtotal, impuestos, total } = calcTotals(form.items)
+      const quote = await addQuote({
+        clienteId:        form.clienteMode === 'registrado' ? form.clienteId : '',
+        clienteNombre:    form.clienteMode === 'eventual'   ? form.clienteNombre    : '',
+        clienteRfc:       form.clienteMode === 'eventual'   ? form.clienteRfc       : '',
+        clienteCorreo:    form.clienteMode === 'eventual'   ? form.clienteCorreo    : '',
+        clienteTelefono:  form.clienteMode === 'eventual'   ? form.clienteTelefono  : '',
+        clienteDireccion: form.clienteMode === 'eventual'   ? form.clienteDireccion : '',
+        vigencia: form.vigencia, notas: form.notas, items: form.items,
+        fecha: new Date().toISOString().split('T')[0],
+        subtotal, impuestos, total, estatus: 'borrador',
+      })
+      toast.success(`Cotización ${quote.folio} creada.`)
+      setModal(null)
+      setForm(BLANK_FORM)
+      setSelQuote(quote)
+      setModal('preview')
+    } finally {
+      setSaving(false)
+    }
   }
 
   // ── convertir a pedido ────────────────────────────────────────────────────
@@ -354,7 +359,7 @@ export function QuotesPage() {
               >
                 <Eye size={14} /> {form.previewOpen ? 'Ocultar preview' : 'Vista previa'}
               </button>
-              <button className="btn-primary" onClick={handleSave}>Guardar y Ver Cotización</button>
+              <button className="btn-primary" onClick={handleSave} disabled={saving}>{saving ? 'Guardando...' : 'Guardar y Ver Cotización'}</button>
             </>
           }
         >

@@ -79,6 +79,9 @@ export function ClientsProspectsPage() {
   const [qP, setQP] = useState('')
   const [qC, setQC] = useState('')
 
+  // ── saving state ───────────────────────────────────────────────────────────
+  const [saving, setSaving] = useState(false)
+
   // ── prospect state ─────────────────────────────────────────────────────────
   type PModal = 'new' | 'edit' | 'del' | 'convert' | 'marcar_ganado' | null
   const [pModal, setPModal] = useState<PModal>(null)
@@ -147,11 +150,16 @@ export function ClientsProspectsPage() {
     const { prospectoId: _id, fechaAlta: _fa, ...rest } = p
     setPForm(rest); setPEditId(p.prospectoId); setPModal('edit')
   }
-  function handleSaveProspect() {
+  async function handleSaveProspect() {
     if (!pForm.empresa.trim()) { toast.error('La empresa es obligatoria.'); return }
-    if (pEditId) { updateProspect(pEditId, pForm); toast.success('Prospecto actualizado.') }
-    else { addProspect({ ...pForm, creadoPor: me?.name ?? '' }); toast.success('Prospecto creado.') }
-    setPModal(null)
+    setSaving(true)
+    try {
+      if (pEditId) { await updateProspect(pEditId, pForm); toast.success('Prospecto actualizado.') }
+      else { await addProspect({ ...pForm, creadoPor: me?.name ?? '' }); toast.success('Prospecto creado.') }
+      setPModal(null)
+    } finally {
+      setSaving(false)
+    }
   }
 
   function openMarcarGanado(p: Prospect) { setPConvTarget(p); setPModal('marcar_ganado') }
@@ -165,15 +173,19 @@ export function ClientsProspectsPage() {
   function openConvert(p: Prospect) {
     setPConvTarget(p); setFiscal({ ...BLANK_FISCAL }); setPModal('convert')
   }
-  function handleConvert() {
+  async function handleConvert() {
     if (!pConvTarget) return
     if (!fiscal.rfc.trim()) { toast.error('El RFC es obligatorio.'); return }
     if (!fiscal.direccionFiscal.trim()) { toast.error('La dirección fiscal es obligatoria.'); return }
-    convertirACliente(pConvTarget.prospectoId, fiscal)
-    toast.success(`"${pConvTarget.empresa}" convertido a cliente.`)
-    setPModal(null); setPConvTarget(null); setFiscal(BLANK_FISCAL)
-    // Switch to clients tab to show the new client
-    setTab('clientes')
+    setSaving(true)
+    try {
+      await convertirACliente(pConvTarget.prospectoId, fiscal)
+      toast.success(`"${pConvTarget.empresa}" convertido a cliente.`)
+      setPModal(null); setPConvTarget(null); setFiscal(BLANK_FISCAL)
+      setTab('clientes')
+    } finally {
+      setSaving(false)
+    }
   }
 
   function openDelProspect(p: Prospect) { setPDelTarget(p); setPModal('del') }
@@ -192,10 +204,15 @@ export function ClientsProspectsPage() {
     const { clientId: _id, fechaAlta: _fa, ...rest } = c
     setCForm(rest); setCEditId(c.clientId); setCModal('edit')
   }
-  function handleSaveClient() {
+  async function handleSaveClient() {
     if (!cForm.razonSocial?.trim()) { toast.error('La razón social es obligatoria.'); return }
-    updateClient(cEditId!, cForm); toast.success('Cliente actualizado.')
-    setCModal(null)
+    setSaving(true)
+    try {
+      await updateClient(cEditId!, cForm); toast.success('Cliente actualizado.')
+      setCModal(null)
+    } finally {
+      setSaving(false)
+    }
   }
 
   function openDelClient(c: Client) { setCDelTarget(c); setCModal('confirm_delete') }
@@ -399,7 +416,7 @@ export function ClientsProspectsPage() {
         <Modal
           title={pModal === 'new' ? 'Nuevo Prospecto' : 'Editar Prospecto'}
           onClose={() => setPModal(null)}
-          footer={<><button className="btn-secondary" onClick={() => setPModal(null)}>Cancelar</button><button className="btn-primary" onClick={handleSaveProspect}>Guardar</button></>}
+          footer={<><button className="btn-secondary" onClick={() => setPModal(null)}>Cancelar</button><button className="btn-primary" onClick={handleSaveProspect} disabled={saving}>{saving ? 'Guardando...' : 'Guardar'}</button></>}
         >
           <div className="form-grid">
             <div className="form-group sm:col-span-2">
@@ -468,7 +485,7 @@ export function ClientsProspectsPage() {
           title={`Convertir a Cliente — ${pConvTarget.empresa}`}
           onClose={() => setPModal(null)}
           size="lg"
-          footer={<><button className="btn-secondary" onClick={() => setPModal(null)}>Cancelar</button><button className="btn-primary" onClick={handleConvert}><ArrowRight size={14} /> Crear Cliente</button></>}
+          footer={<><button className="btn-secondary" onClick={() => setPModal(null)}>Cancelar</button><button className="btn-primary" onClick={handleConvert} disabled={saving}>{saving ? 'Creando...' : <><ArrowRight size={14} /> Crear Cliente</>}</button></>}
         >
           <div className="space-y-4">
             <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm space-y-1">

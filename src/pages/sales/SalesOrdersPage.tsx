@@ -33,6 +33,7 @@ export function SalesOrdersPage() {
     return () => { u1(); u2(); u3() }
   }, [])
 
+  const [saving, setSaving] = useState(false)
   const [q, setQ] = useState('')
   const [modal, setModal] = useState<'edit' | 'new' | 'del' | null>(null)
   const [sel, setSel] = useState<SalesOrder | null>(null)
@@ -80,13 +81,18 @@ export function SalesOrdersPage() {
   async function handleSaveNew() {
     if (!form.clienteId) { toast.error('Selecciona un cliente.'); return }
     if (form.items.length === 0) { toast.error('Agrega al menos una partida.'); return }
-    const subtotal = form.items.reduce((a, it) => a + it.cantidad * it.precio * (1 - it.descuento / 100), 0)
-    const impuestos = subtotal * (form.ivaPct / 100)
-    const total = subtotal + impuestos
-    const order = await addOrder({ ...form, fechaPedido: new Date().toISOString().split('T')[0], estatus: 'nuevo', subtotal, impuestos, total })
-    toast.success(`Pedido ${order.folio} creado.`)
-    setModal(null)
-    setForm({ clienteId: '', fechaEntrega: '', notas: '', items: [] })
+    setSaving(true)
+    try {
+      const subtotal = form.items.reduce((a, it) => a + it.cantidad * it.precio * (1 - it.descuento / 100), 0)
+      const impuestos = subtotal * (form.ivaPct / 100)
+      const total = subtotal + impuestos
+      const order = await addOrder({ ...form, fechaPedido: new Date().toISOString().split('T')[0], estatus: 'nuevo', subtotal, impuestos, total })
+      toast.success(`Pedido ${order.folio} creado.`)
+      setModal(null)
+      setForm({ clienteId: '', fechaEntrega: '', notas: '', ivaPct: 16, items: [] })
+    } finally {
+      setSaving(false)
+    }
   }
 
   function handleDelete() {
@@ -218,7 +224,7 @@ export function SalesOrdersPage() {
       {/* New Order Modal */}
       {modal === 'new' && (
         <Modal title="Nuevo Pedido de Venta" onClose={() => setModal(null)} size="lg"
-          footer={<><button className="btn-secondary" onClick={() => setModal(null)}>Cancelar</button><button className="btn-primary" onClick={handleSaveNew}>Guardar Pedido</button></>}
+          footer={<><button className="btn-secondary" onClick={() => setModal(null)}>Cancelar</button><button className="btn-primary" onClick={handleSaveNew} disabled={saving}>{saving ? 'Guardando...' : 'Guardar Pedido'}</button></>}
         >
           <div className="space-y-4">
             <div className="form-grid">
