@@ -31,6 +31,17 @@ function toProspectNote(r: DbProspectNote): ContactNote {
   return { noteId: r.id, entidadId: r.prospecto_id, fecha: r.fecha, texto: r.texto }
 }
 
+// ── Helpers de recarga individual ────────────────────────────────────────────
+
+async function fetchProspects() {
+  const { data } = await supabase.from('erp_prospects').select('*').order('created_at', { ascending: false })
+  return data ? (data as DbProspect[]).map(toProspect) : null
+}
+async function fetchProspectNotes() {
+  const { data } = await supabase.from('erp_prospect_notes').select('*').order('fecha', { ascending: false })
+  return data ? (data as DbProspectNote[]).map(toProspectNote) : null
+}
+
 interface ProspectsState {
   prospects: Prospect[]
   prospectNotes: ContactNote[]
@@ -51,8 +62,12 @@ export const useProspectsStore = create<ProspectsState>()((set, get) => ({
   subscribeRealtime() {
     const ch = supabase
       .channel('erp_prospects_rt')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_prospects' }, () => { void get().loadProspects() })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_prospect_notes' }, () => { void get().loadProspects() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_prospects' }, async () => {
+        const d = await fetchProspects(); if (d) set({ prospects: d })
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_prospect_notes' }, async () => {
+        const d = await fetchProspectNotes(); if (d) set({ prospectNotes: d })
+      })
       .subscribe()
     return () => { void supabase.removeChannel(ch) }
   },
@@ -60,12 +75,9 @@ export const useProspectsStore = create<ProspectsState>()((set, get) => ({
   async loadProspects() {
     set({ loading: true })
     try {
-      const [{ data }, { data: nd }] = await Promise.all([
-        supabase.from('erp_prospects').select('*').order('created_at', { ascending: false }),
-        supabase.from('erp_prospect_notes').select('*').order('fecha', { ascending: false }),
-      ])
-      if (data) set({ prospects: (data as DbProspect[]).map(toProspect) })
-      if (nd)   set({ prospectNotes: (nd as DbProspectNote[]).map(toProspectNote) })
+      const [prospects, prospectNotes] = await Promise.all([fetchProspects(), fetchProspectNotes()])
+      if (prospects)     set({ prospects })
+      if (prospectNotes) set({ prospectNotes })
     } finally {
       set({ loading: false })
     }
@@ -78,7 +90,8 @@ export const useProspectsStore = create<ProspectsState>()((set, get) => ({
       valor_potencial: data.valorPotencial, creado_por: data.creadoPor ?? '',
       ciudad: data.ciudad ?? '', productos_actividad: data.productosActividad ?? '',
     })
-    await get().loadProspects()
+    const d = await fetchProspects()
+    if (d) set({ prospects: d })
   },
 
   async updateProspect(id, data) {
@@ -92,13 +105,20 @@ export const useProspectsStore = create<ProspectsState>()((set, get) => ({
     if (data.valorPotencial !== undefined) patch.valor_potencial = data.valorPotencial
     if (data.ciudad !== undefined) patch.ciudad = data.ciudad
     if (data.productosActividad !== undefined) patch.productos_actividad = data.productosActividad
-    await supabase.from('erp_prospects').update(patch).eq('id', id)
-    await get().loadProspects()
+
+    // Optimistic update
+    set(s => ({ prospects: s.prospects.map(p => p.prospectoId === id ? { ...p, ...data } : p) }))
+
+    const { error } = await supabase.from('erp_prospects').update(patch).eq('id', id)
+    if (error) {
+      const d = await fetchProspects()
+      if (d) set({ prospects: d })
+    }
   },
 
   async deleteProspect(id) {
-    await supabase.from('erp_prospects').delete().eq('id', id)
     set(s => ({ prospects: s.prospects.filter(p => p.prospectoId !== id) }))
+    await supabase.from('erp_prospects').delete().eq('id', id)
   },
 
   async convertirACliente(id, fiscal) {
@@ -110,17 +130,18 @@ export const useProspectsStore = create<ProspectsState>()((set, get) => ({
       correo: prospect.correo, telefono: prospect.telefono,
       limiteCredito: fiscal.limiteCredito, estatus: 'activo',
     })
+    set(s => ({ prospects: s.prospects.filter(p => p.prospectoId !== id) }))
     await supabase.from('erp_prospects').delete().eq('id', id)
-    await get().loadProspects()
   },
 
   async addProspectNote(prospectoId, texto) {
     await supabase.from('erp_prospect_notes').insert({ prospecto_id: prospectoId, texto })
-    await get().loadProspects()
+    const d = await fetchProspectNotes()
+    if (d) set({ prospectNotes: d })
   },
 
   async removeProspectNote(noteId) {
-    await supabase.from('erp_prospect_notes').delete().eq('id', noteId)
     set(s => ({ prospectNotes: s.prospectNotes.filter(n => n.noteId !== noteId) }))
+    await supabase.from('erp_prospect_notes').delete().eq('id', noteId)
   },
 }))

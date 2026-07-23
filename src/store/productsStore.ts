@@ -67,19 +67,28 @@ export const useProductsStore = create<ProductsState>()((set, get) => ({
     if (data.costoPromedio !== undefined) patch.costo_promedio = data.costoPromedio
     if (data.precioVenta !== undefined) patch.precio_venta = data.precioVenta
     if (data.activo !== undefined) patch.activo = data.activo
-    await supabase.from('erp_products').update(patch).eq('id', id)
-    await get().loadProducts()
+
+    // Optimistic update
+    set(s => ({ products: s.products.map(p => p.productId === id ? { ...p, ...data } : p) }))
+
+    const { error } = await supabase.from('erp_products').update(patch).eq('id', id)
+    if (error) await get().loadProducts()
   },
 
   async deleteProduct(id) {
-    await supabase.from('erp_products').delete().eq('id', id)
     set(s => ({ products: s.products.filter(p => p.productId !== id) }))
+    await supabase.from('erp_products').delete().eq('id', id)
   },
 
   async toggleProduct(id) {
     const p = get().products.find(p => p.productId === id)
     if (!p) return
-    await supabase.from('erp_products').update({ activo: !p.activo }).eq('id', id)
+    // Optimistic update
     set(s => ({ products: s.products.map(p => p.productId === id ? { ...p, activo: !p.activo } : p) }))
+    const { error } = await supabase.from('erp_products').update({ activo: !p.activo }).eq('id', id)
+    if (error) {
+      // Rollback
+      set(s => ({ products: s.products.map(p => p.productId === id ? { ...p, activo: p.activo } : p) }))
+    }
   },
 }))

@@ -75,6 +75,33 @@ function toGasto(r: DbGasto): GastoNegocio {
   }
 }
 
+// ── Helpers de recarga individual ────────────────────────────────────────────
+
+async function fetchFacturasVenta() {
+  const { data } = await supabase.from('erp_invoices_sale').select('*').order('created_at', { ascending: false })
+  return data ? (data as DbFV[]).map(toFV) : null
+}
+async function fetchPagosClientes() {
+  const { data } = await supabase.from('erp_payments_client').select('*').order('created_at', { ascending: false })
+  return data ? (data as DbPC[]).map(toPC) : null
+}
+async function fetchFacturasProveedor() {
+  const { data } = await supabase.from('erp_invoices_supplier').select('*').order('created_at', { ascending: false })
+  return data ? (data as DbFP[]).map(toFP) : null
+}
+async function fetchPagosProveedores() {
+  const { data } = await supabase.from('erp_payments_supplier').select('*').order('created_at', { ascending: false })
+  return data ? (data as DbPP[]).map(toPP) : null
+}
+async function fetchBancos() {
+  const { data } = await supabase.from('erp_banks').select('*').order('banco')
+  return data ? (data as DbBanco[]).map(toBanco) : null
+}
+async function fetchGastos() {
+  const { data } = await supabase.from('erp_gastos_negocio').select('*').order('fecha', { ascending: false })
+  return data ? (data as DbGasto[]).map(toGasto) : null
+}
+
 // ── Store ─────────────────────────────────────────────────────────────────────
 
 interface FinanceState {
@@ -106,15 +133,28 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
   facturasProveedor: [], pagosProveedores: [],
   bancos: [], gastos: [], loading: false,
 
+  // ── Realtime granular: cada tabla recarga solo su entidad ─────────────────
   subscribeRealtime() {
     const ch = supabase
       .channel('erp_finance_rt')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_invoices_sale' }, () => { void get().loadFinance() })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_payments_client' }, () => { void get().loadFinance() })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_invoices_supplier' }, () => { void get().loadFinance() })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_payments_supplier' }, () => { void get().loadFinance() })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_banks' }, () => { void get().loadFinance() })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_gastos_negocio' }, () => { void get().loadFinance() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_invoices_sale' }, async () => {
+        const d = await fetchFacturasVenta(); if (d) set({ facturasVenta: d })
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_payments_client' }, async () => {
+        const d = await fetchPagosClientes(); if (d) set({ pagosClientes: d })
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_invoices_supplier' }, async () => {
+        const d = await fetchFacturasProveedor(); if (d) set({ facturasProveedor: d })
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_payments_supplier' }, async () => {
+        const d = await fetchPagosProveedores(); if (d) set({ pagosProveedores: d })
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_banks' }, async () => {
+        const d = await fetchBancos(); if (d) set({ bancos: d })
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_gastos_negocio' }, async () => {
+        const d = await fetchGastos(); if (d) set({ gastos: d })
+      })
       .subscribe()
     return () => { void supabase.removeChannel(ch) }
   },
@@ -122,35 +162,39 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
   async loadFinance() {
     set({ loading: true })
     try {
-      const [{ data: fv }, { data: pc }, { data: fp }, { data: pp }, { data: bk }, { data: gn }] = await Promise.all([
-        supabase.from('erp_invoices_sale').select('*').order('created_at', { ascending: false }),
-        supabase.from('erp_payments_client').select('*').order('created_at', { ascending: false }),
-        supabase.from('erp_invoices_supplier').select('*').order('created_at', { ascending: false }),
-        supabase.from('erp_payments_supplier').select('*').order('created_at', { ascending: false }),
-        supabase.from('erp_banks').select('*').order('banco'),
-        supabase.from('erp_gastos_negocio').select('*').order('fecha', { ascending: false }),
+      const [fv, pc, fp, pp, bk, gn] = await Promise.all([
+        fetchFacturasVenta(),
+        fetchPagosClientes(),
+        fetchFacturasProveedor(),
+        fetchPagosProveedores(),
+        fetchBancos(),
+        fetchGastos(),
       ])
-      if (fv) set({ facturasVenta: (fv as DbFV[]).map(toFV) })
-      if (pc) set({ pagosClientes: (pc as DbPC[]).map(toPC) })
-      if (fp) set({ facturasProveedor: (fp as DbFP[]).map(toFP) })
-      if (pp) set({ pagosProveedores: (pp as DbPP[]).map(toPP) })
-      if (bk) set({ bancos: (bk as DbBanco[]).map(toBanco) })
-      if (gn) set({ gastos: (gn as DbGasto[]).map(toGasto) })
+      if (fv) set({ facturasVenta: fv })
+      if (pc) set({ pagosClientes: pc })
+      if (fp) set({ facturasProveedor: fp })
+      if (pp) set({ pagosProveedores: pp })
+      if (bk) set({ bancos: bk })
+      if (gn) set({ gastos: gn })
     } finally {
       set({ loading: false })
     }
   },
 
   async addFacturaVenta(data) {
-    const { count } = await supabase.from('erp_invoices_sale').select('*', { count: 'exact', head: true })
-    const folio = `FAC-${String((count ?? 0) + 1).padStart(4, '0')}`
+    // Folio atómico en servidor
+    const { data: folioRow } = await supabase
+      .rpc('erp_next_folio', { p_prefix: 'FAC', p_seq: 'erp_seq_folio_inv_sale' })
+    const folio = (folioRow as string | null) ?? `FAC-${Date.now()}`
+
     await supabase.from('erp_invoices_sale').insert({
       folio, cliente_id: data.clienteId, pedido_id: data.pedidoId ?? null,
       fecha: data.fecha, fecha_vencimiento: data.fechaVencimiento,
       subtotal: data.subtotal, impuestos: data.impuestos, total: data.total,
       saldo_pendiente: data.saldoPendiente, estatus: data.estatus,
     })
-    await get().loadFinance()
+    const d = await fetchFacturasVenta()
+    if (d) set({ facturasVenta: d })
   },
 
   async updateFacturaVenta(id, data) {
@@ -158,30 +202,39 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     if (data.estatus !== undefined) patch.estatus = data.estatus
     if (data.saldoPendiente !== undefined) patch.saldo_pendiente = data.saldoPendiente
     if (data.fechaVencimiento !== undefined) patch.fecha_vencimiento = data.fechaVencimiento
-    await supabase.from('erp_invoices_sale').update(patch).eq('id', id)
-    await get().loadFinance()
+
+    // Optimistic update
+    set(s => ({ facturasVenta: s.facturasVenta.map(f => f.facturaId === id ? { ...f, ...data } : f) }))
+
+    const { error } = await supabase.from('erp_invoices_sale').update(patch).eq('id', id)
+    if (error) {
+      const d = await fetchFacturasVenta()
+      if (d) set({ facturasVenta: d })
+    }
   },
 
+  // ── Pago de cliente: RPC atómica (inserta pago + actualiza saldo en 1 TX) ─
   async addPagoCliente(data) {
-    await supabase.from('erp_payments_client').insert({
-      factura_id: data.facturaId, cliente_id: data.clienteId,
-      fecha: data.fecha, monto: data.monto,
-      forma_pago: data.formaPago, referencia: data.referencia,
+    await supabase.rpc('erp_aplicar_pago_cliente', {
+      p_factura_id:  data.facturaId,
+      p_cliente_id:  data.clienteId,
+      p_fecha:       data.fecha,
+      p_monto:       data.monto,
+      p_forma_pago:  data.formaPago,
+      p_referencia:  data.referencia,
     })
-    const fv = get().facturasVenta.find(f => f.facturaId === data.facturaId)
-    if (fv) {
-      const nuevo = Math.max(0, fv.saldoPendiente - data.monto)
-      const estatus: FacturaVenta['estatus'] = nuevo === 0 ? 'pagada' : 'parcial'
-      await supabase.from('erp_invoices_sale')
-        .update({ saldo_pendiente: nuevo, estatus })
-        .eq('id', data.facturaId)
-    }
-    await get().loadFinance()
+    // Recargar solo las dos entidades afectadas
+    const [fv, pc] = await Promise.all([fetchFacturasVenta(), fetchPagosClientes()])
+    if (fv) set({ facturasVenta: fv })
+    if (pc) set({ pagosClientes: pc })
   },
 
   async addFacturaProveedor(data) {
-    const { count } = await supabase.from('erp_invoices_supplier').select('*', { count: 'exact', head: true })
-    const folio = `FPROV-${String((count ?? 0) + 1).padStart(4, '0')}`
+    // Folio atómico en servidor
+    const { data: folioRow } = await supabase
+      .rpc('erp_next_folio', { p_prefix: 'FPROV', p_seq: 'erp_seq_folio_inv_sup' })
+    const folio = (folioRow as string | null) ?? `FPROV-${Date.now()}`
+
     const { data: row } = await supabase
       .from('erp_invoices_supplier')
       .insert({
@@ -195,30 +248,29 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
       })
       .select('*')
       .maybeSingle()
-    await get().loadFinance()
+    const d = await fetchFacturasProveedor()
+    if (d) set({ facturasProveedor: d })
     return row ? toFP(row as DbFP) : { ...data, facturaProvId: '', folio }
   },
 
+  // ── Pago de proveedor: RPC atómica ────────────────────────────────────────
   async addPagoProveedor(data) {
-    await supabase.from('erp_payments_supplier').insert({
-      factura_prov_id: data.facturaProvId, supplier_id: data.supplierId,
-      fecha: data.fecha, monto: data.monto,
-      forma_pago: data.formaPago, referencia: data.referencia,
+    await supabase.rpc('erp_aplicar_pago_proveedor', {
+      p_factura_prov_id: data.facturaProvId,
+      p_supplier_id:     data.supplierId,
+      p_fecha:           data.fecha,
+      p_monto:           data.monto,
+      p_forma_pago:      data.formaPago,
+      p_referencia:      data.referencia,
     })
-    const fp = get().facturasProveedor.find(f => f.facturaProvId === data.facturaProvId)
-    if (fp) {
-      const nuevo = Math.max(0, fp.saldoPendiente - data.monto)
-      const estatus: FacturaProveedor['estatus'] = nuevo === 0 ? 'pagada' : 'parcial'
-      await supabase.from('erp_invoices_supplier')
-        .update({ saldo_pendiente: nuevo, estatus })
-        .eq('id', data.facturaProvId)
-    }
-    await get().loadFinance()
+    const [fp, pp] = await Promise.all([fetchFacturasProveedor(), fetchPagosProveedores()])
+    if (fp) set({ facturasProveedor: fp })
+    if (pp) set({ pagosProveedores: pp })
   },
 
   async deleteFacturaProveedor(id) {
-    await supabase.from('erp_invoices_supplier').delete().eq('id', id)
     set(s => ({ facturasProveedor: s.facturasProveedor.filter(f => f.facturaProvId !== id) }))
+    await supabase.from('erp_invoices_supplier').delete().eq('id', id)
   },
 
   async updateBanco(id, data) {
@@ -228,8 +280,15 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     if (data.saldo !== undefined) patch.saldo = data.saldo
     if (data.moneda !== undefined) patch.moneda = data.moneda
     if (data.activo !== undefined) patch.activo = data.activo
-    await supabase.from('erp_banks').update(patch).eq('id', id)
-    await get().loadFinance()
+
+    // Optimistic update
+    set(s => ({ bancos: s.bancos.map(b => b.bancoId === id ? { ...b, ...data } : b) }))
+
+    const { error } = await supabase.from('erp_banks').update(patch).eq('id', id)
+    if (error) {
+      const d = await fetchBancos()
+      if (d) set({ bancos: d })
+    }
   },
 
   async addBanco(data) {
@@ -237,12 +296,13 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
       banco: data.banco, cuenta: data.cuenta,
       saldo: data.saldo, moneda: data.moneda, activo: data.activo,
     })
-    await get().loadFinance()
+    const d = await fetchBancos()
+    if (d) set({ bancos: d })
   },
 
   async deleteBanco(id) {
-    await supabase.from('erp_banks').delete().eq('id', id)
     set(s => ({ bancos: s.bancos.filter(b => b.bancoId !== id) }))
+    await supabase.from('erp_banks').delete().eq('id', id)
   },
 
   async addGasto(data) {
@@ -251,7 +311,8 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
       descripcion: data.descripcion, monto: data.monto,
       forma_pago: data.formaPago, referencia: data.referencia, notas: data.notas,
     })
-    await get().loadFinance()
+    const d = await fetchGastos()
+    if (d) set({ gastos: d })
   },
 
   async updateGasto(id, data) {
@@ -263,12 +324,19 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     if (data.formaPago !== undefined) patch.forma_pago = data.formaPago
     if (data.referencia !== undefined) patch.referencia = data.referencia
     if (data.notas !== undefined) patch.notas = data.notas
-    await supabase.from('erp_gastos_negocio').update(patch).eq('id', id)
-    await get().loadFinance()
+
+    // Optimistic update
+    set(s => ({ gastos: s.gastos.map(g => g.gastoId === id ? { ...g, ...data } : g) }))
+
+    const { error } = await supabase.from('erp_gastos_negocio').update(patch).eq('id', id)
+    if (error) {
+      const d = await fetchGastos()
+      if (d) set({ gastos: d })
+    }
   },
 
   async deleteGasto(id) {
-    await supabase.from('erp_gastos_negocio').delete().eq('id', id)
     set(s => ({ gastos: s.gastos.filter(g => g.gastoId !== id) }))
+    await supabase.from('erp_gastos_negocio').delete().eq('id', id)
   },
 }))

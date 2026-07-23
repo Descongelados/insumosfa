@@ -70,8 +70,11 @@ export const useLogisticsStore = create<LogisticsState>()((set, get) => ({
   },
 
   async addEmbarque(data) {
-    const { count } = await supabase.from('erp_shipments').select('*', { count: 'exact', head: true })
-    const folio = `EMB-${String((count ?? 0) + 1).padStart(4, '0')}`
+    // Folio atómico en servidor
+    const { data: folioRow } = await supabase
+      .rpc('erp_next_folio', { p_prefix: 'EMB', p_seq: 'erp_seq_folio_shipments' })
+    const folio = (folioRow as string | null) ?? `EMB-${Date.now()}`
+
     await supabase.from('erp_shipments').insert({
       folio, pedido_id: data.pedidoId ?? null, origen: data.origen,
       destino: data.destino, transportista_id: data.transportistaId,
@@ -94,13 +97,17 @@ export const useLogisticsStore = create<LogisticsState>()((set, get) => ({
     if (data.estatus !== undefined) patch.estatus = data.estatus
     if (data.notas !== undefined) patch.notas = data.notas
     if (data.ordenesIds !== undefined) patch.ordenes_ids = data.ordenesIds
-    await supabase.from('erp_shipments').update(patch).eq('id', id)
-    await get().loadLogistics()
+
+    // Optimistic update
+    set(s => ({ embarques: s.embarques.map(e => e.embarqueId === id ? { ...e, ...data } : e) }))
+
+    const { error } = await supabase.from('erp_shipments').update(patch).eq('id', id)
+    if (error) await get().loadLogistics()
   },
 
   async deleteEmbarque(id) {
-    await supabase.from('erp_shipments').delete().eq('id', id)
     set(s => ({ embarques: s.embarques.filter(e => e.embarqueId !== id) }))
+    await supabase.from('erp_shipments').delete().eq('id', id)
   },
 
   async addTransportista(data) {
@@ -118,12 +125,16 @@ export const useLogisticsStore = create<LogisticsState>()((set, get) => ({
     if (data.telefono !== undefined) patch.telefono = data.telefono
     if (data.tarifaBase !== undefined) patch.tarifa_base = data.tarifaBase
     if (data.activo !== undefined) patch.activo = data.activo
-    await supabase.from('erp_carriers').update(patch).eq('id', id)
-    await get().loadLogistics()
+
+    // Optimistic update
+    set(s => ({ transportistas: s.transportistas.map(t => t.transportistaId === id ? { ...t, ...data } : t) }))
+
+    const { error } = await supabase.from('erp_carriers').update(patch).eq('id', id)
+    if (error) await get().loadLogistics()
   },
 
   async deleteTransportista(id) {
-    await supabase.from('erp_carriers').delete().eq('id', id)
     set(s => ({ transportistas: s.transportistas.filter(t => t.transportistaId !== id) }))
+    await supabase.from('erp_carriers').delete().eq('id', id)
   },
 }))

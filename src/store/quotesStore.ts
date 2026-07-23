@@ -15,6 +15,9 @@ type DbQuote = DbQuoteBase & {
   cliente_direccion?: string
 }
 
+// Columnas de lista (sin items para reducir payload)
+const LIST_COLUMNS = 'id,folio,cliente_id,cliente_nombre,cliente_rfc,cliente_correo,cliente_telefono,cliente_direccion,fecha,vigencia,subtotal,impuestos,total,estatus,notas,created_at'
+
 /**
  * Normaliza un item crudo del JSONB.
  * Supabase JS puede entregar las claves dentro del JSONB en snake_case
@@ -50,11 +53,6 @@ function toQuote(r: DbQuote): Quote {
   }
 }
 
-async function nextFolio(prefix: string, table: string): Promise<string> {
-  const { count } = await supabase.from(table).select('*', { count: 'exact', head: true })
-  return `${prefix}-${String((count ?? 0) + 1).padStart(4, '0')}`
-}
-
 interface QuotesState {
   quotes: Quote[]
   loading: boolean
@@ -73,9 +71,10 @@ export const useQuotesStore = create<QuotesState>()((set, get) => ({
     try {
       const { data } = await supabase
         .from('erp_quotes')
-        .select('*')
+        .select(LIST_COLUMNS)
         .order('created_at', { ascending: false })
-      if (data) set({ quotes: (data as DbQuote[]).map(toQuote) })
+      // items viene null al usar columnas explícitas; inicializamos vacío
+      if (data) set({ quotes: (data as DbQuote[]).map(r => toQuote({ ...r, items: [] })) })
     } finally {
       set({ loading: false })
     }
@@ -92,12 +91,13 @@ export const useQuotesStore = create<QuotesState>()((set, get) => ({
   },
 
   async addQuote(data) {
-    const folio = await nextFolio('COT', 'erp_quotes')
+    // Genera folio atómicamente en el servidor (sin race condition)
+    const { data: folioRow } = await supabase
+      .rpc('erp_next_folio', { p_prefix: 'COT', p_seq: 'erp_seq_folio_quotes' })
+    const folio = (folioRow as string | null) ?? `COT-${Date.now()}`
 
-    // Serializar items explícitamente para preservar claves camelCase en JSONB
     const itemsJson = JSON.parse(JSON.stringify(data.items)) as QuoteItem[]
 
-    // Intentar insertar con las columnas de cliente eventual (post-migración)
     const { data: row, error } = await supabase
       .from('erp_quotes')
       .insert({
@@ -120,42 +120,7 @@ export const useQuotesStore = create<QuotesState>()((set, get) => ({
       .select('*')
       .maybeSingle()
 
-    if (error) {
-      // Fallback: insertar sin las columnas eventuales (migración no aplicada aún)
-      const { data: row2 } = await supabase
-        .from('erp_quotes')
-        .insert({
-          folio,
-          cliente_id: data.clienteId ?? '',
-          fecha:      data.fecha,
-          vigencia:   data.vigencia || null,
-          subtotal:   data.subtotal,
-          impuestos:  data.impuestos,
-          total:      data.total,
-          estatus:    data.estatus,
-          items:      itemsJson,
-          notas:      data.notas ?? '',
-        })
-        .select('*')
-        .maybeSingle()
-
-      await get().loadQuotes()
-
-      if (row2) {
-        // Enriquecer con los datos eventuales que no se guardaron en BD
-        const base = toQuote(row2 as DbQuote)
-        return {
-          ...base,
-          clienteNombre:    data.clienteNombre    || undefined,
-          clienteRfc:       data.clienteRfc       || undefined,
-          clienteCorreo:    data.clienteCorreo    || undefined,
-          clienteTelefono:  data.clienteTelefono  || undefined,
-          clienteDireccion: data.clienteDireccion || undefined,
-        }
-      }
-      // Último recurso: devolver objeto en memoria con items normalizados
-      return { ...data, items: itemsJson, cotizacionId: '', folio }
-    }
+    if (error) throw error
 
     await get().loadQuotes()
     return row ? toQuote(row as DbQuote) : { ...data, items: itemsJson, cotizacionId: '', folio }
@@ -177,12 +142,16 @@ export const useQuotesStore = create<QuotesState>()((set, get) => ({
     if (data.estatus   !== undefined) patch.estatus    = data.estatus
     if (data.items     !== undefined) patch.items      = JSON.parse(JSON.stringify(data.items))
     if (data.notas     !== undefined) patch.notas      = data.notas
-    await supabase.from('erp_quotes').update(patch).eq('id', id)
-    await get().loadQuotes()
+
+    // Optimistic update
+    set(s => ({ quotes: s.quotes.map(q => q.cotizacionId === id ? { ...q, ...data } : q) }))
+
+    const { error } = await supabase.from('erp_quotes').update(patch).eq('id', id)
+    if (error) await get().loadQuotes()
   },
 
   async deleteQuote(id) {
-    await supabase.from('erp_quotes').delete().eq('id', id)
     set(s => ({ quotes: s.quotes.filter(q => q.cotizacionId !== id) }))
+    await supabase.from('erp_quotes').delete().eq('id', id)
   },
 }))

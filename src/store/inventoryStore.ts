@@ -35,6 +35,8 @@ interface InventoryState {
   kardex: KardexMovimiento[]
   loading: boolean
   loadInventory: () => Promise<void>
+  /** Carga el historial de movimientos de un producto específico (lazy). */
+  loadKardexByProduct: (productId: string) => Promise<void>
   subscribeRealtime: () => () => void
   applyMovimiento: (params: {
     productId: string; tipo: MovimientoTipo; cantidad: number
@@ -63,24 +65,52 @@ export const useInventoryStore = create<InventoryState>()((set, get) => ({
   async loadInventory() {
     set({ loading: true })
     try {
-      const [{ data: id }, { data: kd }] = await Promise.all([
-        supabase.from('erp_inventory').select('*'),
-        supabase.from('erp_kardex').select('*').order('created_at', { ascending: false }).limit(500),
-      ])
+      // Solo carga el inventario en la carga inicial; el kardex se carga bajo demanda por producto.
+      const { data: id } = await supabase.from('erp_inventory').select('*')
       if (id) set({ inventario: (id as DbInv[]).map(toInv) })
-      if (kd) set({ kardex: (kd as DbKardex[]).map(toKardex) })
     } finally {
       set({ loading: false })
     }
   },
 
+  /** Carga el kardex de un producto específico (máx. 200 mov.) — llamar al abrir el detalle. */
+  async loadKardexByProduct(productId) {
+    const { data: kd } = await supabase
+      .from('erp_kardex')
+      .select('*')
+      .eq('product_id', productId)
+      .order('created_at', { ascending: false })
+      .limit(200)
+    if (kd) set({ kardex: (kd as DbKardex[]).map(toKardex) })
+  },
+
   async updateCantidadDisponible(productId, nuevaCantidad, usuario) {
     const existing = get().inventario.find(i => i.productId === productId)
     const anterior = existing?.cantidadDisponible ?? 0
-    await supabase
+
+    // Optimistic update del inventario
+    set(s => ({
+      inventario: s.inventario.map(i =>
+        i.productId === productId ? { ...i, cantidadDisponible: nuevaCantidad } : i,
+      ),
+    }))
+
+    // updated_at lo maneja el trigger en BD (no se envía desde el cliente)
+    const { error } = await supabase
       .from('erp_inventory')
-      .update({ cantidad_disponible: nuevaCantidad, updated_at: new Date().toISOString() })
+      .update({ cantidad_disponible: nuevaCantidad })
       .eq('product_id', productId)
+
+    if (error) {
+      // Rollback
+      set(s => ({
+        inventario: s.inventario.map(i =>
+          i.productId === productId ? { ...i, cantidadDisponible: anterior } : i,
+        ),
+      }))
+      return
+    }
+
     await supabase.from('erp_kardex').insert({
       product_id: productId, tipo: 'Ajuste', cantidad: Math.abs(nuevaCantidad - anterior),
       documento_origen: 'Ajuste Manual', usuario,
@@ -88,7 +118,6 @@ export const useInventoryStore = create<InventoryState>()((set, get) => ({
       fecha: new Date().toISOString().split('T')[0],
       existencia_anterior: anterior, existencia_nueva: nuevaCantidad,
     })
-    await get().loadInventory()
   },
 
   async applyMovimiento({ productId, tipo, cantidad, documentoOrigen, usuario, notas = '' }) {
@@ -97,16 +126,29 @@ export const useInventoryStore = create<InventoryState>()((set, get) => ({
     const esEntrada = ['EntradaCompra', 'Devolucion'].includes(tipo)
     const nueva = esEntrada ? anterior + cantidad : Math.max(0, anterior - cantidad)
 
+    // Optimistic update
     if (existing) {
+      set(s => ({
+        inventario: s.inventario.map(i =>
+          i.productId === productId ? { ...i, cantidadDisponible: nueva } : i,
+        ),
+      }))
+    }
+
+    if (existing) {
+      // updated_at lo maneja el trigger en BD
       await supabase
         .from('erp_inventory')
-        .update({ cantidad_disponible: nueva, updated_at: new Date().toISOString() })
+        .update({ cantidad_disponible: nueva })
         .eq('product_id', productId)
     } else {
       await supabase.from('erp_inventory').insert({
         product_id: productId, cantidad_disponible: nueva,
         cantidad_comprometida: 0, cantidad_transito: 0,
       })
+      // Recargar para obtener el id asignado
+      const { data: fresh } = await supabase.from('erp_inventory').select('*').eq('product_id', productId)
+      if (fresh) set(s => ({ inventario: [...s.inventario, ...(fresh as DbInv[]).map(toInv)] }))
     }
 
     await supabase.from('erp_kardex').insert({
@@ -114,7 +156,5 @@ export const useInventoryStore = create<InventoryState>()((set, get) => ({
       usuario, notas, fecha: new Date().toISOString().split('T')[0],
       existencia_anterior: anterior, existencia_nueva: nueva,
     })
-
-    await get().loadInventory()
   },
 }))

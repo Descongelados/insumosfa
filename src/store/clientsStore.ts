@@ -33,6 +33,21 @@ function toClientNote(r: DbClientNote): ContactNote {
   return { noteId: r.id, entidadId: r.cliente_id, fecha: r.fecha, texto: r.texto }
 }
 
+// ── Helpers de recarga individual ────────────────────────────────────────────
+
+async function fetchClients() {
+  const { data } = await supabase.from('erp_clients').select('*').order('created_at', { ascending: false })
+  return data ? (data as DbClient[]).map(toClient) : null
+}
+async function fetchContactos() {
+  const { data } = await supabase.from('erp_client_contacts').select('*')
+  return data ? (data as DbContact[]).map(toContacto) : null
+}
+async function fetchClientNotes() {
+  const { data } = await supabase.from('erp_client_notes').select('*').order('fecha', { ascending: false })
+  return data ? (data as DbClientNote[]).map(toClientNote) : null
+}
+
 interface ClientsState {
   clients: Client[]
   contactos: ContactoCliente[]
@@ -52,12 +67,19 @@ interface ClientsState {
 export const useClientsStore = create<ClientsState>()((set, get) => ({
   clients: [], contactos: [], clientNotes: [], loading: false,
 
+  // ── Realtime granular: cada tabla recarga solo su entidad ─────────────────
   subscribeRealtime() {
     const ch = supabase
       .channel('erp_clients_rt')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_clients' }, () => { void get().loadClients() })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_client_contacts' }, () => { void get().loadClients() })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_client_notes' }, () => { void get().loadClients() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_clients' }, async () => {
+        const d = await fetchClients(); if (d) set({ clients: d })
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_client_contacts' }, async () => {
+        const d = await fetchContactos(); if (d) set({ contactos: d })
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_client_notes' }, async () => {
+        const d = await fetchClientNotes(); if (d) set({ clientNotes: d })
+      })
       .subscribe()
     return () => { void supabase.removeChannel(ch) }
   },
@@ -65,14 +87,12 @@ export const useClientsStore = create<ClientsState>()((set, get) => ({
   async loadClients() {
     set({ loading: true })
     try {
-      const [{ data: cd }, { data: ctd }, { data: nd }] = await Promise.all([
-        supabase.from('erp_clients').select('*').order('created_at', { ascending: false }),
-        supabase.from('erp_client_contacts').select('*'),
-        supabase.from('erp_client_notes').select('*').order('fecha', { ascending: false }),
+      const [clients, contactos, clientNotes] = await Promise.all([
+        fetchClients(), fetchContactos(), fetchClientNotes(),
       ])
-      if (cd)  set({ clients: (cd as DbClient[]).map(toClient) })
-      if (ctd) set({ contactos: (ctd as DbContact[]).map(toContacto) })
-      if (nd)  set({ clientNotes: (nd as DbClientNote[]).map(toClientNote) })
+      if (clients)     set({ clients })
+      if (contactos)   set({ contactos })
+      if (clientNotes) set({ clientNotes })
     } finally {
       set({ loading: false })
     }
@@ -89,7 +109,8 @@ export const useClientsStore = create<ClientsState>()((set, get) => ({
       })
       .select('id')
       .maybeSingle()
-    await get().loadClients()
+    const d = await fetchClients()
+    if (d) set({ clients: d })
     return (row as { id: string } | null)?.id ?? ''
   },
 
@@ -103,16 +124,23 @@ export const useClientsStore = create<ClientsState>()((set, get) => ({
     if (data.telefono !== undefined) patch.telefono = data.telefono
     if (data.limiteCredito !== undefined) patch.limite_credito = data.limiteCredito
     if (data.estatus !== undefined) patch.estatus = data.estatus
-    await supabase.from('erp_clients').update(patch).eq('id', id)
-    await get().loadClients()
+
+    // Optimistic update
+    set(s => ({ clients: s.clients.map(c => c.clientId === id ? { ...c, ...data } : c) }))
+
+    const { error } = await supabase.from('erp_clients').update(patch).eq('id', id)
+    if (error) {
+      const d = await fetchClients()
+      if (d) set({ clients: d })
+    }
   },
 
   async deleteClient(id) {
-    await supabase.from('erp_clients').delete().eq('id', id)
     set(s => ({
       clients: s.clients.filter(c => c.clientId !== id),
       contactos: s.contactos.filter(c => c.clienteId !== id),
     }))
+    await supabase.from('erp_clients').delete().eq('id', id)
   },
 
   async addContacto(data) {
@@ -120,21 +148,23 @@ export const useClientsStore = create<ClientsState>()((set, get) => ({
       cliente_id: data.clienteId, nombre: data.nombre,
       puesto: data.puesto, correo: data.correo, telefono: data.telefono,
     })
-    await get().loadClients()
+    const d = await fetchContactos()
+    if (d) set({ contactos: d })
   },
 
   async removeContacto(id) {
-    await supabase.from('erp_client_contacts').delete().eq('id', id)
     set(s => ({ contactos: s.contactos.filter(c => c.contactoId !== id) }))
+    await supabase.from('erp_client_contacts').delete().eq('id', id)
   },
 
   async addClientNote(clienteId, texto) {
     await supabase.from('erp_client_notes').insert({ cliente_id: clienteId, texto })
-    await get().loadClients()
+    const d = await fetchClientNotes()
+    if (d) set({ clientNotes: d })
   },
 
   async removeClientNote(noteId) {
-    await supabase.from('erp_client_notes').delete().eq('id', noteId)
     set(s => ({ clientNotes: s.clientNotes.filter(n => n.noteId !== noteId) }))
+    await supabase.from('erp_client_notes').delete().eq('id', noteId)
   },
 }))

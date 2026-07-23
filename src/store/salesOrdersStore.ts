@@ -20,11 +20,6 @@ function toOrder(r: DbOrder): SalesOrder {
   }
 }
 
-async function nextFolio(): Promise<string> {
-  const { count } = await supabase.from('erp_sales_orders').select('*', { count: 'exact', head: true })
-  return `PV-${String((count ?? 0) + 1).padStart(4, '0')}`
-}
-
 interface SalesOrdersState {
   orders: SalesOrder[]
   loading: boolean
@@ -57,7 +52,11 @@ export const useSalesOrdersStore = create<SalesOrdersState>()((set, get) => ({
   },
 
   async addOrder(data) {
-    const folio = await nextFolio()
+    // Folio atómico en servidor
+    const { data: folioRow } = await supabase
+      .rpc('erp_next_folio', { p_prefix: 'PV', p_seq: 'erp_seq_folio_sales' })
+    const folio = (folioRow as string | null) ?? `PV-${Date.now()}`
+
     const { data: row } = await supabase
       .from('erp_sales_orders')
       .insert({
@@ -84,15 +83,19 @@ export const useSalesOrdersStore = create<SalesOrdersState>()((set, get) => ({
     if (data.impuestos !== undefined) patch.impuestos = data.impuestos
     if (data.total !== undefined) patch.total = data.total
     if (data.notas !== undefined) patch.notas = data.notas
+
+    // Optimistic update
+    set(s => ({ orders: s.orders.map(o => o.pedidoId === id ? { ...o, ...data } : o) }))
+
     await supabase.from('erp_sales_orders').update(patch).eq('id', id)
 
+    // Auto-generar factura al facturar, verificando con select('id') + índice
     if (data.estatus === 'facturado') {
-      const orders = get().orders
-      const order = orders.find(o => o.pedidoId === id)
+      const order = get().orders.find(o => o.pedidoId === id)
       if (order) {
         const { count } = await supabase
           .from('erp_invoices_sale')
-          .select('*', { count: 'exact', head: true })
+          .select('id', { count: 'exact', head: true })
           .eq('pedido_id', id)
         if ((count ?? 0) === 0) {
           const today = new Date().toISOString().split('T')[0]
@@ -106,12 +109,10 @@ export const useSalesOrdersStore = create<SalesOrdersState>()((set, get) => ({
         }
       }
     }
-
-    await get().loadOrders()
   },
 
   async deleteOrder(id) {
-    await supabase.from('erp_sales_orders').delete().eq('id', id)
     set(s => ({ orders: s.orders.filter(o => o.pedidoId !== id) }))
+    await supabase.from('erp_sales_orders').delete().eq('id', id)
   },
 }))

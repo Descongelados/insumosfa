@@ -74,12 +74,16 @@ export const useSuppliersStore = create<SuppliersState>()((set, get) => ({
     if (data.tiempoEntrega !== undefined) patch.tiempo_entrega = data.tiempoEntrega
     if (data.cumplimiento !== undefined) patch.cumplimiento = data.cumplimiento
     if (data.activo !== undefined) patch.activo = data.activo
-    await supabase.from('erp_suppliers').update(patch).eq('id', id)
-    await get().loadSuppliers()
+
+    // Optimistic update
+    set(s => ({ suppliers: s.suppliers.map(s => s.supplierId === id ? { ...s, ...data } : s) }))
+
+    const { error } = await supabase.from('erp_suppliers').update(patch).eq('id', id)
+    if (error) await get().loadSuppliers()
   },
 
   async deleteSupplier(id) {
-    await supabase.from('erp_suppliers').delete().eq('id', id)
     set(s => ({ suppliers: s.suppliers.filter(s => s.supplierId !== id) }))
+    await supabase.from('erp_suppliers').delete().eq('id', id)
   },
 }))

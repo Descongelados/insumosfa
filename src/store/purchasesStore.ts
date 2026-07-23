@@ -88,18 +88,25 @@ export const usePurchasesStore = create<PurchasesState>()((set, get) => ({
     if (data.productId !== undefined) patch.product_id = data.productId
     if (data.cantidad !== undefined) patch.cantidad = data.cantidad
     if (data.estatus !== undefined) patch.estatus = data.estatus
-    await supabase.from('erp_purchase_requests').update(patch).eq('id', id)
-    await get().loadPurchases()
+
+    // Optimistic update
+    set(s => ({ solicitudes: s.solicitudes.map(sc => sc.solicitudId === id ? { ...sc, ...data } : sc) }))
+
+    const { error } = await supabase.from('erp_purchase_requests').update(patch).eq('id', id)
+    if (error) await get().loadPurchases()
   },
 
   async deleteSolicitud(id) {
-    await supabase.from('erp_purchase_requests').delete().eq('id', id)
     set(s => ({ solicitudes: s.solicitudes.filter(sc => sc.solicitudId !== id) }))
+    await supabase.from('erp_purchase_requests').delete().eq('id', id)
   },
 
   async addOrdenCompra(data) {
-    const { count } = await supabase.from('erp_purchase_orders').select('*', { count: 'exact', head: true })
-    const folio = `OC-${String((count ?? 0) + 1).padStart(4, '0')}`
+    // Folio atómico en servidor
+    const { data: folioRow } = await supabase
+      .rpc('erp_next_folio', { p_prefix: 'OC', p_seq: 'erp_seq_folio_purchases' })
+    const folio = (folioRow as string | null) ?? `OC-${Date.now()}`
+
     const { data: row } = await supabase
       .from('erp_purchase_orders')
       .insert({
@@ -122,12 +129,16 @@ export const usePurchasesStore = create<PurchasesState>()((set, get) => ({
     if (data.estatus !== undefined) patch.estatus = data.estatus
     if (data.items !== undefined) patch.items = data.items
     if (data.notas !== undefined) patch.notas = data.notas
-    await supabase.from('erp_purchase_orders').update(patch).eq('id', id)
-    await get().loadPurchases()
+
+    // Optimistic update
+    set(s => ({ ordenesCompra: s.ordenesCompra.map(oc => oc.ordenCompraId === id ? { ...oc, ...data } : oc) }))
+
+    const { error } = await supabase.from('erp_purchase_orders').update(patch).eq('id', id)
+    if (error) await get().loadPurchases()
   },
 
   async deleteOrdenCompra(id) {
-    await supabase.from('erp_purchase_orders').delete().eq('id', id)
     set(s => ({ ordenesCompra: s.ordenesCompra.filter(oc => oc.ordenCompraId !== id) }))
+    await supabase.from('erp_purchase_orders').delete().eq('id', id)
   },
 }))
