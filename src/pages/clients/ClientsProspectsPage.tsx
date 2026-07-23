@@ -424,7 +424,7 @@ export function ClientsProspectsPage() {
           <div className="form-grid">
             <div className="form-group sm:col-span-2">
               <label className="label">Empresa *</label>
-              <input className="input" value={pForm.empresa} onChange={FP('empresa')} />
+              <input className="input" value={pForm.empresa} onChange={FP('empresa')} autoFocus />
             </div>
             <div className="form-group">
               <label className="label">Contacto</label>
