@@ -54,9 +54,20 @@ function toQuote(r: DbQuote): Quote {
   }
 }
 
+// ── Helper de recarga independiente del flag initialized ─────────────────────
+async function fetchQuotes() {
+  const { data } = await supabase
+    .from('erp_quotes')
+    .select(LIST_COLUMNS)
+    .order('created_at', { ascending: false })
+  // items viene null al usar columnas explícitas; inicializamos vacío
+  return data ? (data as unknown as DbQuoteBase[]).map(r => toQuote({ ...r, items: [] })) : null
+}
+
 interface QuotesState {
   quotes: Quote[]
   loading: boolean
+  initialized: boolean
   loadQuotes: () => Promise<void>
   subscribeRealtime: () => () => void
   addQuote: (q: Omit<Quote, 'cotizacionId' | 'folio'>) => Promise<Quote>
@@ -65,17 +76,14 @@ interface QuotesState {
 }
 
 export const useQuotesStore = create<QuotesState>()((set, get) => ({
-  quotes: [], loading: false,
+  quotes: [], loading: false, initialized: false,
 
   async loadQuotes() {
+    if (get().initialized) return
     set({ loading: true })
     try {
-      const { data } = await supabase
-        .from('erp_quotes')
-        .select(LIST_COLUMNS)
-        .order('created_at', { ascending: false })
-      // items viene null al usar columnas explícitas; inicializamos vacío
-      if (data) set({ quotes: (data as unknown as DbQuoteBase[]).map(r => toQuote({ ...r, items: [] })) })
+      const d = await fetchQuotes()
+      if (d) set({ quotes: d, initialized: true })
     } finally {
       set({ loading: false })
     }
@@ -84,8 +92,8 @@ export const useQuotesStore = create<QuotesState>()((set, get) => ({
   subscribeRealtime() {
     const channel = supabase
       .channel('erp_quotes_rt')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_quotes' }, () => {
-        void get().loadQuotes()
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_quotes' }, async () => {
+        const d = await fetchQuotes(); if (d) set({ quotes: d })
       })
       .subscribe()
     return () => { void supabase.removeChannel(channel) }
@@ -123,7 +131,8 @@ export const useQuotesStore = create<QuotesState>()((set, get) => ({
 
     if (error) throw error
 
-    await get().loadQuotes()
+    const d = await fetchQuotes()
+    if (d) set({ quotes: d })
     return row ? toQuote(row as DbQuote) : { ...data, items: itemsJson, cotizacionId: '', folio }
   },
 
@@ -148,7 +157,10 @@ export const useQuotesStore = create<QuotesState>()((set, get) => ({
     set(s => ({ quotes: s.quotes.map(q => q.cotizacionId === id ? { ...q, ...data } : q) }))
 
     const { error } = await supabase.from('erp_quotes').update(patch).eq('id', id)
-    if (error) { toast.error('Error al guardar. Intenta de nuevo.'); await get().loadQuotes() }
+    if (error) {
+      toast.error('Error al guardar. Intenta de nuevo.')
+      const d = await fetchQuotes(); if (d) set({ quotes: d })
+    }
   },
 
   async deleteQuote(id) {
