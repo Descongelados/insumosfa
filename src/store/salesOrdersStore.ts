@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { SalesOrder } from '../types'
 import { supabase } from '../lib/supabase'
 import { useFinanceStore } from './financeStore'
+import { toast } from './toastStore'
 
 type DbOrder = {
   id: string; folio: string; cliente_id: string; cotizacion_id: string | null
@@ -89,7 +90,13 @@ export const useSalesOrdersStore = create<SalesOrdersState>()((set, get) => ({
     // Optimistic update
     set(s => ({ orders: s.orders.map(o => o.pedidoId === id ? { ...o, ...data } : o) }))
 
-    await supabase.from('erp_sales_orders').update(patch).eq('id', id)
+    const { error } = await supabase.from('erp_sales_orders').update(patch).eq('id', id)
+    if (error) {
+      toast.error('Error al guardar. Intenta de nuevo.')
+      const { data: rows } = await supabase.from('erp_sales_orders').select('*').order('created_at', { ascending: false })
+      if (rows) set({ orders: (rows as DbOrder[]).map(toOrder) })
+      return
+    }
 
     // Auto-generar factura al facturar, verificando con select('id') + índice
     if (data.estatus === 'facturado') {
