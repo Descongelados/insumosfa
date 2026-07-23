@@ -21,6 +21,11 @@ function toOrder(r: DbOrder): SalesOrder {
   }
 }
 
+async function fetchOrders() {
+  const { data } = await supabase.from('erp_sales_orders').select('*').order('created_at', { ascending: false })
+  return data ? (data as DbOrder[]).map(toOrder) : null
+}
+
 interface SalesOrdersState {
   orders: SalesOrder[]
   loading: boolean
@@ -38,7 +43,9 @@ export const useSalesOrdersStore = create<SalesOrdersState>()((set, get) => ({
   subscribeRealtime() {
     const ch = supabase
       .channel('erp_sales_orders_rt')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_sales_orders' }, () => { void get().loadOrders() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_sales_orders' }, async () => {
+        const d = await fetchOrders(); if (d) set({ orders: d })
+      })
       .subscribe()
     return () => { void supabase.removeChannel(ch) }
   },
@@ -47,8 +54,8 @@ export const useSalesOrdersStore = create<SalesOrdersState>()((set, get) => ({
     if (get().initialized) return
     set({ loading: true })
     try {
-      const { data } = await supabase.from('erp_sales_orders').select('*').order('created_at', { ascending: false })
-      if (data) set({ orders: (data as DbOrder[]).map(toOrder), initialized: true })
+      const d = await fetchOrders()
+      if (d) set({ orders: d, initialized: true })
     } finally {
       set({ loading: false })
     }
@@ -70,7 +77,8 @@ export const useSalesOrdersStore = create<SalesOrdersState>()((set, get) => ({
       })
       .select('*')
       .maybeSingle()
-    await get().loadOrders()
+    const d = await fetchOrders()
+    if (d) set({ orders: d })
     return row ? toOrder(row as DbOrder) : { ...data, pedidoId: '', folio }
   },
 
@@ -93,8 +101,8 @@ export const useSalesOrdersStore = create<SalesOrdersState>()((set, get) => ({
     const { error } = await supabase.from('erp_sales_orders').update(patch).eq('id', id)
     if (error) {
       toast.error('Error al guardar. Intenta de nuevo.')
-      const { data: rows } = await supabase.from('erp_sales_orders').select('*').order('created_at', { ascending: false })
-      if (rows) set({ orders: (rows as DbOrder[]).map(toOrder) })
+      const d = await fetchOrders()
+      if (d) set({ orders: d })
       return
     }
 
