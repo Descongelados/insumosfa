@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { Prospect, ContactNote } from '../types'
 import { supabase } from '../lib/supabase'
+import { toast } from './toastStore'
 import { useClientsStore } from './clientsStore'
 
 export interface DatosFiscales {
@@ -114,6 +115,7 @@ export const useProspectsStore = create<ProspectsState>()((set, get) => ({
 
     const { error } = await supabase.from('erp_prospects').update(patch).eq('id', id)
     if (error) {
+      toast.error('Error al guardar. Intenta de nuevo.')
       const d = await fetchProspects()
       if (d) set({ prospects: d })
     }

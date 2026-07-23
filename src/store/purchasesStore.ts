@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { toast } from './toastStore'
 import type { SolicitudCompra, OrdenCompra } from '../types'
 import { supabase } from '../lib/supabase'
 
@@ -117,6 +118,7 @@ export const usePurchasesStore = create<PurchasesState>()((set, get) => ({
 
     const { error } = await supabase.from('erp_purchase_requests').update(patch).eq('id', id)
     if (error) {
+      toast.error('Error al guardar. Intenta de nuevo.')
       const d = await fetchSolicitudes()
       if (d) set({ solicitudes: d })
     }
@@ -162,6 +164,7 @@ export const usePurchasesStore = create<PurchasesState>()((set, get) => ({
 
     const { error } = await supabase.from('erp_purchase_orders').update(patch).eq('id', id)
     if (error) {
+      toast.error('Error al guardar. Intenta de nuevo.')
       const d = await fetchOrdenes()
       if (d) set({ ordenesCompra: d })
     }

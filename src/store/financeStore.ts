@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { toast } from './toastStore'
 import type { FacturaVenta, PagoCliente, FacturaProveedor, PagoProveedor, Banco, GastoNegocio } from '../types'
 import { supabase } from '../lib/supabase'
 
@@ -211,6 +212,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
 
     const { error } = await supabase.from('erp_invoices_sale').update(patch).eq('id', id)
     if (error) {
+      toast.error('Error al guardar. Intenta de nuevo.')
       const d = await fetchFacturasVenta()
       if (d) set({ facturasVenta: d })
     }
@@ -289,6 +291,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
 
     const { error } = await supabase.from('erp_banks').update(patch).eq('id', id)
     if (error) {
+      toast.error('Error al guardar. Intenta de nuevo.')
       const d = await fetchBancos()
       if (d) set({ bancos: d })
     }
@@ -333,6 +336,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
 
     const { error } = await supabase.from('erp_gastos_negocio').update(patch).eq('id', id)
     if (error) {
+      toast.error('Error al guardar. Intenta de nuevo.')
       const d = await fetchGastos()
       if (d) set({ gastos: d })
     }

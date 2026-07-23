@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { Quote, QuoteItem } from '../types'
 import { supabase } from '../lib/supabase'
+import { toast } from './toastStore'
 
 // Columnas que existen siempre en erp_quotes
 type DbQuoteBase = {
@@ -147,7 +148,7 @@ export const useQuotesStore = create<QuotesState>()((set, get) => ({
     set(s => ({ quotes: s.quotes.map(q => q.cotizacionId === id ? { ...q, ...data } : q) }))
 
     const { error } = await supabase.from('erp_quotes').update(patch).eq('id', id)
-    if (error) await get().loadQuotes()
+    if (error) { toast.error('Error al guardar. Intenta de nuevo.'); await get().loadQuotes() }
   },
 
   async deleteQuote(id) {

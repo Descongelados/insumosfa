@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { Client, ContactoCliente, ContactNote } from '../types'
 import { supabase } from '../lib/supabase'
+import { toast } from './toastStore'
 
 type DbClient = {
   id: string; razon_social: string; rfc: string; regimen_fiscal: string
@@ -133,6 +134,7 @@ export const useClientsStore = create<ClientsState>()((set, get) => ({
 
     const { error } = await supabase.from('erp_clients').update(patch).eq('id', id)
     if (error) {
+      toast.error('Error al guardar. Intenta de nuevo.')
       const d = await fetchClients()
       if (d) set({ clients: d })
     }

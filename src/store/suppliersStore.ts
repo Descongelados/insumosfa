@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { toast } from './toastStore'
 import type { Supplier } from '../types'
 import { supabase } from '../lib/supabase'
 
@@ -90,6 +91,7 @@ export const useSuppliersStore = create<SuppliersState>()((set, get) => ({
 
     const { error } = await supabase.from('erp_suppliers').update(patch).eq('id', id)
     if (error) {
+      toast.error('Error al guardar. Intenta de nuevo.')
       const d = await fetchSuppliers()
       if (d) set({ suppliers: d })
     }

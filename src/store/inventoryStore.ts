@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { toast } from './toastStore'
 import type { Inventario, KardexMovimiento, MovimientoTipo } from '../types'
 import { supabase } from '../lib/supabase'
 
@@ -116,6 +117,7 @@ export const useInventoryStore = create<InventoryState>()((set, get) => ({
       .eq('product_id', productId)
 
     if (error) {
+      toast.error('Error al guardar. Intenta de nuevo.')
       // Rollback
       set(s => ({
         inventario: s.inventario.map(i =>

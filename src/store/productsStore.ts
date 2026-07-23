@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { toast } from './toastStore'
 import type { Product } from '../types'
 import { supabase } from '../lib/supabase'
 
@@ -83,6 +84,7 @@ export const useProductsStore = create<ProductsState>()((set, get) => ({
 
     const { error } = await supabase.from('erp_products').update(patch).eq('id', id)
     if (error) {
+      toast.error('Error al guardar. Intenta de nuevo.')
       const d = await fetchProducts()
       if (d) set({ products: d })
     }
@@ -100,6 +102,7 @@ export const useProductsStore = create<ProductsState>()((set, get) => ({
     set(s => ({ products: s.products.map(p => p.productId === id ? { ...p, activo: !p.activo } : p) }))
     const { error } = await supabase.from('erp_products').update({ activo: !p.activo }).eq('id', id)
     if (error) {
+      toast.error('Error al guardar. Intenta de nuevo.')
       // Rollback
       set(s => ({ products: s.products.map(p => p.productId === id ? { ...p, activo: p.activo } : p) }))
     }

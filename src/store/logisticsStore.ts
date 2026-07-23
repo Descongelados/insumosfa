@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { toast } from './toastStore'
 import type { Embarque, Transportista } from '../types'
 import { supabase } from '../lib/supabase'
 
@@ -126,6 +127,7 @@ export const useLogisticsStore = create<LogisticsState>()((set, get) => ({
 
     const { error } = await supabase.from('erp_shipments').update(patch).eq('id', id)
     if (error) {
+      toast.error('Error al guardar. Intenta de nuevo.')
       const d = await fetchEmbarques()
       if (d) set({ embarques: d })
     }
@@ -158,6 +160,7 @@ export const useLogisticsStore = create<LogisticsState>()((set, get) => ({
 
     const { error } = await supabase.from('erp_carriers').update(patch).eq('id', id)
     if (error) {
+      toast.error('Error al guardar. Intenta de nuevo.')
       const d = await fetchCarriers()
       if (d) set({ transportistas: d })
     }
