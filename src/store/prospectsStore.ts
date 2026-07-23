@@ -129,12 +129,32 @@ export const useProspectsStore = create<ProspectsState>()((set, get) => ({
   async convertirACliente(id, fiscal) {
     const prospect = get().prospects.find(p => p.prospectoId === id)
     if (!prospect) return
-    await useClientsStore.getState().addClient({
+
+    // Crear cliente y obtener su nuevo ID
+    const newClientId = await useClientsStore.getState().addClient({
       razonSocial: prospect.empresa, rfc: fiscal.rfc,
       regimenFiscal: fiscal.regimenFiscal, direccionFiscal: fiscal.direccionFiscal,
       correo: prospect.correo, telefono: prospect.telefono,
       limiteCredito: fiscal.limiteCredito, estatus: 'activo',
     })
+
+    // Migrar notas del prospecto al nuevo cliente
+    if (newClientId) {
+      const notasProspecto = get().prospectNotes.filter(n => n.entidadId === id)
+      if (notasProspecto.length > 0) {
+        await supabase.from('erp_client_notes').insert(
+          notasProspecto.map(n => ({ cliente_id: newClientId, texto: n.texto, fecha: n.fecha }))
+        )
+        const clientNotes = await supabase.from('erp_client_notes').select('*').order('fecha', { ascending: false })
+        if (clientNotes.data) {
+          useClientsStore.setState({
+            clientNotes: (clientNotes.data as { id: string; cliente_id: string; fecha: string; texto: string }[])
+              .map(r => ({ noteId: r.id, entidadId: r.cliente_id, fecha: r.fecha, texto: r.texto }))
+          })
+        }
+      }
+    }
+
     set(s => ({ prospects: s.prospects.filter(p => p.prospectoId !== id) }))
     await supabase.from('erp_prospects').delete().eq('id', id)
   },

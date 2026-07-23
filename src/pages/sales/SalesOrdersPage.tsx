@@ -37,7 +37,7 @@ export function SalesOrdersPage() {
   const [modal, setModal] = useState<'edit' | 'new' | 'del' | null>(null)
   const [sel, setSel] = useState<SalesOrder | null>(null)
   const [delTarget, setDelTarget] = useState<SalesOrder | null>(null)
-  const [form, setForm] = useState({ clienteId: '', fechaEntrega: '', notas: '', items: [] as SalesOrderItem[] })
+  const [form, setForm] = useState({ clienteId: '', fechaEntrega: '', notas: '', ivaPct: 16 as 0 | 8 | 16, items: [] as SalesOrderItem[] })
 
   const canDelete = me ? hasRole(me, 'director', 'administracion') : false
 
@@ -52,7 +52,7 @@ export function SalesOrdersPage() {
 
   function openEdit(o: SalesOrder) { setSel(o); setModal('edit') }
   function openNew() {
-    setForm({ clienteId: clients[0]?.clientId ?? '', fechaEntrega: '', notas: '', items: [] })
+    setForm({ clienteId: clients[0]?.clientId ?? '', fechaEntrega: '', notas: '', ivaPct: 16, items: [] })
     setModal('new')
   }
   function openDel(o: SalesOrder) { setDelTarget(o); setModal('del') }
@@ -81,7 +81,7 @@ export function SalesOrdersPage() {
     if (!form.clienteId) { toast.error('Selecciona un cliente.'); return }
     if (form.items.length === 0) { toast.error('Agrega al menos una partida.'); return }
     const subtotal = form.items.reduce((a, it) => a + it.cantidad * it.precio * (1 - it.descuento / 100), 0)
-    const impuestos = subtotal * 0.16
+    const impuestos = subtotal * (form.ivaPct / 100)
     const total = subtotal + impuestos
     const order = await addOrder({ ...form, fechaPedido: new Date().toISOString().split('T')[0], estatus: 'nuevo', subtotal, impuestos, total })
     toast.success(`Pedido ${order.folio} creado.`)
@@ -232,6 +232,14 @@ export function SalesOrdersPage() {
                 <label className="label">Fecha de Entrega</label>
                 <input type="date" className="input" value={form.fechaEntrega} onChange={e => setForm(f => ({ ...f, fechaEntrega: e.target.value }))} />
               </div>
+              <div className="form-group">
+                <label className="label">IVA</label>
+                <select className="select" value={form.ivaPct} onChange={e => setForm(f => ({ ...f, ivaPct: Number(e.target.value) as 0 | 8 | 16 }))}>
+                  <option value={16}>16%</option>
+                  <option value={8}>8% (zona fronteriza)</option>
+                  <option value={0}>0% (exento)</option>
+                </select>
+              </div>
             </div>
             <div>
               <div className="flex items-center justify-between mb-2">
@@ -270,11 +278,11 @@ export function SalesOrdersPage() {
               ))}
               {form.items.length > 0 && (() => {
                 const sub = form.items.reduce((a, it) => a + it.cantidad * it.precio * (1 - it.descuento / 100), 0)
-                const iva = sub * 0.16
+                const iva = sub * (form.ivaPct / 100)
                 return (
                   <div className="mt-3 p-3 bg-gray-50 rounded-lg text-sm text-right space-y-1">
                     <div>Subtotal: <span className="font-semibold">{sub.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}</span></div>
-                    <div>IVA 16%: <span className="font-semibold">{iva.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}</span></div>
+                    <div>IVA {form.ivaPct}%: <span className="font-semibold">{iva.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}</span></div>
                     <div className="text-base font-bold text-gray-900">Total: {(sub + iva).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}</div>
                   </div>
                 )

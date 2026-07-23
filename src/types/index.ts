@@ -169,6 +169,7 @@ export interface SalesOrder {
   fechaPedido: string
   fechaEntrega: string
   estatus: PedidoEstatus
+  ivaPct: 0 | 8 | 16
   items: SalesOrderItem[]
   subtotal: number
   impuestos: number

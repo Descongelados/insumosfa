@@ -6,7 +6,7 @@ import { toast } from './toastStore'
 
 type DbOrder = {
   id: string; folio: string; cliente_id: string; cotizacion_id: string | null
-  fecha_pedido: string; fecha_entrega: string; estatus: string
+  fecha_pedido: string; fecha_entrega: string; estatus: string; iva_pct: number | null
   items: unknown; subtotal: number; impuestos: number; total: number; notas: string
 }
 
@@ -16,6 +16,7 @@ function toOrder(r: DbOrder): SalesOrder {
     cotizacionId: r.cotizacion_id ?? undefined,
     fechaPedido: r.fecha_pedido, fechaEntrega: r.fecha_entrega,
     estatus: r.estatus as SalesOrder['estatus'],
+    ivaPct: (r.iva_pct ?? 16) as SalesOrder['ivaPct'],
     items: (r.items as SalesOrder['items']) ?? [],
     subtotal: r.subtotal, impuestos: r.impuestos, total: r.total, notas: r.notas,
   }
@@ -72,7 +73,7 @@ export const useSalesOrdersStore = create<SalesOrdersState>()((set, get) => ({
       .insert({
         folio, cliente_id: data.clienteId, cotizacion_id: data.cotizacionId ?? null,
         fecha_pedido: data.fechaPedido, fecha_entrega: data.fechaEntrega,
-        estatus: data.estatus, items: data.items,
+        estatus: data.estatus, iva_pct: data.ivaPct ?? 16, items: data.items,
         subtotal: data.subtotal, impuestos: data.impuestos, total: data.total, notas: data.notas,
       })
       .select('*')
@@ -93,6 +94,7 @@ export const useSalesOrdersStore = create<SalesOrdersState>()((set, get) => ({
     if (data.subtotal !== undefined) patch.subtotal = data.subtotal
     if (data.impuestos !== undefined) patch.impuestos = data.impuestos
     if (data.total !== undefined) patch.total = data.total
+    if (data.ivaPct !== undefined) patch.iva_pct = data.ivaPct
     if (data.notas !== undefined) patch.notas = data.notas
 
     // Optimistic update
