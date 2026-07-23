@@ -47,6 +47,7 @@ export function SuppliersPage() {
   const [form, setForm] = useState(BLANK)
   const [editId, setEditId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Supplier | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const filtered = suppliers.filter((s) =>
     [s.razonSocial, s.rfc, s.contacto].join(' ').toLowerCase().includes(q.toLowerCase())
@@ -60,15 +61,23 @@ export function SuppliersPage() {
 
   function handleSave() {
     if (!form.razonSocial?.trim()) { toast.error('La razón social es obligatoria.'); return }
-    if (editId) { updateSupplier(editId, form); toast.success('Proveedor actualizado.') }
-    else { addSupplier(form); toast.success('Proveedor creado.') }
+    if (form.correo && !/^[^@]+@[^@]+\.[^@]+$/.test(form.correo)) { toast.error('El correo no tiene un formato válido.'); return }
+    if (editId) { void updateSupplier(editId, form); toast.success('Proveedor actualizado.') }
+    else { void addSupplier(form); toast.success('Proveedor creado.') }
     setModal(null)
   }
 
-  function handleDelete() {
-    if (deleteTarget) { deleteSupplier(deleteTarget.supplierId); toast.success(`Proveedor "${deleteTarget.razonSocial}" eliminado.`) }
-    setModal(null)
-    setDeleteTarget(null)
+  async function handleDelete() {
+    if (!deleteTarget) return
+    setDeleting(true)
+    try {
+      await deleteSupplier(deleteTarget.supplierId)
+      toast.success(`Proveedor "${deleteTarget.razonSocial}" eliminado.`)
+      setModal(null)
+      setDeleteTarget(null)
+    } finally {
+      setDeleting(false)
+    }
   }
 
   const F = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -181,9 +190,10 @@ export function SuppliersPage() {
           onClose={() => setModal(null)}
           footer={
             <>
-              <button className="btn-secondary" onClick={() => setModal(null)}>Cancelar</button>
-              <button className="btn-danger" onClick={handleDelete}>
-                <Trash2 size={14} /> Eliminar definitivamente
+              <button className="btn-secondary" onClick={() => setModal(null)} disabled={deleting}>Cancelar</button>
+              <button className="btn-danger" onClick={() => void handleDelete()} disabled={deleting}>
+                {deleting ? <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin inline-block" /> : <Trash2 size={14} />}
+                {deleting ? 'Eliminando...' : 'Eliminar definitivamente'}
               </button>
             </>
           }

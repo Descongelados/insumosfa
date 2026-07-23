@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { toast } from './toastStore'
+import { refChannel } from './realtimeChannel'
 import type { Supplier } from '../types'
 import { supabase } from '../lib/supabase'
 
@@ -21,8 +22,9 @@ function toSupplier(r: DbSupplier): Supplier {
 }
 
 async function fetchSuppliers() {
-  const { data } = await supabase.from('erp_suppliers').select('*').order('razon_social')
-  return data ? (data as DbSupplier[]).map(toSupplier) : null
+  const { data, error } = await supabase.from('erp_suppliers').select('*').order('razon_social')
+  if (error) { toast.error('Error al cargar proveedores.'); return null }
+  return (data as DbSupplier[]).map(toSupplier)
 }
 
 interface SuppliersState {
@@ -40,13 +42,12 @@ export const useSuppliersStore = create<SuppliersState>()((set, get) => ({
   suppliers: [], loading: false, initialized: false,
 
   subscribeRealtime() {
-    const ch = supabase
-      .channel('erp_suppliers_rt')
+    return refChannel('erp_suppliers_rt', (ch) => ch
       .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_suppliers' }, async () => {
+        if (!get().initialized) return
         const d = await fetchSuppliers(); if (d) set({ suppliers: d })
       })
-      .subscribe()
-    return () => { void supabase.removeChannel(ch) }
+    )
   },
 
   async loadSuppliers() {
@@ -98,7 +99,12 @@ export const useSuppliersStore = create<SuppliersState>()((set, get) => ({
   },
 
   async deleteSupplier(id) {
+    const backup = get().suppliers
     set(s => ({ suppliers: s.suppliers.filter(s => s.supplierId !== id) }))
-    await supabase.from('erp_suppliers').delete().eq('id', id)
+    const { error } = await supabase.from('erp_suppliers').delete().eq('id', id)
+    if (error) {
+      toast.error('Error al eliminar proveedor. Intenta de nuevo.')
+      set({ suppliers: backup })
+    }
   },
 }))

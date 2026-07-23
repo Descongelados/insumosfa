@@ -59,12 +59,14 @@ export const useInventoryStore = create<InventoryState>()((set, get) => ({
 
   subscribeRealtime() {
     return refChannel('erp_inventory_rt', (ch) => ch
-      // Cambios en stock → recargar inventario completo
+      // Cambios en stock → recargar inventario solo si ya se inicializó
       .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_inventory' }, () => {
+        if (!get().initialized) return
         void get().loadInventory()
       })
       // Cambios en kardex → recargar solo el producto actualmente en vista
       .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_kardex' }, () => {
+        if (!get().initialized) return
         const pid = get().activeProductId
         if (pid) void get().loadKardexByProduct(pid)
       })

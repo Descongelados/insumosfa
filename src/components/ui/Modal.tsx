@@ -17,7 +17,7 @@ export function Modal({ title, onClose, children, footer, size = 'md' }: ModalPr
       <div className={`modal w-full ${sizeMap[size]}`}>
         <div className="modal-header">
           <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
-          <button onClick={onClose} className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600">
+          <button onClick={onClose} aria-label="Cerrar modal" className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600">
             <X size={20} />
           </button>
         </div>

@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { Quote, QuoteItem } from '../types'
 import { supabase } from '../lib/supabase'
 import { toast } from './toastStore'
+import { refChannel } from './realtimeChannel'
 
 // Columnas que existen siempre en erp_quotes
 type DbQuoteBase = {
@@ -56,12 +57,13 @@ function toQuote(r: DbQuote): Quote {
 
 // ── Helper de recarga independiente del flag initialized ─────────────────────
 async function fetchQuotes() {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('erp_quotes')
     .select(LIST_COLUMNS)
     .order('created_at', { ascending: false })
+  if (error) { toast.error('Error al cargar cotizaciones.'); return null }
   // items viene null al usar columnas explícitas; inicializamos vacío
-  return data ? (data as unknown as DbQuoteBase[]).map(r => toQuote({ ...r, items: [] })) : null
+  return (data as unknown as DbQuoteBase[]).map(r => toQuote({ ...r, items: [] }))
 }
 
 interface QuotesState {
@@ -90,13 +92,12 @@ export const useQuotesStore = create<QuotesState>()((set, get) => ({
   },
 
   subscribeRealtime() {
-    const channel = supabase
-      .channel('erp_quotes_rt')
+    return refChannel('erp_quotes_rt', (ch) => ch
       .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_quotes' }, async () => {
+        if (!get().initialized) return
         const d = await fetchQuotes(); if (d) set({ quotes: d })
       })
-      .subscribe()
-    return () => { void supabase.removeChannel(channel) }
+    )
   },
 
   async addQuote(data) {
@@ -164,7 +165,12 @@ export const useQuotesStore = create<QuotesState>()((set, get) => ({
   },
 
   async deleteQuote(id) {
+    const backup = get().quotes
     set(s => ({ quotes: s.quotes.filter(q => q.cotizacionId !== id) }))
-    await supabase.from('erp_quotes').delete().eq('id', id)
+    const { error } = await supabase.from('erp_quotes').delete().eq('id', id)
+    if (error) {
+      toast.error('Error al eliminar cotización. Intenta de nuevo.')
+      set({ quotes: backup })
+    }
   },
 }))

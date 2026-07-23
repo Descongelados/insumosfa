@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { Client, ContactoCliente, ContactNote } from '../types'
 import { supabase } from '../lib/supabase'
 import { toast } from './toastStore'
+import { refChannel } from './realtimeChannel'
 
 type DbClient = {
   id: string; razon_social: string; rfc: string; regimen_fiscal: string
@@ -39,16 +40,19 @@ function toClientNote(r: DbClientNote): ContactNote {
 // ── Helpers de recarga individual ────────────────────────────────────────────
 
 async function fetchClients() {
-  const { data } = await supabase.from('erp_clients').select('*').order('created_at', { ascending: false })
-  return data ? (data as DbClient[]).map(toClient) : null
+  const { data, error } = await supabase.from('erp_clients').select('*').order('created_at', { ascending: false })
+  if (error) { toast.error('Error al cargar clientes.'); return null }
+  return (data as DbClient[]).map(toClient)
 }
 async function fetchContactos() {
-  const { data } = await supabase.from('erp_client_contacts').select('*')
-  return data ? (data as DbContact[]).map(toContacto) : null
+  const { data, error } = await supabase.from('erp_client_contacts').select('*')
+  if (error) return null
+  return (data as DbContact[]).map(toContacto)
 }
 async function fetchClientNotes() {
-  const { data } = await supabase.from('erp_client_notes').select('*').order('fecha', { ascending: false })
-  return data ? (data as DbClientNote[]).map(toClientNote) : null
+  const { data, error } = await supabase.from('erp_client_notes').select('*').order('fecha', { ascending: false })
+  if (error) return null
+  return (data as DbClientNote[]).map(toClientNote)
 }
 
 interface ClientsState {
@@ -73,19 +77,20 @@ export const useClientsStore = create<ClientsState>()((set, get) => ({
 
   // ── Realtime granular: cada tabla recarga solo su entidad ─────────────────
   subscribeRealtime() {
-    const ch = supabase
-      .channel('erp_clients_rt')
+    return refChannel('erp_clients_rt', (ch) => ch
       .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_clients' }, async () => {
+        if (!get().initialized) return
         const d = await fetchClients(); if (d) set({ clients: d })
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_client_contacts' }, async () => {
+        if (!get().initialized) return
         const d = await fetchContactos(); if (d) set({ contactos: d })
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_client_notes' }, async () => {
+        if (!get().initialized) return
         const d = await fetchClientNotes(); if (d) set({ clientNotes: d })
       })
-      .subscribe()
-    return () => { void supabase.removeChannel(ch) }
+    )
   },
 
   async loadClients() {
@@ -105,7 +110,7 @@ export const useClientsStore = create<ClientsState>()((set, get) => ({
   },
 
   async addClient(data) {
-    const { data: row } = await supabase
+    const { data: row, error } = await supabase
       .from('erp_clients')
       .insert({
         razon_social: data.razonSocial, rfc: data.rfc,
@@ -116,6 +121,7 @@ export const useClientsStore = create<ClientsState>()((set, get) => ({
       })
       .select('id')
       .maybeSingle()
+    if (error) { toast.error('Error al crear cliente.'); return '' }
     const d = await fetchClients()
     if (d) set({ clients: d })
     return (row as { id: string } | null)?.id ?? ''
@@ -146,11 +152,17 @@ export const useClientsStore = create<ClientsState>()((set, get) => ({
   },
 
   async deleteClient(id) {
+    const backup = get().clients
+    const backupContactos = get().contactos
     set(s => ({
       clients: s.clients.filter(c => c.clientId !== id),
       contactos: s.contactos.filter(c => c.clienteId !== id),
     }))
-    await supabase.from('erp_clients').delete().eq('id', id)
+    const { error } = await supabase.from('erp_clients').delete().eq('id', id)
+    if (error) {
+      toast.error('Error al eliminar cliente. Intenta de nuevo.')
+      set({ clients: backup, contactos: backupContactos })
+    }
   },
 
   async addContacto(data) {
@@ -163,8 +175,13 @@ export const useClientsStore = create<ClientsState>()((set, get) => ({
   },
 
   async removeContacto(id) {
+    const backup = get().contactos
     set(s => ({ contactos: s.contactos.filter(c => c.contactoId !== id) }))
-    await supabase.from('erp_client_contacts').delete().eq('id', id)
+    const { error } = await supabase.from('erp_client_contacts').delete().eq('id', id)
+    if (error) {
+      toast.error('Error al eliminar contacto.')
+      set({ contactos: backup })
+    }
   },
 
   async addClientNote(clienteId, texto) {
@@ -174,7 +191,12 @@ export const useClientsStore = create<ClientsState>()((set, get) => ({
   },
 
   async removeClientNote(noteId) {
+    const backup = get().clientNotes
     set(s => ({ clientNotes: s.clientNotes.filter(n => n.noteId !== noteId) }))
-    await supabase.from('erp_client_notes').delete().eq('id', noteId)
+    const { error } = await supabase.from('erp_client_notes').delete().eq('id', noteId)
+    if (error) {
+      toast.error('Error al eliminar nota.')
+      set({ clientNotes: backup })
+    }
   },
 }))

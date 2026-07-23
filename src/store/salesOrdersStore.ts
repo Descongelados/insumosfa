@@ -3,6 +3,7 @@ import type { SalesOrder } from '../types'
 import { supabase } from '../lib/supabase'
 import { useFinanceStore } from './financeStore'
 import { toast } from './toastStore'
+import { refChannel } from './realtimeChannel'
 
 type DbOrder = {
   id: string; folio: string; cliente_id: string; cotizacion_id: string | null
@@ -23,8 +24,9 @@ function toOrder(r: DbOrder): SalesOrder {
 }
 
 async function fetchOrders() {
-  const { data } = await supabase.from('erp_sales_orders').select('*').order('created_at', { ascending: false })
-  return data ? (data as DbOrder[]).map(toOrder) : null
+  const { data, error } = await supabase.from('erp_sales_orders').select('*').order('created_at', { ascending: false })
+  if (error) { toast.error('Error al cargar pedidos.'); return null }
+  return (data as DbOrder[]).map(toOrder)
 }
 
 interface SalesOrdersState {
@@ -42,13 +44,12 @@ export const useSalesOrdersStore = create<SalesOrdersState>()((set, get) => ({
   orders: [], loading: false, initialized: false,
 
   subscribeRealtime() {
-    const ch = supabase
-      .channel('erp_sales_orders_rt')
+    return refChannel('erp_sales_orders_rt', (ch) => ch
       .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_sales_orders' }, async () => {
+        if (!get().initialized) return
         const d = await fetchOrders(); if (d) set({ orders: d })
       })
-      .subscribe()
-    return () => { void supabase.removeChannel(ch) }
+    )
   },
 
   async loadOrders() {
@@ -64,11 +65,12 @@ export const useSalesOrdersStore = create<SalesOrdersState>()((set, get) => ({
 
   async addOrder(data) {
     // Folio atómico en servidor
-    const { data: folioRow } = await supabase
+    const { data: folioRow, error: folioErr } = await supabase
       .rpc('erp_next_folio', { p_prefix: 'PV', p_seq: 'erp_seq_folio_sales' })
+    if (folioErr) toast.error('Error al generar folio. Se usará folio temporal.')
     const folio = (folioRow as string | null) ?? `PV-${Date.now()}`
 
-    const { data: row } = await supabase
+    const { data: row, error } = await supabase
       .from('erp_sales_orders')
       .insert({
         folio, cliente_id: data.clienteId, cotizacion_id: data.cotizacionId ?? null,
@@ -78,6 +80,7 @@ export const useSalesOrdersStore = create<SalesOrdersState>()((set, get) => ({
       })
       .select('*')
       .maybeSingle()
+    if (error) { toast.error('Error al crear pedido. Intenta de nuevo.'); throw error }
     const d = await fetchOrders()
     if (d) set({ orders: d })
     return row ? toOrder(row as DbOrder) : { ...data, pedidoId: '', folio }
@@ -131,7 +134,12 @@ export const useSalesOrdersStore = create<SalesOrdersState>()((set, get) => ({
   },
 
   async deleteOrder(id) {
+    const backup = get().orders
     set(s => ({ orders: s.orders.filter(o => o.pedidoId !== id) }))
-    await supabase.from('erp_sales_orders').delete().eq('id', id)
+    const { error } = await supabase.from('erp_sales_orders').delete().eq('id', id)
+    if (error) {
+      toast.error('Error al eliminar pedido. Intenta de nuevo.')
+      set({ orders: backup })
+    }
   },
 }))

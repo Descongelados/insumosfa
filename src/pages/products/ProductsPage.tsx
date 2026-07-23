@@ -38,6 +38,7 @@ export function ProductsPage() {
   const [form, setForm] = useState(BLANK)
   const [editId, setEditId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const cats = ['Todos', ...Array.from(new Set(products.map((p) => p.categoria)))]
 
@@ -62,10 +63,17 @@ export function ProductsPage() {
     setModal(null)
   }
 
-  function handleDelete() {
-    if (deleteTarget) { deleteProduct(deleteTarget.productId); toast.success(`Producto ${deleteTarget.sku} eliminado.`) }
-    setModal(null)
-    setDeleteTarget(null)
+  async function handleDelete() {
+    if (!deleteTarget) return
+    setDeleting(true)
+    try {
+      await deleteProduct(deleteTarget.productId)
+      toast.success(`Producto ${deleteTarget.sku} eliminado.`)
+      setModal(null)
+      setDeleteTarget(null)
+    } finally {
+      setDeleting(false)
+    }
   }
 
   const N = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
@@ -178,9 +186,10 @@ export function ProductsPage() {
           onClose={() => setModal(null)}
           footer={
             <>
-              <button className="btn-secondary" onClick={() => setModal(null)}>Cancelar</button>
-              <button className="btn-danger" onClick={handleDelete}>
-                <Trash2 size={14} /> Eliminar definitivamente
+              <button className="btn-secondary" onClick={() => setModal(null)} disabled={deleting}>Cancelar</button>
+              <button className="btn-danger" onClick={() => void handleDelete()} disabled={deleting}>
+                {deleting ? <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin inline-block" /> : <Trash2 size={14} />}
+                {deleting ? 'Eliminando...' : 'Eliminar definitivamente'}
               </button>
             </>
           }

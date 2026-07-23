@@ -80,28 +80,34 @@ function toGasto(r: DbGasto): GastoNegocio {
 // ── Helpers de recarga individual ────────────────────────────────────────────
 
 async function fetchFacturasVenta() {
-  const { data } = await supabase.from('erp_invoices_sale').select('*').order('created_at', { ascending: false })
-  return data ? (data as DbFV[]).map(toFV) : null
+  const { data, error } = await supabase.from('erp_invoices_sale').select('*').order('created_at', { ascending: false })
+  if (error) return null
+  return (data as DbFV[]).map(toFV)
 }
 async function fetchPagosClientes() {
-  const { data } = await supabase.from('erp_payments_client').select('*').order('created_at', { ascending: false })
-  return data ? (data as DbPC[]).map(toPC) : null
+  const { data, error } = await supabase.from('erp_payments_client').select('*').order('created_at', { ascending: false })
+  if (error) return null
+  return (data as DbPC[]).map(toPC)
 }
 async function fetchFacturasProveedor() {
-  const { data } = await supabase.from('erp_invoices_supplier').select('*').order('created_at', { ascending: false })
-  return data ? (data as DbFP[]).map(toFP) : null
+  const { data, error } = await supabase.from('erp_invoices_supplier').select('*').order('created_at', { ascending: false })
+  if (error) return null
+  return (data as DbFP[]).map(toFP)
 }
 async function fetchPagosProveedores() {
-  const { data } = await supabase.from('erp_payments_supplier').select('*').order('created_at', { ascending: false })
-  return data ? (data as DbPP[]).map(toPP) : null
+  const { data, error } = await supabase.from('erp_payments_supplier').select('*').order('created_at', { ascending: false })
+  if (error) return null
+  return (data as DbPP[]).map(toPP)
 }
 async function fetchBancos() {
-  const { data } = await supabase.from('erp_banks').select('*').order('banco')
-  return data ? (data as DbBanco[]).map(toBanco) : null
+  const { data, error } = await supabase.from('erp_banks').select('*').order('banco')
+  if (error) return null
+  return (data as DbBanco[]).map(toBanco)
 }
 async function fetchGastos() {
-  const { data } = await supabase.from('erp_gastos_negocio').select('*').order('fecha', { ascending: false })
-  return data ? (data as DbGasto[]).map(toGasto) : null
+  const { data, error } = await supabase.from('erp_gastos_negocio').select('*').order('fecha', { ascending: false })
+  if (error) return null
+  return (data as DbGasto[]).map(toGasto)
 }
 
 // ── Store ─────────────────────────────────────────────────────────────────────
@@ -140,21 +146,27 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
   subscribeRealtime() {
     return refChannel('erp_finance_rt', (ch) => ch
       .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_invoices_sale' }, async () => {
+        if (!get().initialized) return
         const d = await fetchFacturasVenta(); if (d) set({ facturasVenta: d })
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_payments_client' }, async () => {
+        if (!get().initialized) return
         const d = await fetchPagosClientes(); if (d) set({ pagosClientes: d })
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_invoices_supplier' }, async () => {
+        if (!get().initialized) return
         const d = await fetchFacturasProveedor(); if (d) set({ facturasProveedor: d })
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_payments_supplier' }, async () => {
+        if (!get().initialized) return
         const d = await fetchPagosProveedores(); if (d) set({ pagosProveedores: d })
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_banks' }, async () => {
+        if (!get().initialized) return
         const d = await fetchBancos(); if (d) set({ bancos: d })
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_gastos_negocio' }, async () => {
+        if (!get().initialized) return
         const d = await fetchGastos(); if (d) set({ gastos: d })
       })
     )
@@ -190,12 +202,13 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
       .rpc('erp_next_folio', { p_prefix: 'FAC', p_seq: 'erp_seq_folio_inv_sale' })
     const folio = (folioRow as string | null) ?? `FAC-${Date.now()}`
 
-    await supabase.from('erp_invoices_sale').insert({
+    const { error } = await supabase.from('erp_invoices_sale').insert({
       folio, cliente_id: data.clienteId, pedido_id: data.pedidoId ?? null,
       fecha: data.fecha, fecha_vencimiento: data.fechaVencimiento,
       subtotal: data.subtotal, impuestos: data.impuestos, total: data.total,
       saldo_pendiente: data.saldoPendiente, estatus: data.estatus,
     })
+    if (error) { toast.error('Error al crear factura.'); return }
     const d = await fetchFacturasVenta()
     if (d) set({ facturasVenta: d })
   },
@@ -273,8 +286,13 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
   },
 
   async deleteFacturaProveedor(id) {
+    const backup = get().facturasProveedor
     set(s => ({ facturasProveedor: s.facturasProveedor.filter(f => f.facturaProvId !== id) }))
-    await supabase.from('erp_invoices_supplier').delete().eq('id', id)
+    const { error } = await supabase.from('erp_invoices_supplier').delete().eq('id', id)
+    if (error) {
+      toast.error('Error al eliminar factura. Intenta de nuevo.')
+      set({ facturasProveedor: backup })
+    }
   },
 
   async updateBanco(id, data) {
@@ -306,8 +324,13 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
   },
 
   async deleteBanco(id) {
+    const backup = get().bancos
     set(s => ({ bancos: s.bancos.filter(b => b.bancoId !== id) }))
-    await supabase.from('erp_banks').delete().eq('id', id)
+    const { error } = await supabase.from('erp_banks').delete().eq('id', id)
+    if (error) {
+      toast.error('Error al eliminar banco. Intenta de nuevo.')
+      set({ bancos: backup })
+    }
   },
 
   async addGasto(data) {
@@ -342,7 +365,12 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
   },
 
   async deleteGasto(id) {
+    const backup = get().gastos
     set(s => ({ gastos: s.gastos.filter(g => g.gastoId !== id) }))
-    await supabase.from('erp_gastos_negocio').delete().eq('id', id)
+    const { error } = await supabase.from('erp_gastos_negocio').delete().eq('id', id)
+    if (error) {
+      toast.error('Error al eliminar gasto. Intenta de nuevo.')
+      set({ gastos: backup })
+    }
   },
 }))

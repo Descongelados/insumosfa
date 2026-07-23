@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { Prospect, ContactNote } from '../types'
 import { supabase } from '../lib/supabase'
 import { toast } from './toastStore'
+import { refChannel } from './realtimeChannel'
 import { useClientsStore } from './clientsStore'
 
 export interface DatosFiscales {
@@ -35,12 +36,14 @@ function toProspectNote(r: DbProspectNote): ContactNote {
 // ── Helpers de recarga individual ────────────────────────────────────────────
 
 async function fetchProspects() {
-  const { data } = await supabase.from('erp_prospects').select('*').order('created_at', { ascending: false })
-  return data ? (data as DbProspect[]).map(toProspect) : null
+  const { data, error } = await supabase.from('erp_prospects').select('*').order('created_at', { ascending: false })
+  if (error) { toast.error('Error al cargar prospectos.'); return null }
+  return (data as DbProspect[]).map(toProspect)
 }
 async function fetchProspectNotes() {
-  const { data } = await supabase.from('erp_prospect_notes').select('*').order('fecha', { ascending: false })
-  return data ? (data as DbProspectNote[]).map(toProspectNote) : null
+  const { data, error } = await supabase.from('erp_prospect_notes').select('*').order('fecha', { ascending: false })
+  if (error) return null
+  return (data as DbProspectNote[]).map(toProspectNote)
 }
 
 interface ProspectsState {
@@ -62,16 +65,16 @@ export const useProspectsStore = create<ProspectsState>()((set, get) => ({
   prospects: [], prospectNotes: [], loading: false, initialized: false,
 
   subscribeRealtime() {
-    const ch = supabase
-      .channel('erp_prospects_rt')
+    return refChannel('erp_prospects_rt', (ch) => ch
       .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_prospects' }, async () => {
+        if (!get().initialized) return
         const d = await fetchProspects(); if (d) set({ prospects: d })
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_prospect_notes' }, async () => {
+        if (!get().initialized) return
         const d = await fetchProspectNotes(); if (d) set({ prospectNotes: d })
       })
-      .subscribe()
-    return () => { void supabase.removeChannel(ch) }
+    )
   },
 
   async loadProspects() {
@@ -122,8 +125,13 @@ export const useProspectsStore = create<ProspectsState>()((set, get) => ({
   },
 
   async deleteProspect(id) {
+    const backup = get().prospects
     set(s => ({ prospects: s.prospects.filter(p => p.prospectoId !== id) }))
-    await supabase.from('erp_prospects').delete().eq('id', id)
+    const { error } = await supabase.from('erp_prospects').delete().eq('id', id)
+    if (error) {
+      toast.error('Error al eliminar prospecto. Intenta de nuevo.')
+      set({ prospects: backup })
+    }
   },
 
   async convertirACliente(id, fiscal) {
@@ -168,7 +176,12 @@ export const useProspectsStore = create<ProspectsState>()((set, get) => ({
   },
 
   async removeProspectNote(noteId) {
+    const backup = get().prospectNotes
     set(s => ({ prospectNotes: s.prospectNotes.filter(n => n.noteId !== noteId) }))
-    await supabase.from('erp_prospect_notes').delete().eq('id', noteId)
+    const { error } = await supabase.from('erp_prospect_notes').delete().eq('id', noteId)
+    if (error) {
+      toast.error('Error al eliminar nota.')
+      set({ prospectNotes: backup })
+    }
   },
 }))

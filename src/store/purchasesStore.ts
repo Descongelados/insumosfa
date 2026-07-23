@@ -35,18 +35,20 @@ function toOrden(r: DbOrden): OrdenCompra {
 // ── Helpers de recarga individual ────────────────────────────────────────────
 
 async function fetchSolicitudes() {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('erp_purchase_requests')
     .select('*')
     .order('created_at', { ascending: false })
-  return data ? (data as DbSolicitud[]).map(toSolicitud) : null
+  if (error) { toast.error('Error al cargar solicitudes.'); return null }
+  return (data as DbSolicitud[]).map(toSolicitud)
 }
 async function fetchOrdenes() {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('erp_purchase_orders')
     .select('*')
     .order('created_at', { ascending: false })
-  return data ? (data as DbOrden[]).map(toOrden) : null
+  if (error) { toast.error('Error al cargar órdenes de compra.'); return null }
+  return (data as DbOrden[]).map(toOrden)
 }
 
 interface PurchasesState {
@@ -71,9 +73,11 @@ export const usePurchasesStore = create<PurchasesState>()((set, get) => ({
   subscribeRealtime() {
     return refChannel('erp_purchases_rt', (ch) => ch
       .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_purchase_requests' }, async () => {
+        if (!get().initialized) return
         const d = await fetchSolicitudes(); if (d) set({ solicitudes: d })
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_purchase_orders' }, async () => {
+        if (!get().initialized) return
         const d = await fetchOrdenes(); if (d) set({ ordenesCompra: d })
       })
     )
@@ -124,8 +128,13 @@ export const usePurchasesStore = create<PurchasesState>()((set, get) => ({
   },
 
   async deleteSolicitud(id) {
+    const backup = get().solicitudes
     set(s => ({ solicitudes: s.solicitudes.filter(sc => sc.solicitudId !== id) }))
-    await supabase.from('erp_purchase_requests').delete().eq('id', id)
+    const { error } = await supabase.from('erp_purchase_requests').delete().eq('id', id)
+    if (error) {
+      toast.error('Error al eliminar solicitud. Intenta de nuevo.')
+      set({ solicitudes: backup })
+    }
   },
 
   async addOrdenCompra(data) {
@@ -170,7 +179,12 @@ export const usePurchasesStore = create<PurchasesState>()((set, get) => ({
   },
 
   async deleteOrdenCompra(id) {
+    const backup = get().ordenesCompra
     set(s => ({ ordenesCompra: s.ordenesCompra.filter(oc => oc.ordenCompraId !== id) }))
-    await supabase.from('erp_purchase_orders').delete().eq('id', id)
+    const { error } = await supabase.from('erp_purchase_orders').delete().eq('id', id)
+    if (error) {
+      toast.error('Error al eliminar orden de compra. Intenta de nuevo.')
+      set({ ordenesCompra: backup })
+    }
   },
 }))

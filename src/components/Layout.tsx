@@ -45,6 +45,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           {/* Desktop collapse button */}
           <button
             onClick={() => setDesktopOpen(!desktopOpen)}
+            aria-label={collapsed ? 'Expandir menú' : 'Colapsar menú'}
             className="hidden md:flex p-1.5 rounded hover:bg-gray-700 text-gray-400 hover:text-white ml-auto"
           >
             {collapsed ? <Menu size={18} /> : <X size={18} />}
@@ -52,6 +53,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           {/* Mobile close button */}
           <button
             onClick={() => setMobileOpen(false)}
+            aria-label="Cerrar menú"
             className="md:hidden p-1.5 rounded hover:bg-gray-700 text-gray-400 hover:text-white ml-auto"
           >
             <X size={18} />

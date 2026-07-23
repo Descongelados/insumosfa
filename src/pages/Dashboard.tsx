@@ -79,8 +79,10 @@ export function DashboardPage() {
   const cxcVencidas        = canFinanzas   ? facturasVenta.filter((f) => f.estatus === 'vencida').reduce((a, f) => a + f.saldoPendiente, 0) : 0
   const cxpVencidas        = canFinanzas   ? facturasProveedor.filter((f) => f.estatus === 'vencida').reduce((a, f) => a + f.saldoPendiente, 0) : 0
   const saldoBancario      = canFinanzas   ? bancos.filter(b => b.moneda === 'MXN').reduce((a, b) => a + b.saldo, 0) : 0
+  // Map O(1) en lugar de find() O(n) en cada iteración
+  const prodMap = useMemo(() => new Map(products.map(p => [p.productId, p])), [products])
   const inventarioValorizado = canInventario && canProductos ? inventario.reduce((a, inv) => {
-    const prod = products.find(p => p.productId === inv.productId)
+    const prod = prodMap.get(inv.productId)
     return a + (inv.cantidadDisponible * (prod?.costoPromedio ?? 0))
   }, 0) : 0
 

@@ -34,18 +34,20 @@ function toShipment(r: DbShipment): Embarque {
 // ── Helpers de recarga individual ────────────────────────────────────────────
 
 async function fetchEmbarques() {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('erp_shipments')
     .select('*')
     .order('created_at', { ascending: false })
-  return data ? (data as DbShipment[]).map(toShipment) : null
+  if (error) { toast.error('Error al cargar embarques.'); return null }
+  return (data as DbShipment[]).map(toShipment)
 }
 async function fetchCarriers() {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('erp_carriers')
     .select('*')
     .order('nombre')
-  return data ? (data as DbCarrier[]).map(toCarrier) : null
+  if (error) return null
+  return (data as DbCarrier[]).map(toCarrier)
 }
 
 interface LogisticsState {
@@ -70,9 +72,11 @@ export const useLogisticsStore = create<LogisticsState>()((set, get) => ({
   subscribeRealtime() {
     return refChannel('erp_logistics_rt', (ch) => ch
       .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_shipments' }, async () => {
+        if (!get().initialized) return
         const d = await fetchEmbarques(); if (d) set({ embarques: d })
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_carriers' }, async () => {
+        if (!get().initialized) return
         const d = await fetchCarriers(); if (d) set({ transportistas: d })
       })
     )
@@ -133,8 +137,13 @@ export const useLogisticsStore = create<LogisticsState>()((set, get) => ({
   },
 
   async deleteEmbarque(id) {
+    const backup = get().embarques
     set(s => ({ embarques: s.embarques.filter(e => e.embarqueId !== id) }))
-    await supabase.from('erp_shipments').delete().eq('id', id)
+    const { error } = await supabase.from('erp_shipments').delete().eq('id', id)
+    if (error) {
+      toast.error('Error al eliminar embarque. Intenta de nuevo.')
+      set({ embarques: backup })
+    }
   },
 
   async addTransportista(data) {
@@ -166,7 +175,12 @@ export const useLogisticsStore = create<LogisticsState>()((set, get) => ({
   },
 
   async deleteTransportista(id) {
+    const backup = get().transportistas
     set(s => ({ transportistas: s.transportistas.filter(t => t.transportistaId !== id) }))
-    await supabase.from('erp_carriers').delete().eq('id', id)
+    const { error } = await supabase.from('erp_carriers').delete().eq('id', id)
+    if (error) {
+      toast.error('Error al eliminar transportista. Intenta de nuevo.')
+      set({ transportistas: backup })
+    }
   },
 }))

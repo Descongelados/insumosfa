@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { toast } from './toastStore'
+import { refChannel } from './realtimeChannel'
 import type { Product } from '../types'
 import { supabase } from '../lib/supabase'
 
@@ -18,8 +19,9 @@ function toProduct(r: DbProduct): Product {
 }
 
 async function fetchProducts() {
-  const { data } = await supabase.from('erp_products').select('*').order('descripcion')
-  return data ? (data as DbProduct[]).map(toProduct) : null
+  const { data, error } = await supabase.from('erp_products').select('*').order('descripcion')
+  if (error) { toast.error('Error al cargar productos.'); return null }
+  return (data as DbProduct[]).map(toProduct)
 }
 
 interface ProductsState {
@@ -38,13 +40,12 @@ export const useProductsStore = create<ProductsState>()((set, get) => ({
   products: [], loading: false, initialized: false,
 
   subscribeRealtime() {
-    const ch = supabase
-      .channel('erp_products_rt')
+    return refChannel('erp_products_rt', (ch) => ch
       .on('postgres_changes', { event: '*', schema: 'public', table: 'erp_products' }, async () => {
+        if (!get().initialized) return
         const d = await fetchProducts(); if (d) set({ products: d })
       })
-      .subscribe()
-    return () => { void supabase.removeChannel(ch) }
+    )
   },
 
   async loadProducts() {
@@ -91,8 +92,13 @@ export const useProductsStore = create<ProductsState>()((set, get) => ({
   },
 
   async deleteProduct(id) {
+    const backup = get().products
     set(s => ({ products: s.products.filter(p => p.productId !== id) }))
-    await supabase.from('erp_products').delete().eq('id', id)
+    const { error } = await supabase.from('erp_products').delete().eq('id', id)
+    if (error) {
+      toast.error('Error al eliminar producto. Intenta de nuevo.')
+      set({ products: backup })
+    }
   },
 
   async toggleProduct(id) {
