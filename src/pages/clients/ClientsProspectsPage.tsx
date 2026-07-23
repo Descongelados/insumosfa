@@ -69,6 +69,8 @@ export function ClientsProspectsPage() {
   const [tab, setTab] = useState<'prospectos' | 'clientes'>('prospectos')
 
   // ── permissions ────────────────────────────────────────────────────────────
+  const canEditProspect    = me ? hasRole(me, 'director', 'ventas', 'administracion') : false
+  const canEditClient      = me ? hasRole(me, 'director', 'administracion', 'ventas') : false
   const canDeleteClient    = me ? hasRole(me, 'director', 'administracion', 'ventas') : false
   const canDeleteProspect  = me ? hasRole(me, 'director', 'ventas', 'administracion') : false
   const canConvert         = me ? hasRole(me, 'director', 'ventas', 'administracion') : false
@@ -297,7 +299,7 @@ export function ClientsProspectsPage() {
                 {
                   key: 'acc', header: '', render: (p) => (
                     <div className="flex gap-1 flex-wrap">
-                      {p.estatus !== 'ganado' && (
+                      {canEditProspect && p.estatus !== 'ganado' && (
                         <button className="btn btn-secondary btn-sm" onClick={() => openEditProspect(p)}>
                           <Edit2 size={13} /> Editar
                         </button>
@@ -363,9 +365,11 @@ export function ClientsProspectsPage() {
                 {
                   key: 'acc', header: '', render: (c) => (
                     <div className="flex gap-1">
-                      <button className="btn btn-secondary btn-sm" onClick={() => openEditClient(c)}>
-                        <Edit2 size={13} /> Editar
-                      </button>
+                      {canEditClient && (
+                        <button className="btn btn-secondary btn-sm" onClick={() => openEditClient(c)}>
+                          <Edit2 size={13} /> Editar
+                        </button>
+                      )}
                       <button className="btn btn-secondary btn-sm" onClick={() => openNotes('cliente', c.clientId, c.razonSocial)} title="Notas de contacto">
                         <MessageSquare size={13} />
                         {clientNotes.filter(n => n.entidadId === c.clientId).length > 0 && (
