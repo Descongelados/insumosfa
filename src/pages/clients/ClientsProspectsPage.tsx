@@ -42,6 +42,7 @@ const BLANK_FISCAL: DatosFiscales = {
 const BLANK_CLIENT: Omit<Client, 'clientId' | 'fechaAlta'> = {
   razonSocial: '', rfc: '', regimenFiscal: REGIMENES[0],
   direccionFiscal: '', correo: '', telefono: '', limiteCredito: 0, estatus: 'activo',
+  ciudad: '', productosActividad: '',
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -376,6 +377,8 @@ export function ClientsProspectsPage() {
                 { key: 'rfc', header: 'RFC' },
                 { key: 'correo', header: 'Correo' },
                 { key: 'telefono', header: 'Teléfono' },
+                { key: 'ciudad', header: 'Ciudad' },
+                { key: 'productosActividad', header: 'Productos / Actividad' },
                 { key: 'limiteCredito', header: 'Límite Crédito', render: (c) => <Currency value={c.limiteCredito} /> },
                 { key: 'estatus', header: 'Estatus', render: (c) => <StatusBadge status={c.estatus} /> },
                 { key: 'fechaAlta', header: 'Alta' },
@@ -565,6 +568,14 @@ export function ClientsProspectsPage() {
             <div className="form-group">
               <label className="label">Teléfono</label>
               <input className="input" value={cForm.telefono} onChange={FC('telefono')} />
+            </div>
+            <div className="form-group">
+              <label className="label">Ciudad</label>
+              <input className="input" value={cForm.ciudad} onChange={FC('ciudad')} />
+            </div>
+            <div className="form-group sm:col-span-2">
+              <label className="label">Productos / Actividad</label>
+              <input className="input" value={cForm.productosActividad} onChange={FC('productosActividad')} />
             </div>
             <div className="form-group">
               <label className="label">Límite de Crédito (MXN)</label>

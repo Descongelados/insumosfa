@@ -7,6 +7,7 @@ type DbClient = {
   id: string; razon_social: string; rfc: string; regimen_fiscal: string
   direccion_fiscal: string; correo: string; telefono: string
   limite_credito: number; estatus: string; fecha_alta: string
+  ciudad: string; productos_actividad: string
 }
 type DbContact = {
   id: string; cliente_id: string; nombre: string
@@ -22,6 +23,7 @@ function toClient(r: DbClient): Client {
     regimenFiscal: r.regimen_fiscal, direccionFiscal: r.direccion_fiscal,
     correo: r.correo, telefono: r.telefono, limiteCredito: r.limite_credito,
     estatus: r.estatus as 'activo' | 'inactivo', fechaAlta: r.fecha_alta,
+    ciudad: r.ciudad ?? '', productosActividad: r.productos_actividad ?? '',
   }
 }
 function toContacto(r: DbContact): ContactoCliente {
@@ -110,6 +112,7 @@ export const useClientsStore = create<ClientsState>()((set, get) => ({
         regimen_fiscal: data.regimenFiscal, direccion_fiscal: data.direccionFiscal,
         correo: data.correo, telefono: data.telefono,
         limite_credito: data.limiteCredito, estatus: data.estatus,
+        ciudad: data.ciudad ?? '', productos_actividad: data.productosActividad ?? '',
       })
       .select('id')
       .maybeSingle()
@@ -128,6 +131,8 @@ export const useClientsStore = create<ClientsState>()((set, get) => ({
     if (data.telefono !== undefined) patch.telefono = data.telefono
     if (data.limiteCredito !== undefined) patch.limite_credito = data.limiteCredito
     if (data.estatus !== undefined) patch.estatus = data.estatus
+    if (data.ciudad !== undefined) patch.ciudad = data.ciudad
+    if (data.productosActividad !== undefined) patch.productos_actividad = data.productosActividad
 
     // Optimistic update
     set(s => ({ clients: s.clients.map(c => c.clientId === id ? { ...c, ...data } : c) }))

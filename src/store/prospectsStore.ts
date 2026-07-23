@@ -136,6 +136,8 @@ export const useProspectsStore = create<ProspectsState>()((set, get) => ({
       regimenFiscal: fiscal.regimenFiscal, direccionFiscal: fiscal.direccionFiscal,
       correo: prospect.correo, telefono: prospect.telefono,
       limiteCredito: fiscal.limiteCredito, estatus: 'activo',
+      ciudad: prospect.ciudad ?? '',
+      productosActividad: prospect.productosActividad ?? '',
     })
 
     // Migrar notas del prospecto al nuevo cliente

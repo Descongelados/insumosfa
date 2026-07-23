@@ -26,6 +26,8 @@ export interface Client {
   limiteCredito: number
   estatus: 'activo' | 'inactivo'
   fechaAlta: string
+  ciudad: string
+  productosActividad: string
 }
 
 export interface ContactoCliente {
