@@ -30,6 +30,7 @@ const REGIMENES = [
 const BLANK: Omit<Prospect, 'prospectoId' | 'fechaAlta'> = {
   empresa: '', contacto: '', correo: '', telefono: '',
   origen: ORIGENES[0], estatus: 'nuevo', valorPotencial: 0,
+  creadoPor: '', ciudad: '', productosActividad: '',
 }
 
 const BLANK_FISCAL: DatosFiscales = {

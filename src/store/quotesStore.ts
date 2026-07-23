@@ -74,7 +74,7 @@ export const useQuotesStore = create<QuotesState>()((set, get) => ({
         .select(LIST_COLUMNS)
         .order('created_at', { ascending: false })
       // items viene null al usar columnas explícitas; inicializamos vacío
-      if (data) set({ quotes: (data as DbQuote[]).map(r => toQuote({ ...r, items: [] })) })
+      if (data) set({ quotes: (data as unknown as DbQuoteBase[]).map(r => toQuote({ ...r, items: [] })) })
     } finally {
       set({ loading: false })
     }

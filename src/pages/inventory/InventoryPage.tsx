@@ -17,7 +17,7 @@ const TIPO_LABELS: Record<MovimientoTipo, string> = {
 }
 
 export function InventoryPage() {
-  const { inventario, kardex, loadInventory, subscribeRealtime: subInventory, applyMovimiento, updateCantidadDisponible } = useInventoryStore()
+  const { inventario, kardex, loadInventory, loadKardexByProduct, setActiveProductId, subscribeRealtime: subInventory, applyMovimiento, updateCantidadDisponible } = useInventoryStore()
   const { products, loadProducts, subscribeRealtime: subProducts } = useProductsStore()
   const { user } = useAuthStore()
 
@@ -28,11 +28,28 @@ export function InventoryPage() {
     void loadProducts()
     const u1 = subInventory()
     const u2 = subProducts()
-    return () => { u1(); u2() }
+    return () => {
+      u1()
+      u2()
+      setActiveProductId(null)
+    }
   }, [])
 
   const [q, setQ] = useState('')
   const [view, setView] = useState<'stock' | 'kardex'>('stock')
+
+  // kardex: producto activo en el selector
+  const [kardexProdId, setKardexProdId] = useState('')
+
+  useEffect(() => {
+    if (view !== 'kardex') {
+      setActiveProductId(null)
+      return
+    }
+    if (!kardexProdId) return
+    setActiveProductId(kardexProdId)
+    void loadKardexByProduct(kardexProdId)
+  }, [view, kardexProdId])
   const [modal, setModal] = useState(false)
   const [selProd, setSelProd] = useState('')
   const [form, setForm] = useState({ tipo: TIPOS[0], cantidad: 1, doc: '', notas: '' })
@@ -69,6 +86,9 @@ export function InventoryPage() {
     if (!q) return true
     return [k.prod?.sku ?? '', k.prod?.descripcion ?? ''].join(' ').toLowerCase().includes(q.toLowerCase())
   })
+
+  // producto seleccionado en el selector de kardex
+  const kardexProd = products.find((p) => p.productId === kardexProdId)
 
   function handleMovimiento() {
     if (!selProd) { toast.error('Selecciona un producto.'); return }
@@ -107,13 +127,25 @@ export function InventoryPage() {
         </div>
       )}
 
-      <div className="flex gap-2">
+      <div className="flex gap-2 flex-wrap items-center">
         <button className={`btn ${view === 'stock' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setView('stock')}>
           <Warehouse size={15} /> Stock Actual
         </button>
         <button className={`btn ${view === 'kardex' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setView('kardex')}>
           <History size={15} /> Kardex
         </button>
+        {view === 'kardex' && (
+          <select
+            className="select text-sm py-1 min-w-[220px]"
+            value={kardexProdId}
+            onChange={(e) => setKardexProdId(e.target.value)}
+          >
+            <option value="">— Seleccionar producto —</option>
+            {products.filter(p => p.activo).map((p) => (
+              <option key={p.productId} value={p.productId}>{p.sku} — {p.descripcion}</option>
+            ))}
+          </select>
+        )}
       </div>
 
       <div className="card">
@@ -171,20 +203,32 @@ export function InventoryPage() {
             ]}
           />
         ) : (
-          <DataTable
-            data={kdx}
-            rowKey={(k) => k.movimientoId}
-            columns={[
-              { key: 'fecha', header: 'Fecha' },
-              { key: 'sku', header: 'SKU', render: (k) => <span className="font-mono text-xs text-blue-700">{k.prod?.sku}</span> },
-              { key: 'tipo', header: 'Tipo', render: (k) => <span className="badge badge-blue">{TIPO_LABELS[k.tipo]}</span> },
-              { key: 'doc', header: 'Documento', render: (k) => k.documentoOrigen },
-              { key: 'cant', header: 'Cantidad', render: (k) => k.cantidad },
-              { key: 'ante', header: 'Exist. Anterior', render: (k) => k.existenciaAnterior },
-              { key: 'nueva', header: 'Exist. Nueva', render: (k) => <span className="font-semibold">{k.existenciaNueva}</span> },
-              { key: 'usr', header: 'Usuario', render: (k) => <span className="text-xs text-gray-500">{k.usuario}</span> },
-            ]}
-          />
+          <>
+            {!kardexProdId ? (
+              <p className="text-sm text-gray-500 py-6 text-center">Selecciona un producto para ver su kardex.</p>
+            ) : (
+              <>
+                {kardexProd && (
+                  <p className="mb-3 text-sm text-gray-600">
+                    Mostrando kardex de <span className="font-semibold text-blue-700">{kardexProd.sku}</span> — {kardexProd.descripcion}
+                  </p>
+                )}
+                <DataTable
+                  data={kdx}
+                  rowKey={(k) => k.movimientoId}
+                  columns={[
+                    { key: 'fecha', header: 'Fecha' },
+                    { key: 'tipo', header: 'Tipo', render: (k) => <span className="badge badge-blue">{TIPO_LABELS[k.tipo]}</span> },
+                    { key: 'doc', header: 'Documento', render: (k) => k.documentoOrigen },
+                    { key: 'cant', header: 'Cantidad', render: (k) => k.cantidad },
+                    { key: 'ante', header: 'Exist. Anterior', render: (k) => k.existenciaAnterior },
+                    { key: 'nueva', header: 'Exist. Nueva', render: (k) => <span className="font-semibold">{k.existenciaNueva}</span> },
+                    { key: 'usr', header: 'Usuario', render: (k) => <span className="text-xs text-gray-500">{k.usuario}</span> },
+                  ]}
+                />
+              </>
+            )}
+          </>
         )}
       </div>
 
