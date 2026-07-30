@@ -72,6 +72,7 @@ interface QuotesState {
   loading: boolean
   initialized: boolean
   loadQuotes: () => Promise<void>
+  fetchQuoteById: (id: string) => Promise<Quote | null>
   subscribeRealtime: () => () => void
   addQuote: (q: Omit<Quote, 'cotizacionId' | 'folio'>) => Promise<Quote>
   updateQuote: (id: string, data: Partial<Quote>) => Promise<void>
@@ -90,6 +91,16 @@ export const useQuotesStore = create<QuotesState>()((set, get) => ({
     } finally {
       set({ loading: false })
     }
+  },
+
+  async fetchQuoteById(id: string) {
+    const { data, error } = await supabase
+      .from('erp_quotes')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle()
+    if (error || !data) return null
+    return toQuote(data as DbQuote)
   },
 
   subscribeRealtime() {

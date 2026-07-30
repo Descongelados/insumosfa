@@ -85,7 +85,7 @@ const BLANK_FORM = {
 
 // ─────────────────────────────────────────────────────────────────────────────
 export function QuotesPage() {
-  const { quotes, loadQuotes, subscribeRealtime, addQuote, updateQuote, deleteQuote } = useQuotesStore()
+  const { quotes, loadQuotes, fetchQuoteById, subscribeRealtime, addQuote, updateQuote, deleteQuote } = useQuotesStore()
   const { addOrder }                   = useSalesOrdersStore()
   const { clients, loadClients }       = useClientsStore()
   const { products, loadProducts, loading: productsLoading } = useProductsStore()
@@ -355,7 +355,11 @@ export function QuotesPage() {
               key: 'acc', header: '',
               render: qt => (
                 <div className="flex gap-1 flex-wrap">
-                  <button className="btn btn-secondary btn-sm" onClick={() => { setSelQuote(qt); setModal('preview') }}>
+                  <button className="btn btn-secondary btn-sm" onClick={async () => {
+                    setSelQuote(qt); setModal('preview')
+                    const full = await fetchQuoteById(qt.cotizacionId)
+                    if (full) setSelQuote(full)
+                  }}>
                     <Eye size={13} /> Ver
                   </button>
                   {(qt.estatus === 'borrador' || qt.estatus === 'enviada') && (
