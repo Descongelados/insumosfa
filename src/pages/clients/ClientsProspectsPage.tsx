@@ -3,7 +3,8 @@ import { useClientsStore } from '../../store/clientsStore'
 import { useProspectsStore } from '../../store/prospectsStore'
 import type { DatosFiscales } from '../../store/prospectsStore'
 import { useAuthStore } from '../../store/authStore'
-import { hasRole } from '../../store/usersStore'
+import { useUsersStore, hasRole } from '../../store/usersStore'
+import { ROUTE_ROLES } from '../../rbac'
 import { DataTable } from '../../components/ui/DataTable'
 import { SearchBar } from '../../components/ui/SearchBar'
 import { StatusBadge } from '../../components/ui/StatusBadge'
@@ -35,6 +36,7 @@ const BLANK_PROSPECT: Omit<Prospect, 'prospectoId' | 'fechaAlta'> = {
   empresa: '', contacto: '', correo: '', telefono: '',
   origen: ORIGENES[0], estatus: 'nuevo', valorPotencial: 0, creadoPor: '',
   ciudad: '', productosActividad: '',
+  responsableId: '', responsableNombre: '',
 }
 const BLANK_FISCAL: DatosFiscales = {
   rfc: '', regimenFiscal: REGIMENES[0], direccionFiscal: '', limiteCredito: 0,
@@ -60,10 +62,16 @@ export function ClientsProspectsPage() {
   const { clients, loadClients, subscribeRealtime: subClients, updateClient, deleteClient, clientNotes, addClientNote, removeClientNote } = useClientsStore()
   const { prospects, loadProspects, subscribeRealtime: subProspects, addProspect, updateProspect, deleteProspect, convertirACliente, prospectNotes, addProspectNote, removeProspectNote } = useProspectsStore()
   const { user: me } = useAuthStore()
+  const { users, loadUsers } = useUsersStore()
+
+  // Usuarios con acceso al módulo /clientes-prospectos
+  const modRoles = ROUTE_ROLES['/clientes-prospectos'] ?? []
+  const usuariosModulo = users.filter(u => u.active && u.roles.some(r => modRoles.includes(r)))
 
   useEffect(() => {
     void loadClients()
     void loadProspects()
+    void loadUsers()
     const u1 = subClients()
     const u2 = subProspects()
     return () => { u1(); u2() }
@@ -111,18 +119,21 @@ export function ClientsProspectsPage() {
         valorPotencial:   Number(row.valorPotencial   ?? 0),
         estatus: 'nuevo',
         creadoPor: me?.email ?? '',
+        responsableId: '', responsableNombre: '',
       })
     }
   }
 
   // ── prospect state ─────────────────────────────────────────────────────────
-  type PModal = 'new' | 'edit' | 'del' | 'convert' | 'marcar_ganado' | null
+  type PModal = 'new' | 'edit' | 'del' | 'convert' | 'marcar_ganado' | 'cambiar_responsable' | null
   const [pModal, setPModal] = useState<PModal>(null)
   const [pForm, setPForm] = useState(BLANK_PROSPECT)
   const [pEditId, setPEditId] = useState<string | null>(null)
   const [pDelTarget, setPDelTarget] = useState<Prospect | null>(null)
   const [pConvTarget, setPConvTarget] = useState<Prospect | null>(null)
   const [fiscal, setFiscal] = useState<DatosFiscales>(BLANK_FISCAL)
+  const [pRespTarget, setPRespTarget] = useState<Prospect | null>(null)
+  const [pRespId, setPRespId] = useState<string>('')
 
   // ── client state ───────────────────────────────────────────────────────────
   type CModal = 'edit' | 'confirm_delete' | null
@@ -225,6 +236,18 @@ export function ClientsProspectsPage() {
   function handleDeleteProspect() {
     if (pDelTarget) { deleteProspect(pDelTarget.prospectoId); toast.success(`Prospecto "${pDelTarget.empresa}" eliminado.`) }
     setPModal(null); setPDelTarget(null)
+  }
+
+  function openCambiarResponsable(p: Prospect) {
+    setPRespTarget(p)
+    setPRespId(p.responsableId ?? '')
+    setPModal('cambiar_responsable')
+  }
+  async function handleCambiarResponsable() {
+    if (!pRespTarget) return
+    await updateProspect(pRespTarget.prospectoId, { responsableId: pRespId })
+    toast.success('Responsable actualizado.')
+    setPModal(null); setPRespTarget(null)
   }
 
   // ══ CLIENT HANDLERS ════════════════════════════════════════════════════════
@@ -353,7 +376,29 @@ export function ClientsProspectsPage() {
                 { key: 'valorPotencial', header: 'Valor Potencial', render: (p) => <Currency value={p.valorPotencial} /> },
                 { key: 'estatus', header: 'Estatus', render: (p) => <StatusBadge status={p.estatus} /> },
                 { key: 'fechaAlta', header: 'Fecha Alta' },
-                { key: 'creadoPor', header: 'Contactado por' },
+                {
+                  key: 'responsable',
+                  header: 'Responsable de contacto',
+                  render: (p) => {
+                    const nombre = p.responsableId
+                      ? (usuariosModulo.find(u => u.userId === p.responsableId)?.name ?? p.responsableId)
+                      : (p.creadoPor || '—')
+                    return (
+                      <div className="flex items-center gap-1.5 min-w-[140px]">
+                        <span className="text-sm text-gray-700">{nombre}</span>
+                        {canEditProspect && p.estatus !== 'ganado' && (
+                          <button
+                            className="btn btn-secondary btn-sm py-0 px-1.5 text-xs"
+                            title="Cambiar responsable"
+                            onClick={() => openCambiarResponsable(p)}
+                          >
+                            ✎
+                          </button>
+                        )}
+                      </div>
+                    )
+                  }
+                },
                 {
                   key: 'acc', header: '', render: (p) => (
                     <div className="flex gap-1 flex-wrap">
@@ -571,6 +616,46 @@ export function ClientsProspectsPage() {
           <p className="text-sm text-gray-700">
             ¿Eliminar el prospecto <strong>{pDelTarget.empresa}</strong>? Esta acción no se puede deshacer.
           </p>
+        </Modal>
+      )}
+
+      {/* Cambiar Responsable de contacto */}
+      {pModal === 'cambiar_responsable' && pRespTarget && (
+        <Modal
+          title={`Responsable de contacto — ${pRespTarget.empresa}`}
+          onClose={() => setPModal(null)}
+          footer={
+            <>
+              <button className="btn-secondary" onClick={() => setPModal(null)}>Cancelar</button>
+              <button className="btn-primary" onClick={handleCambiarResponsable}>Guardar</button>
+            </>
+          }
+        >
+          <div className="space-y-4 text-sm">
+            <p className="text-gray-500">
+              Selecciona el usuario responsable de dar seguimiento a este prospecto.
+              Solo se muestran usuarios activos con acceso al módulo.
+            </p>
+            {usuariosModulo.length === 0 ? (
+              <p className="text-amber-600">No hay usuarios activos con acceso a este módulo.</p>
+            ) : (
+              <div className="form-group">
+                <label className="label">Responsable</label>
+                <select
+                  className="select"
+                  value={pRespId}
+                  onChange={(e) => setPRespId(e.target.value)}
+                >
+                  <option value="">— Sin asignar —</option>
+                  {usuariosModulo.map(u => (
+                    <option key={u.userId} value={u.userId}>
+                      {u.name} ({u.roles.join(', ')})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
         </Modal>
       )}
 
