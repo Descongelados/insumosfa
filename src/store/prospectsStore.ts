@@ -13,6 +13,7 @@ type DbProspect = {
   id: string; empresa: string; contacto: string; correo: string
   telefono: string; origen: string; estatus: string
   valor_potencial: number; fecha_alta: string; creado_por: string
+  responsable_id: string | null
   ciudad: string; productos_actividad: string
 }
 type DbProspectNote = {
@@ -26,6 +27,8 @@ function toProspect(r: DbProspect): Prospect {
     estatus: r.estatus as Prospect['estatus'],
     valorPotencial: r.valor_potencial, fechaAlta: r.fecha_alta,
     creadoPor: r.creado_por ?? '',
+    responsableId: r.responsable_id ?? '',
+    responsableNombre: '',   // se resuelve en la UI a partir de usersStore
     ciudad: r.ciudad ?? '', productosActividad: r.productos_actividad ?? '',
   }
 }
@@ -95,6 +98,7 @@ export const useProspectsStore = create<ProspectsState>()((set, get) => ({
       empresa: data.empresa, contacto: data.contacto, correo: data.correo,
       telefono: data.telefono, origen: data.origen, estatus: data.estatus,
       valor_potencial: data.valorPotencial, creado_por: data.creadoPor ?? '',
+      responsable_id: data.responsableId || null,
       ciudad: data.ciudad ?? '', productos_actividad: data.productosActividad ?? '',
     })
     const d = await fetchProspects()
@@ -112,6 +116,7 @@ export const useProspectsStore = create<ProspectsState>()((set, get) => ({
     if (data.valorPotencial !== undefined) patch.valor_potencial = data.valorPotencial
     if (data.ciudad !== undefined) patch.ciudad = data.ciudad
     if (data.productosActividad !== undefined) patch.productos_actividad = data.productosActividad
+    if (data.responsableId !== undefined) patch.responsable_id = data.responsableId || null
 
     // Optimistic update
     set(s => ({ prospects: s.prospects.map(p => p.prospectoId === id ? { ...p, ...data } : p) }))
