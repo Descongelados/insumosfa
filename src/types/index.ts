@@ -61,6 +61,10 @@ export interface Prospect {
   valorPotencial: number
   fechaAlta: string
   creadoPor: string
+  /** ID del usuario responsable de contacto (referencia a erp_users) */
+  responsableId: string
+  /** Nombre del responsable — se llena en el front a partir de la lista de usuarios */
+  responsableNombre: string
   ciudad: string
   productosActividad: string
 }
