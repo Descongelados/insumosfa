@@ -649,7 +649,7 @@ export function ClientsProspectsPage() {
                   <option value="">— Sin asignar —</option>
                   {usuariosModulo.map(u => (
                     <option key={u.userId} value={u.userId}>
-                      {u.name} ({u.roles.join(', ')})
+                      {u.name}
                     </option>
                   ))}
                 </select>
