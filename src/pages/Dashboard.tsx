@@ -109,7 +109,7 @@ export function DashboardPage() {
     }))
   }, [orders, ordenesCompra])
 
-  const prospectosPorEstatus = ['nuevo','contactado','calificado','cotizado','ganado','perdido'].map(s => ({
+  const prospectosPorEstatus = ['nuevo','contactado','cotizado','ganado','perdido'].map(s => ({
     name: s.charAt(0).toUpperCase() + s.slice(1),
     value: prospects.filter(p => p.estatus === s).length
   })).filter(x => x.value > 0)
