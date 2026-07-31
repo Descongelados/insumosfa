@@ -28,8 +28,8 @@ const REGIMENES = [
 ]
 
 // ── Prospects constants ───────────────────────────────────────────────────────
-const ESTADOS_EDITABLES: ProspectoEstatus[] = ['nuevo', 'contactado', 'calificado', 'cotizado', 'perdido']
-const ESTADOS_PIPELINE:  ProspectoEstatus[] = ['nuevo', 'contactado', 'calificado', 'cotizado', 'ganado', 'perdido']
+const ESTADOS_EDITABLES: ProspectoEstatus[] = ['nuevo', 'contactado', 'cotizado', 'perdido']
+const ESTADOS_PIPELINE:  ProspectoEstatus[] = ['nuevo', 'contactado', 'cotizado', 'ganado', 'perdido']
 const ORIGENES = ['Referido', 'LinkedIn', 'Expo', 'Web', 'Llamada', 'Visita', 'Otro']
 
 const BLANK_PROSPECT: Omit<Prospect, 'prospectoId' | 'fechaAlta'> = {
@@ -172,9 +172,13 @@ export function ClientsProspectsPage() {
     : []
 
   // ── filtered lists ─────────────────────────────────────────────────────────
-  const filteredProspects = prospects.filter((p) =>
-    [p.empresa, p.contacto, p.correo].join(' ').toLowerCase().includes(qP.toLowerCase())
-  )
+  const [statusFilter, setStatusFilter] = useState<ProspectoEstatus | null>(null)
+
+  const filteredProspects = prospects.filter((p) => {
+    const matchQ = [p.empresa, p.contacto, p.correo].join(' ').toLowerCase().includes(qP.toLowerCase())
+    const matchS = statusFilter === null || p.estatus === statusFilter
+    return matchQ && matchS
+  })
   const filteredClients = clients.filter((c) =>
     [c.razonSocial, c.rfc, c.correo].join(' ').toLowerCase().includes(qC.toLowerCase())
   )
@@ -282,6 +286,10 @@ export function ClientsProspectsPage() {
     e, count: prospects.filter((p) => p.estatus === e).length,
   }))
 
+  function toggleStatusFilter(e: ProspectoEstatus) {
+    setStatusFilter(prev => prev === e ? null : e)
+  }
+
   // ─────────────────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
@@ -351,12 +359,26 @@ export function ClientsProspectsPage() {
           {/* Pipeline counters */}
           <div className="flex gap-3 overflow-x-auto pb-2">
             {byStatus.map(({ e, count }) => (
-              <div key={e} className={`card-sm flex-shrink-0 min-w-[100px] text-center ${e === 'ganado' ? 'border-green-300 bg-green-50' : ''}`}>
+              <button
+                key={e}
+                onClick={() => toggleStatusFilter(e)}
+                className={[
+                  'card-sm flex-shrink-0 min-w-[100px] text-center transition-all',
+                  e === 'ganado' ? 'border-green-300 bg-green-50' : '',
+                  statusFilter === e ? 'ring-2 ring-blue-500 ring-offset-1' : 'hover:border-blue-300',
+                ].join(' ')}
+              >
                 <div className="text-2xl font-bold text-gray-900">{count}</div>
                 <StatusBadge status={e} />
-              </div>
+              </button>
             ))}
           </div>
+          {statusFilter && (
+            <div className="flex items-center gap-2 text-sm text-blue-700">
+              <span>Filtrando por: <strong>{statusFilter}</strong></span>
+              <button className="underline text-gray-500 hover:text-gray-700" onClick={() => setStatusFilter(null)}>Limpiar filtro</button>
+            </div>
+          )}
 
           <div className="card">
             <div className="mb-4">

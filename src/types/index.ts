@@ -48,7 +48,7 @@ export interface ContactNote {
 }
 
 // ─── Prospects ─────────────────────────────────────────────────────────────
-export type ProspectoEstatus = 'nuevo' | 'contactado' | 'calificado' | 'cotizado' | 'ganado' | 'perdido'
+export type ProspectoEstatus = 'nuevo' | 'contactado' | 'cotizado' | 'ganado' | 'perdido'
 
 export interface Prospect {
   prospectoId: string
