@@ -324,6 +324,8 @@ export interface GastoNegocio {
   formaPago: string
   referencia: string
   notas: string
+  /** ID de la cuenta bancaria de la que salió el dinero (undefined = efectivo) */
+  bancoId?: string
 }
 
 // ─── Audit ─────────────────────────────────────────────────────────────────

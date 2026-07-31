@@ -31,6 +31,7 @@ type DbBanco = {
 type DbGasto = {
   id: string; fecha: string; categoria: string; descripcion: string
   monto: number; forma_pago: string; referencia: string; notas: string
+  banco_id: string | null
 }
 
 function toFV(r: DbFV): FacturaVenta {
@@ -74,6 +75,7 @@ function toGasto(r: DbGasto): GastoNegocio {
     categoria: r.categoria as GastoNegocio['categoria'],
     descripcion: r.descripcion, monto: r.monto,
     formaPago: r.forma_pago, referencia: r.referencia, notas: r.notas,
+    bancoId: r.banco_id ?? undefined,
   }
 }
 
@@ -338,12 +340,28 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
       fecha: data.fecha, categoria: data.categoria,
       descripcion: data.descripcion, monto: data.monto,
       forma_pago: data.formaPago, referencia: data.referencia, notas: data.notas,
+      banco_id: data.bancoId ?? null,
     })
-    const d = await fetchGastos()
-    if (d) set({ gastos: d })
+
+    // Descontar del saldo bancario si el pago no fue en efectivo
+    if (data.bancoId && data.formaPago !== 'Efectivo') {
+      const banco = get().bancos.find(b => b.bancoId === data.bancoId)
+      if (banco) {
+        await supabase.from('erp_banks')
+          .update({ saldo: banco.saldo - data.monto })
+          .eq('id', data.bancoId)
+      }
+    }
+
+    const [gastos, bancos] = await Promise.all([fetchGastos(), fetchBancos()])
+    if (gastos) set({ gastos })
+    if (bancos)  set({ bancos })
   },
 
   async updateGasto(id, data) {
+    // Obtener el gasto actual antes de modificarlo para calcular el ajuste bancario
+    const gastoAnterior = get().gastos.find(g => g.gastoId === id)
+
     const patch: Record<string, unknown> = {}
     if (data.fecha !== undefined) patch.fecha = data.fecha
     if (data.categoria !== undefined) patch.categoria = data.categoria
@@ -352,6 +370,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     if (data.formaPago !== undefined) patch.forma_pago = data.formaPago
     if (data.referencia !== undefined) patch.referencia = data.referencia
     if (data.notas !== undefined) patch.notas = data.notas
+    patch.banco_id = data.bancoId ?? null
 
     // Optimistic update
     set(s => ({ gastos: s.gastos.map(g => g.gastoId === id ? { ...g, ...data } : g) }))
@@ -359,9 +378,47 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     const { error } = await supabase.from('erp_gastos_negocio').update(patch).eq('id', id)
     if (error) {
       toast.error('Error al guardar. Intenta de nuevo.')
-      const d = await fetchGastos()
-      if (d) set({ gastos: d })
+      const [gastos, bancos] = await Promise.all([fetchGastos(), fetchBancos()])
+      if (gastos) set({ gastos })
+      if (bancos)  set({ bancos })
+      return
     }
+
+    // Ajuste bancario: revertir anterior + aplicar nuevo
+    const bancos = get().bancos
+    const montoAnterior = gastoAnterior?.monto ?? 0
+    const bancoIdAnterior = gastoAnterior?.bancoId
+    const formaPagoAnterior = gastoAnterior?.formaPago
+
+    // 1. Restaurar saldo del banco anterior (si lo había y no era efectivo)
+    if (bancoIdAnterior && formaPagoAnterior !== 'Efectivo') {
+      const bancoAnt = bancos.find(b => b.bancoId === bancoIdAnterior)
+      if (bancoAnt) {
+        await supabase.from('erp_banks')
+          .update({ saldo: bancoAnt.saldo + montoAnterior })
+          .eq('id', bancoIdAnterior)
+      }
+    }
+
+    // 2. Descontar del nuevo banco (si aplica y no es efectivo)
+    const formaPagoNueva = data.formaPago ?? gastoAnterior?.formaPago
+    const bancoIdNuevo   = data.bancoId
+    if (bancoIdNuevo && formaPagoNueva !== 'Efectivo') {
+      // Recargar bancos para tener saldos frescos tras posible restauración
+      const bancosRefresh = await fetchBancos()
+      const listaBancos = bancosRefresh ?? get().bancos
+      const bancoNuevo = listaBancos.find(b => b.bancoId === bancoIdNuevo)
+      if (bancoNuevo) {
+        const montoNuevo = data.monto ?? gastoAnterior?.monto ?? 0
+        await supabase.from('erp_banks')
+          .update({ saldo: bancoNuevo.saldo - montoNuevo })
+          .eq('id', bancoIdNuevo)
+      }
+    }
+
+    const [gastosFinal, bancosFinal] = await Promise.all([fetchGastos(), fetchBancos()])
+    if (gastosFinal) set({ gastos: gastosFinal })
+    if (bancosFinal)  set({ bancos: bancosFinal })
   },
 
   async deleteGasto(id) {
