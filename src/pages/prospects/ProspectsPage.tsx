@@ -13,8 +13,8 @@ import type { Prospect, ProspectoEstatus } from '../../types'
 import { Plus, Edit2, UserSearch, Trash2, UserCheck, ArrowRight } from 'lucide-react'
 
 // 'ganado' NO aparece en el selector de estatus — se alcanza solo mediante el flujo
-const ESTADOS_EDITABLES: ProspectoEstatus[] = ['nuevo', 'contactado', 'cotizado', 'perdido']
-const ESTADOS_PIPELINE: ProspectoEstatus[] = ['nuevo', 'contactado', 'cotizado', 'ganado', 'perdido']
+const ESTADOS_EDITABLES: ProspectoEstatus[] = ['nuevo', 'contactado', 'calificado', 'cotizado', 'perdido']
+const ESTADOS_PIPELINE: ProspectoEstatus[] = ['nuevo', 'contactado', 'calificado', 'cotizado', 'ganado', 'perdido']
 const ORIGENES = ['Referido', 'LinkedIn', 'Expo', 'Web', 'Llamada', 'Visita', 'Otro']
 
 const REGIMENES = [
@@ -31,7 +31,6 @@ const BLANK: Omit<Prospect, 'prospectoId' | 'fechaAlta'> = {
   empresa: '', contacto: '', correo: '', telefono: '',
   origen: ORIGENES[0], estatus: 'nuevo', valorPotencial: 0,
   creadoPor: '', ciudad: '', productosActividad: '',
-  responsableId: '', responsableNombre: '',
 }
 
 const BLANK_FISCAL: DatosFiscales = {
@@ -43,7 +42,6 @@ export function ProspectsPage() {
   const { user: me } = useAuthStore()
 
   const [q, setQ] = useState('')
-  const [filtroEstatus, setFiltroEstatus] = useState<ProspectoEstatus | null>(null)
   const [modal, setModal] = useState<'new' | 'edit' | 'del' | 'convert' | 'marcar_ganado' | null>(null)
   const [form, setForm] = useState(BLANK)
   const [editId, setEditId] = useState<string | null>(null)
@@ -54,12 +52,10 @@ export function ProspectsPage() {
   const canDelete = me ? hasRole(me, 'director', 'ventas', 'administracion') : false
   const canConvert = me ? hasRole(me, 'director', 'ventas', 'administracion') : false
 
-  // Prospectos filtrados por búsqueda y/o estatus seleccionado
-  const filtered = prospects.filter((p) => {
-    const matchQ = [p.empresa, p.contacto, p.correo].join(' ').toLowerCase().includes(q.toLowerCase())
-    const matchEstatus = filtroEstatus ? p.estatus === filtroEstatus : true
-    return matchQ && matchEstatus
-  })
+  // Prospectos activos en pipeline (excluye los ya ganados que aún no se han convertido)
+  const filtered = prospects.filter((p) =>
+    [p.empresa, p.contacto, p.correo].join(' ').toLowerCase().includes(q.toLowerCase())
+  )
 
   // ── Editar ─────────────────────────────────────────────────────────────────
   function openNew() { setForm(BLANK); setEditId(null); setModal('new') }
@@ -131,23 +127,14 @@ export function ProspectsPage() {
         <button className="btn-primary" onClick={openNew}><Plus size={16} /> Nuevo Prospecto</button>
       </div>
 
-      {/* Pipeline counters — clic para filtrar */}
+      {/* Pipeline counters */}
       <div className="flex gap-3 overflow-x-auto pb-2">
-        {byStatus.map(({ e, count }) => {
-          const activo = filtroEstatus === e
-          return (
-            <button
-              key={e}
-              onClick={() => setFiltroEstatus(activo ? null : e)}
-              className={`card-sm flex-shrink-0 min-w-[100px] text-center cursor-pointer transition-all
-                ${e === 'ganado' ? 'border-green-300 bg-green-50' : ''}
-                ${activo ? 'ring-2 ring-blue-500 ring-offset-1' : 'hover:shadow-md'}`}
-            >
-              <div className="text-2xl font-bold text-gray-900">{count}</div>
-              <StatusBadge status={e} />
-            </button>
-          )
-        })}
+        {byStatus.map(({ e, count }) => (
+          <div key={e} className={`card-sm flex-shrink-0 min-w-[100px] text-center ${e === 'ganado' ? 'border-green-300 bg-green-50' : ''}`}>
+            <div className="text-2xl font-bold text-gray-900">{count}</div>
+            <StatusBadge status={e} />
+          </div>
+        ))}
       </div>
 
       {/* Tabla */}

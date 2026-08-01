@@ -34,7 +34,6 @@ const BLANK_GASTO: Omit<GastoNegocio, 'gastoId'> = {
   formaPago: 'Transferencia',
   referencia: '',
   notas: '',
-  bancoId: undefined,
 }
 
 export function FinancePage() {
@@ -295,9 +294,6 @@ export function FinancePage() {
   async function handleSaveGasto() {
     if (!gastoForm.descripcion.trim()) { toast.error('La descripcion es requerida.'); return }
     if (gastoForm.monto <= 0) { toast.error('El monto debe ser mayor a cero.'); return }
-    if (gastoForm.formaPago !== 'Efectivo' && !gastoForm.bancoId) {
-      toast.error('Selecciona la cuenta bancaria de origen.'); return
-    }
     if (selGasto) { await updateGasto(selGasto.gastoId, gastoForm); toast.success('Gasto actualizado.') }
     else { await addGasto(gastoForm); toast.success(`Gasto registrado: ${MXN(gastoForm.monto)}.`) }
     setModal(null)
@@ -1396,10 +1392,7 @@ export function FinancePage() {
               <div className="form-group">
                 <label className="label">Forma de Pago</label>
                 <select className="select" value={gastoForm.formaPago}
-                  onChange={(e) => {
-                    const fp = e.target.value
-                    setGastoForm(f => ({ ...f, formaPago: fp, bancoId: fp === 'Efectivo' ? undefined : f.bancoId }))
-                  }}>
+                  onChange={(e) => setGastoForm(f => ({ ...f, formaPago: e.target.value }))}>
                   {FORMAS_PAGO.map(x => <option key={x}>{x}</option>)}
                 </select>
               </div>
@@ -1409,27 +1402,6 @@ export function FinancePage() {
                   onChange={(e) => setGastoForm(f => ({ ...f, referencia: e.target.value }))} />
               </div>
             </div>
-            {gastoForm.formaPago !== 'Efectivo' && (
-              <div className="form-group">
-                <label className="label">Cuenta bancaria de origen *</label>
-                {bancos.filter(b => b.activo).length === 0 ? (
-                  <p className="text-xs text-amber-600 mt-1">No hay cuentas bancarias activas. Configúralas en la pestaña Bancos.</p>
-                ) : (
-                  <select
-                    className="select"
-                    value={gastoForm.bancoId ?? ''}
-                    onChange={(e) => setGastoForm(f => ({ ...f, bancoId: e.target.value || undefined }))}
-                  >
-                    <option value="">— Selecciona una cuenta —</option>
-                    {bancos.filter(b => b.activo).map(b => (
-                      <option key={b.bancoId} value={b.bancoId}>
-                        {b.banco} — {b.cuenta} ({MXN(b.saldo)} {b.moneda})
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
-            )}
             <div className="form-group">
               <label className="label">Notas</label>
               <textarea className="textarea" rows={2} value={gastoForm.notas}

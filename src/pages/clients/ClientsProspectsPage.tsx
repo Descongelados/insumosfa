@@ -3,8 +3,7 @@ import { useClientsStore } from '../../store/clientsStore'
 import { useProspectsStore } from '../../store/prospectsStore'
 import type { DatosFiscales } from '../../store/prospectsStore'
 import { useAuthStore } from '../../store/authStore'
-import { useUsersStore, hasRole } from '../../store/usersStore'
-import { ROUTE_ROLES } from '../../rbac'
+import { hasRole } from '../../store/usersStore'
 import { DataTable } from '../../components/ui/DataTable'
 import { SearchBar } from '../../components/ui/SearchBar'
 import { StatusBadge } from '../../components/ui/StatusBadge'
@@ -28,15 +27,14 @@ const REGIMENES = [
 ]
 
 // ── Prospects constants ───────────────────────────────────────────────────────
-const ESTADOS_EDITABLES: ProspectoEstatus[] = ['nuevo', 'contactado', 'cotizado', 'perdido']
-const ESTADOS_PIPELINE:  ProspectoEstatus[] = ['nuevo', 'contactado', 'cotizado', 'ganado', 'perdido']
+const ESTADOS_EDITABLES: ProspectoEstatus[] = ['nuevo', 'contactado', 'calificado', 'cotizado', 'perdido']
+const ESTADOS_PIPELINE:  ProspectoEstatus[] = ['nuevo', 'contactado', 'calificado', 'cotizado', 'ganado', 'perdido']
 const ORIGENES = ['Referido', 'LinkedIn', 'Expo', 'Web', 'Llamada', 'Visita', 'Otro']
 
 const BLANK_PROSPECT: Omit<Prospect, 'prospectoId' | 'fechaAlta'> = {
   empresa: '', contacto: '', correo: '', telefono: '',
   origen: ORIGENES[0], estatus: 'nuevo', valorPotencial: 0, creadoPor: '',
   ciudad: '', productosActividad: '',
-  responsableId: '', responsableNombre: '',
 }
 const BLANK_FISCAL: DatosFiscales = {
   rfc: '', regimenFiscal: REGIMENES[0], direccionFiscal: '', limiteCredito: 0,
@@ -62,16 +60,10 @@ export function ClientsProspectsPage() {
   const { clients, loadClients, subscribeRealtime: subClients, updateClient, deleteClient, clientNotes, addClientNote, removeClientNote } = useClientsStore()
   const { prospects, loadProspects, subscribeRealtime: subProspects, addProspect, updateProspect, deleteProspect, convertirACliente, prospectNotes, addProspectNote, removeProspectNote } = useProspectsStore()
   const { user: me } = useAuthStore()
-  const { users, loadUsers } = useUsersStore()
-
-  // Usuarios con acceso al módulo /clientes-prospectos
-  const modRoles = ROUTE_ROLES['/clientes-prospectos'] ?? []
-  const usuariosModulo = users.filter(u => u.active && u.roles.some(r => modRoles.includes(r)))
 
   useEffect(() => {
     void loadClients()
     void loadProspects()
-    void loadUsers()
     const u1 = subClients()
     const u2 = subProspects()
     return () => { u1(); u2() }
@@ -119,21 +111,18 @@ export function ClientsProspectsPage() {
         valorPotencial:   Number(row.valorPotencial   ?? 0),
         estatus: 'nuevo',
         creadoPor: me?.email ?? '',
-        responsableId: '', responsableNombre: '',
       })
     }
   }
 
   // ── prospect state ─────────────────────────────────────────────────────────
-  type PModal = 'new' | 'edit' | 'del' | 'convert' | 'marcar_ganado' | 'cambiar_responsable' | null
+  type PModal = 'new' | 'edit' | 'del' | 'convert' | 'marcar_ganado' | null
   const [pModal, setPModal] = useState<PModal>(null)
   const [pForm, setPForm] = useState(BLANK_PROSPECT)
   const [pEditId, setPEditId] = useState<string | null>(null)
   const [pDelTarget, setPDelTarget] = useState<Prospect | null>(null)
   const [pConvTarget, setPConvTarget] = useState<Prospect | null>(null)
   const [fiscal, setFiscal] = useState<DatosFiscales>(BLANK_FISCAL)
-  const [pRespTarget, setPRespTarget] = useState<Prospect | null>(null)
-  const [pRespId, setPRespId] = useState<string>('')
 
   // ── client state ───────────────────────────────────────────────────────────
   type CModal = 'edit' | 'confirm_delete' | null
@@ -172,13 +161,9 @@ export function ClientsProspectsPage() {
     : []
 
   // ── filtered lists ─────────────────────────────────────────────────────────
-  const [statusFilter, setStatusFilter] = useState<ProspectoEstatus | null>(null)
-
-  const filteredProspects = prospects.filter((p) => {
-    const matchQ = [p.empresa, p.contacto, p.correo].join(' ').toLowerCase().includes(qP.toLowerCase())
-    const matchS = statusFilter === null || p.estatus === statusFilter
-    return matchQ && matchS
-  })
+  const filteredProspects = prospects.filter((p) =>
+    [p.empresa, p.contacto, p.correo].join(' ').toLowerCase().includes(qP.toLowerCase())
+  )
   const filteredClients = clients.filter((c) =>
     [c.razonSocial, c.rfc, c.correo].join(' ').toLowerCase().includes(qC.toLowerCase())
   )
@@ -242,18 +227,6 @@ export function ClientsProspectsPage() {
     setPModal(null); setPDelTarget(null)
   }
 
-  function openCambiarResponsable(p: Prospect) {
-    setPRespTarget(p)
-    setPRespId(p.responsableId ?? '')
-    setPModal('cambiar_responsable')
-  }
-  async function handleCambiarResponsable() {
-    if (!pRespTarget) return
-    await updateProspect(pRespTarget.prospectoId, { responsableId: pRespId })
-    toast.success('Responsable actualizado.')
-    setPModal(null); setPRespTarget(null)
-  }
-
   // ══ CLIENT HANDLERS ════════════════════════════════════════════════════════
 
   const FC = (k: keyof typeof cForm) =>
@@ -285,10 +258,6 @@ export function ClientsProspectsPage() {
   const byStatus = ESTADOS_PIPELINE.map((e) => ({
     e, count: prospects.filter((p) => p.estatus === e).length,
   }))
-
-  function toggleStatusFilter(e: ProspectoEstatus) {
-    setStatusFilter(prev => prev === e ? null : e)
-  }
 
   // ─────────────────────────────────────────────────────────────────────────────
   return (
@@ -359,26 +328,12 @@ export function ClientsProspectsPage() {
           {/* Pipeline counters */}
           <div className="flex gap-3 overflow-x-auto pb-2">
             {byStatus.map(({ e, count }) => (
-              <button
-                key={e}
-                onClick={() => toggleStatusFilter(e)}
-                className={[
-                  'card-sm flex-shrink-0 min-w-[100px] text-center transition-all',
-                  e === 'ganado' ? 'border-green-300 bg-green-50' : '',
-                  statusFilter === e ? 'ring-2 ring-blue-500 ring-offset-1' : 'hover:border-blue-300',
-                ].join(' ')}
-              >
+              <div key={e} className={`card-sm flex-shrink-0 min-w-[100px] text-center ${e === 'ganado' ? 'border-green-300 bg-green-50' : ''}`}>
                 <div className="text-2xl font-bold text-gray-900">{count}</div>
                 <StatusBadge status={e} />
-              </button>
+              </div>
             ))}
           </div>
-          {statusFilter && (
-            <div className="flex items-center gap-2 text-sm text-blue-700">
-              <span>Filtrando por: <strong>{statusFilter}</strong></span>
-              <button className="underline text-gray-500 hover:text-gray-700" onClick={() => setStatusFilter(null)}>Limpiar filtro</button>
-            </div>
-          )}
 
           <div className="card">
             <div className="mb-4">
@@ -398,29 +353,7 @@ export function ClientsProspectsPage() {
                 { key: 'valorPotencial', header: 'Valor Potencial', render: (p) => <Currency value={p.valorPotencial} /> },
                 { key: 'estatus', header: 'Estatus', render: (p) => <StatusBadge status={p.estatus} /> },
                 { key: 'fechaAlta', header: 'Fecha Alta' },
-                {
-                  key: 'responsable',
-                  header: 'Responsable de contacto',
-                  render: (p) => {
-                    const nombre = p.responsableId
-                      ? (usuariosModulo.find(u => u.userId === p.responsableId)?.name ?? p.responsableId)
-                      : (p.creadoPor || '—')
-                    return (
-                      <div className="flex items-center gap-1.5 min-w-[140px]">
-                        <span className="text-sm text-gray-700">{nombre}</span>
-                        {canEditProspect && p.estatus !== 'ganado' && (
-                          <button
-                            className="btn btn-secondary btn-sm py-0 px-1.5 text-xs"
-                            title="Cambiar responsable"
-                            onClick={() => openCambiarResponsable(p)}
-                          >
-                            ✎
-                          </button>
-                        )}
-                      </div>
-                    )
-                  }
-                },
+                { key: 'creadoPor', header: 'Contactado por' },
                 {
                   key: 'acc', header: '', render: (p) => (
                     <div className="flex gap-1 flex-wrap">
@@ -638,46 +571,6 @@ export function ClientsProspectsPage() {
           <p className="text-sm text-gray-700">
             ¿Eliminar el prospecto <strong>{pDelTarget.empresa}</strong>? Esta acción no se puede deshacer.
           </p>
-        </Modal>
-      )}
-
-      {/* Cambiar Responsable de contacto */}
-      {pModal === 'cambiar_responsable' && pRespTarget && (
-        <Modal
-          title={`Responsable de contacto — ${pRespTarget.empresa}`}
-          onClose={() => setPModal(null)}
-          footer={
-            <>
-              <button className="btn-secondary" onClick={() => setPModal(null)}>Cancelar</button>
-              <button className="btn-primary" onClick={handleCambiarResponsable}>Guardar</button>
-            </>
-          }
-        >
-          <div className="space-y-4 text-sm">
-            <p className="text-gray-500">
-              Selecciona el usuario responsable de dar seguimiento a este prospecto.
-              Solo se muestran usuarios activos con acceso al módulo.
-            </p>
-            {usuariosModulo.length === 0 ? (
-              <p className="text-amber-600">No hay usuarios activos con acceso a este módulo.</p>
-            ) : (
-              <div className="form-group">
-                <label className="label">Responsable</label>
-                <select
-                  className="select"
-                  value={pRespId}
-                  onChange={(e) => setPRespId(e.target.value)}
-                >
-                  <option value="">— Sin asignar —</option>
-                  {usuariosModulo.map(u => (
-                    <option key={u.userId} value={u.userId}>
-                      {u.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </div>
         </Modal>
       )}
 

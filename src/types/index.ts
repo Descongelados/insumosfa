@@ -48,7 +48,7 @@ export interface ContactNote {
 }
 
 // ─── Prospects ─────────────────────────────────────────────────────────────
-export type ProspectoEstatus = 'nuevo' | 'contactado' | 'cotizado' | 'ganado' | 'perdido'
+export type ProspectoEstatus = 'nuevo' | 'contactado' | 'calificado' | 'cotizado' | 'ganado' | 'perdido'
 
 export interface Prospect {
   prospectoId: string
@@ -61,10 +61,6 @@ export interface Prospect {
   valorPotencial: number
   fechaAlta: string
   creadoPor: string
-  /** ID del usuario responsable de contacto (referencia a erp_users) */
-  responsableId: string
-  /** Nombre del responsable — se llena en el front a partir de la lista de usuarios */
-  responsableNombre: string
   ciudad: string
   productosActividad: string
 }
@@ -324,8 +320,6 @@ export interface GastoNegocio {
   formaPago: string
   referencia: string
   notas: string
-  /** ID de la cuenta bancaria de la que salió el dinero (undefined = efectivo) */
-  bancoId?: string
 }
 
 // ─── Audit ─────────────────────────────────────────────────────────────────
