@@ -5,8 +5,9 @@ import { useSalesOrdersStore } from '../../store/salesOrdersStore'
 import { useClientsStore } from '../../store/clientsStore'
 import { useProductsStore } from '../../store/productsStore'
 import { useAuthStore } from '../../store/authStore'
-import { hasRole } from '../../store/usersStore'
+import { hasRole, useUsersStore } from '../../store/usersStore'
 import { useConfigStore, type CompanyInfo } from '../../store/configStore'
+import { ROUTE_ROLES } from '../../rbac'
 import { DataTable } from '../../components/ui/DataTable'
 import { SearchBar } from '../../components/ui/SearchBar'
 import { StatusBadge } from '../../components/ui/StatusBadge'
@@ -91,17 +92,37 @@ export function QuotesPage() {
   const { products, loadProducts, loading: productsLoading } = useProductsStore()
   const { user: me }                   = useAuthStore()
   const { company }                    = useConfigStore()
+  const { users, loadUsers }           = useUsersStore()
 
-  /** Nombre comercial del vendedor según el usuario logueado */
-  const atiende = me?.email?.toLowerCase().includes('ramon') || me?.name?.toLowerCase().includes('ramon')
-    ? 'Ramon Haro Fernandez'
-    : 'Wilfredo Diaz Carpio'
+  // Roles con acceso a /cotizaciones según RBAC
+  const quotesRoles = ROUTE_ROLES['/cotizaciones'] ?? []
+
+  // Usuarios activos con al menos un rol que da acceso a /cotizaciones
+  const atiendePossible = useMemo(
+    () => users.filter(u => u.active && u.roles.some(r => quotesRoles.includes(r))),
+    [users, quotesRoles]
+  )
+
+  // Estado del selector "Atiende" — se inicializa con el usuario logueado si tiene acceso
+  const defaultAtiende = useMemo(() => {
+    if (!me) return ''
+    const meInList = atiendePossible.find(u => u.userId === me.userId)
+    return meInList?.name ?? atiendePossible[0]?.name ?? ''
+  }, [me, atiendePossible])
+
+  const [atiende, setAtiende] = useState('')
+
+  // Sync defaultAtiende → state cuando la lista de usuarios cargue
+  useEffect(() => {
+    if (atiende === '' && defaultAtiende !== '') setAtiende(defaultAtiende)
+  }, [defaultAtiende])
 
   // Carga inicial + suscripción realtime para ver cotizaciones de otros usuarios
   useEffect(() => {
     void loadQuotes()
     void loadClients()
     void loadProducts()
+    void loadUsers()
     return subscribeRealtime()
   }, [])
 
@@ -397,6 +418,23 @@ export function QuotesPage() {
           }
         >
           <div className="space-y-4">
+
+            {/* Atiende */}
+            <div className="form-group">
+              <label className="label">Atiende</label>
+              <select
+                className="select"
+                value={atiende}
+                onChange={e => setAtiende(e.target.value)}
+              >
+                {atiendePossible.length === 0 && (
+                  <option value="">Cargando usuarios...</option>
+                )}
+                {atiendePossible.map(u => (
+                  <option key={u.userId} value={u.name}>{u.name}</option>
+                ))}
+              </select>
+            </div>
 
             {/* Toggle tipo de cliente */}
             <div>
