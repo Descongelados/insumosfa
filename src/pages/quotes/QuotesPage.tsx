@@ -570,6 +570,7 @@ export function QuotesPage() {
               )}
               {form.items.map((it, idx) => (
                 <div key={it.detalleId} className="grid grid-cols-12 gap-2 mb-2 items-end">
+                  {/* Producto — 5 cols */}
                   <div className="col-span-5">
                     {idx === 0 && <label className="label">Producto</label>}
                     <select
@@ -586,18 +587,45 @@ export function QuotesPage() {
                       ))}
                     </select>
                   </div>
+                  {/* Cantidad — 2 cols */}
                   <div className="col-span-2">
                     {idx === 0 && <label className="label">Cantidad</label>}
                     <input type="number" className="input" min={1} value={it.cantidad} onChange={e => updateItem(idx, 'cantidad', Number(e.target.value))} />
                   </div>
-                  <div className="col-span-2">
-                    {idx === 0 && <label className="label">Precio</label>}
-                    <input type="number" className="input" min={0} step="0.01" value={it.precio} onChange={e => updateItem(idx, 'precio', Number(e.target.value))} />
+                  {/* Precio unitario + descuento — 4 cols */}
+                  <div className="col-span-4">
+                    {idx === 0 && <label className="label">Precio Unitario</label>}
+                    <input
+                      type="number"
+                      className="input"
+                      min={0}
+                      step="0.01"
+                      value={it.precio}
+                      onChange={e => updateItem(idx, 'precio', Number(e.target.value))}
+                    />
+                    {/* Descuento: input oculto + precio neto + badge de porcentaje */}
+                    <input
+                      type="number"
+                      className="sr-only"
+                      tabIndex={-1}
+                      aria-hidden="true"
+                      min={0}
+                      max={100}
+                      value={it.descuento}
+                      onChange={e => updateItem(idx, 'descuento', Number(e.target.value))}
+                    />
+                    {it.descuento > 0 && (
+                      <div className="mt-1 flex items-baseline gap-1.5">
+                        <span className="text-sm font-semibold text-green-700">
+                          {mxn(it.precio * (1 - it.descuento / 100))}
+                        </span>
+                        <span className="text-xs text-gray-400">
+                          Desc: {it.descuento}%
+                        </span>
+                      </div>
+                    )}
                   </div>
-                  <div className="col-span-2">
-                    {idx === 0 && <label className="label">Desc%</label>}
-                    <input type="number" className="input" min={0} max={100} value={it.descuento} onChange={e => updateItem(idx, 'descuento', Number(e.target.value))} />
-                  </div>
+                  {/* Eliminar — 1 col */}
                   <div className="col-span-1">
                     {idx === 0 && <div className="label opacity-0">X</div>}
                     <button className="btn btn-danger btn-sm w-full justify-center" onClick={() => removeItem(idx)}><Trash2 size={13} /></button>
