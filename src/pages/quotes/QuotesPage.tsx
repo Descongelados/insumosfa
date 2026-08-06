@@ -13,7 +13,6 @@ import { StatusBadge } from '../../components/ui/StatusBadge'
 import { Modal } from '../../components/ui/Modal'
 import { Currency } from '../../components/ui/Currency'
 import { QuotePDF } from '../../components/QuotePDF'
-import { PriceReferencePanel } from './PriceReferencePanel'
 import { toast } from '../../store/toastStore'
 import type { Quote, QuoteItem, CotizacionEstatus, Client, Product } from '../../types'
 import { Plus, FileText, ArrowRight, Trash2, Eye, Download, Share2, X, Copy, Check, UserCheck, User } from 'lucide-react'
@@ -41,17 +40,6 @@ function ClienteBadge({ qt }: { qt: Quote }) {
       <User size={11} /> Sin registro
     </span>
   )
-}
-
-/**
- * Descuento automático por volumen (kg).
- * Retorna el porcentaje como número (ej: 4.1, no 0.041).
- */
-function getVolumeDiscount(cantidad: number): number {
-  if (cantidad >= 10000) return 9.5
-  if (cantidad >= 5000)  return 6.8
-  if (cantidad >= 1500)  return 4.1
-  return 0
 }
 
 // ── Print via hidden iframe ───────────────────────────────────────────────────
@@ -175,7 +163,6 @@ export function QuotesPage() {
         if (i !== idx) return it
         const updated = { ...it, [key]: value } as QuoteItem
         if (key === 'productId') updated.precio = products.find(p => p.productId === value)?.precioVenta ?? 0
-        if (key === 'cantidad' || key === 'productId') updated.descuento = getVolumeDiscount(updated.cantidad)
         return updated
       }),
     }))
@@ -335,9 +322,6 @@ export function QuotesPage() {
           </button>
         </div>
       </div>
-
-      {/* ── Panel de referencia de precios ──────────────────────────────── */}
-      <PriceReferencePanel />
 
       {/* ── Tabla ───────────────────────────────────────────────────────── */}
       <div className="card">
