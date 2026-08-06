@@ -13,6 +13,7 @@ import { StatusBadge } from '../../components/ui/StatusBadge'
 import { Modal } from '../../components/ui/Modal'
 import { Currency } from '../../components/ui/Currency'
 import { QuotePDF } from '../../components/QuotePDF'
+import { PriceReferencePanel } from './PriceReferencePanel'
 import { toast } from '../../store/toastStore'
 import type { Quote, QuoteItem, CotizacionEstatus, Client, Product } from '../../types'
 import { Plus, FileText, ArrowRight, Trash2, Eye, Download, Share2, X, Copy, Check, UserCheck, User } from 'lucide-react'
@@ -322,6 +323,9 @@ export function QuotesPage() {
           </button>
         </div>
       </div>
+
+      {/* ── Panel de referencia de precios ──────────────────────────────── */}
+      <PriceReferencePanel />
 
       {/* ── Tabla ───────────────────────────────────────────────────────── */}
       <div className="card">
