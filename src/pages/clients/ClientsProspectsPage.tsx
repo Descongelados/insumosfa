@@ -13,7 +13,7 @@ import { CsvImportModal, type CsvColumn } from '../../components/ui/CsvImportMod
 import { toast } from '../../store/toastStore'
 import { exportToCsv } from '../../utils/exportCsv'
 import type { Client, Prospect, ProspectoEstatus } from '../../types'
-import { Users, UserSearch, Plus, CreditCard as Edit2, Trash2, UserCheck, ArrowRight, Info, CircleAlert as AlertCircle, MessageSquare, Send, Download, Upload } from 'lucide-react'
+import { Users, UserSearch, Plus, CreditCard as Edit2, Trash2, UserCheck, ArrowRight, Info, CircleAlert as AlertCircle, MessageSquare, Send, Download, Upload, Filter } from 'lucide-react'
 
 // ── Shared constants ─────────────────────────────────────────────────────────
 const REGIMENES = [
@@ -47,13 +47,16 @@ const BLANK_CLIENT: Omit<Client, 'clientId' | 'fechaAlta'> = {
   ciudad: '', productosActividad: '',
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function fmtNoteDate(iso: string) {
   try {
     const d = new Date(iso)
     return d.toLocaleString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
   } catch { return iso }
+}
+
+function unique(arr: string[]): string[] {
+  return Array.from(new Set(arr.filter(Boolean))).sort()
 }
 
 export function ClientsProspectsPage() {
@@ -81,6 +84,15 @@ export function ClientsProspectsPage() {
   // ── search ─────────────────────────────────────────────────────────────────
   const [qP, setQP] = useState('')
   const [qC, setQC] = useState('')
+
+  // ── prospect filters ───────────────────────────────────────────────────────
+  const [pFilterCiudad,      setPFilterCiudad]      = useState('')
+  const [pFilterEstatus,     setPFilterEstatus]      = useState('')
+  const [pFilterContactadoPor, setPFilterContactadoPor] = useState('')
+
+  // ── client filters ─────────────────────────────────────────────────────────
+  const [cFilterCiudad,  setCFilterCiudad]  = useState('')
+  const [cFilterEstatus, setCFilterEstatus] = useState('')
 
   // ── saving state ───────────────────────────────────────────────────────────
   const [saving, setSaving] = useState(false)
@@ -160,13 +172,36 @@ export function ClientsProspectsPage() {
     ? (notesTarget.type === 'cliente' ? clientNotes : prospectNotes).filter(n => n.entidadId === notesTarget.id)
     : []
 
+  // ── dynamic filter options ─────────────────────────────────────────────────
+  const prospectCiudades    = unique(prospects.map(p => p.ciudad ?? ''))
+  const prospectContactados = unique(prospects.map(p => p.creadoPor ?? ''))
+  const clientCiudades      = unique(clients.map(c => c.ciudad ?? ''))
+
   // ── filtered lists ─────────────────────────────────────────────────────────
-  const filteredProspects = prospects.filter((p) =>
-    [p.empresa, p.contacto, p.correo].join(' ').toLowerCase().includes(qP.toLowerCase())
-  )
-  const filteredClients = clients.filter((c) =>
-    [c.razonSocial, c.rfc, c.correo].join(' ').toLowerCase().includes(qC.toLowerCase())
-  )
+  const filteredProspects = prospects.filter((p) => {
+    const matchSearch = [p.empresa, p.contacto, p.correo].join(' ').toLowerCase().includes(qP.toLowerCase())
+    const matchCiudad      = !pFilterCiudad      || p.ciudad    === pFilterCiudad
+    const matchEstatus     = !pFilterEstatus     || p.estatus   === pFilterEstatus
+    const matchContactadoPor = !pFilterContactadoPor || p.creadoPor === pFilterContactadoPor
+    return matchSearch && matchCiudad && matchEstatus && matchContactadoPor
+  })
+
+  const filteredClients = clients.filter((c) => {
+    const matchSearch  = [c.razonSocial, c.rfc, c.correo].join(' ').toLowerCase().includes(qC.toLowerCase())
+    const matchCiudad  = !cFilterCiudad  || c.ciudad   === cFilterCiudad
+    const matchEstatus = !cFilterEstatus || c.estatus  === cFilterEstatus
+    return matchSearch && matchCiudad && matchEstatus
+  })
+
+  const pActiveFilters = [pFilterCiudad, pFilterEstatus, pFilterContactadoPor].filter(Boolean).length
+  const cActiveFilters = [cFilterCiudad, cFilterEstatus].filter(Boolean).length
+
+  function clearProspectFilters() {
+    setPFilterCiudad(''); setPFilterEstatus(''); setPFilterContactadoPor('')
+  }
+  function clearClientFilters() {
+    setCFilterCiudad(''); setCFilterEstatus('')
+  }
 
   // ══ PROSPECT HANDLERS ══════════════════════════════════════════════════════
 
@@ -336,12 +371,53 @@ export function ClientsProspectsPage() {
           </div>
 
           <div className="card">
-            <div className="mb-4">
-              <SearchBar value={qP} onChange={setQP} placeholder="Buscar empresa o contacto..." />
+            {/* Search + Filters row */}
+            <div className="flex flex-wrap gap-3 mb-4 items-end">
+              <div className="flex-1 min-w-[200px]">
+                <SearchBar value={qP} onChange={setQP} placeholder="Buscar empresa o contacto..." />
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Filter size={15} className="text-gray-400 flex-shrink-0" />
+                <select
+                  className="select text-sm"
+                  value={pFilterCiudad}
+                  onChange={e => setPFilterCiudad(e.target.value)}
+                >
+                  <option value="">Todas las ciudades</option>
+                  {prospectCiudades.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <select
+                  className="select text-sm"
+                  value={pFilterEstatus}
+                  onChange={e => setPFilterEstatus(e.target.value)}
+                >
+                  <option value="">Todos los estatus</option>
+                  {ESTADOS_PIPELINE.map(e => (
+                    <option key={e} value={e}>{e.charAt(0).toUpperCase() + e.slice(1)}</option>
+                  ))}
+                </select>
+                <select
+                  className="select text-sm"
+                  value={pFilterContactadoPor}
+                  onChange={e => setPFilterContactadoPor(e.target.value)}
+                >
+                  <option value="">Todos los responsables</option>
+                  {prospectContactados.map(u => <option key={u} value={u}>{u}</option>)}
+                </select>
+                {pActiveFilters > 0 && (
+                  <button
+                    className="btn-secondary text-xs flex items-center gap-1"
+                    onClick={clearProspectFilters}
+                  >
+                    Limpiar ({pActiveFilters})
+                  </button>
+                )}
+              </div>
             </div>
+
             <DataTable
               data={filteredProspects}
-              emptyMessage={qP ? `Sin resultados para "${qP}"` : 'Sin prospectos registrados.'}
+              emptyMessage={qP || pActiveFilters ? `Sin resultados para los filtros aplicados.` : 'Sin prospectos registrados.'}
               rowKey={(p) => p.prospectoId}
               columns={[
                 { key: 'empresa', header: 'Empresa' },
@@ -405,13 +481,45 @@ export function ClientsProspectsPage() {
           </div>
 
           <div className="card">
-            <div className="flex justify-between mb-4">
-              <SearchBar value={qC} onChange={setQC} placeholder="Buscar por nombre, RFC..." />
+            {/* Search + Filters row */}
+            <div className="flex flex-wrap gap-3 mb-4 items-end">
+              <div className="flex-1 min-w-[200px]">
+                <SearchBar value={qC} onChange={setQC} placeholder="Buscar por nombre, RFC..." />
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Filter size={15} className="text-gray-400 flex-shrink-0" />
+                <select
+                  className="select text-sm"
+                  value={cFilterCiudad}
+                  onChange={e => setCFilterCiudad(e.target.value)}
+                >
+                  <option value="">Todas las ciudades</option>
+                  {clientCiudades.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <select
+                  className="select text-sm"
+                  value={cFilterEstatus}
+                  onChange={e => setCFilterEstatus(e.target.value)}
+                >
+                  <option value="">Todos los estatus</option>
+                  <option value="activo">Activo</option>
+                  <option value="inactivo">Inactivo</option>
+                </select>
+                {cActiveFilters > 0 && (
+                  <button
+                    className="btn-secondary text-xs flex items-center gap-1"
+                    onClick={clearClientFilters}
+                  >
+                    Limpiar ({cActiveFilters})
+                  </button>
+                )}
+              </div>
               <div className="text-sm text-gray-500 self-center">{filteredClients.length} resultados</div>
             </div>
+
             <DataTable
               data={filteredClients}
-              emptyMessage={qC ? `Sin resultados para "${qC}"` : 'Sin clientes registrados.'}
+              emptyMessage={qC || cActiveFilters ? `Sin resultados para los filtros aplicados.` : 'Sin clientes registrados.'}
               rowKey={(c) => c.clientId}
               columns={[
                 { key: 'razonSocial', header: 'Razón Social' },
