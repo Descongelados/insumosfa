@@ -110,6 +110,7 @@ export const useProspectsStore = create<ProspectsState>()((set, get) => ({
     if (data.origen !== undefined) patch.origen = data.origen
     if (data.estatus !== undefined) patch.estatus = data.estatus
     if (data.valorPotencial !== undefined) patch.valor_potencial = data.valorPotencial
+    if (data.creadoPor !== undefined) patch.creado_por = data.creadoPor
     if (data.ciudad !== undefined) patch.ciudad = data.ciudad
     if (data.productosActividad !== undefined) patch.productos_actividad = data.productosActividad
 
