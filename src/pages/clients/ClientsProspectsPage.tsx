@@ -3,7 +3,7 @@ import { useClientsStore } from '../../store/clientsStore'
 import { useProspectsStore } from '../../store/prospectsStore'
 import type { DatosFiscales } from '../../store/prospectsStore'
 import { useAuthStore } from '../../store/authStore'
-import { hasRole } from '../../store/usersStore'
+import { hasRole, useUsersStore } from '../../store/usersStore'
 import { DataTable } from '../../components/ui/DataTable'
 import { SearchBar } from '../../components/ui/SearchBar'
 import { StatusBadge } from '../../components/ui/StatusBadge'
@@ -63,10 +63,12 @@ export function ClientsProspectsPage() {
   const { clients, loadClients, subscribeRealtime: subClients, updateClient, deleteClient, clientNotes, addClientNote, removeClientNote } = useClientsStore()
   const { prospects, loadProspects, subscribeRealtime: subProspects, addProspect, updateProspect, deleteProspect, convertirACliente, prospectNotes, addProspectNote, removeProspectNote } = useProspectsStore()
   const { user: me } = useAuthStore()
+  const { users, loadUsers } = useUsersStore()
 
   useEffect(() => {
     void loadClients()
     void loadProspects()
+    void loadUsers()
     const u1 = subClients()
     const u2 = subProspects()
     return () => { u1(); u2() }
@@ -86,8 +88,8 @@ export function ClientsProspectsPage() {
   const [qC, setQC] = useState('')
 
   // ── prospect filters ───────────────────────────────────────────────────────
-  const [pFilterCiudad,      setPFilterCiudad]      = useState('')
-  const [pFilterEstatus,     setPFilterEstatus]      = useState('')
+  const [pFilterCiudad,        setPFilterCiudad]        = useState('')
+  const [pFilterEstatus,       setPFilterEstatus]        = useState('')
   const [pFilterContactadoPor, setPFilterContactadoPor] = useState('')
 
   // ── client filters ─────────────────────────────────────────────────────────
@@ -122,7 +124,7 @@ export function ClientsProspectsPage() {
         productosActividad: String(row.productosActividad ?? ''),
         valorPotencial:   Number(row.valorPotencial   ?? 0),
         estatus: 'nuevo',
-        creadoPor: me?.email ?? '',
+        creadoPor: me?.name ?? '',
       })
     }
   }
@@ -177,11 +179,14 @@ export function ClientsProspectsPage() {
   const prospectContactados = unique(prospects.map(p => p.creadoPor ?? ''))
   const clientCiudades      = unique(clients.map(c => c.ciudad ?? ''))
 
+  // Lista de usuarios activos para el selector de "Contactado por"
+  const activeUsers = users.filter(u => u.active)
+
   // ── filtered lists ─────────────────────────────────────────────────────────
   const filteredProspects = prospects.filter((p) => {
-    const matchSearch = [p.empresa, p.contacto, p.correo].join(' ').toLowerCase().includes(qP.toLowerCase())
-    const matchCiudad      = !pFilterCiudad      || p.ciudad    === pFilterCiudad
-    const matchEstatus     = !pFilterEstatus     || p.estatus   === pFilterEstatus
+    const matchSearch        = [p.empresa, p.contacto, p.correo].join(' ').toLowerCase().includes(qP.toLowerCase())
+    const matchCiudad        = !pFilterCiudad        || p.ciudad    === pFilterCiudad
+    const matchEstatus       = !pFilterEstatus       || p.estatus   === pFilterEstatus
     const matchContactadoPor = !pFilterContactadoPor || p.creadoPor === pFilterContactadoPor
     return matchSearch && matchCiudad && matchEstatus && matchContactadoPor
   })
@@ -213,7 +218,11 @@ export function ClientsProspectsPage() {
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
       setFiscal((p) => ({ ...p, [k]: k === 'limiteCredito' ? Number(e.target.value) : e.target.value }))
 
-  function openNewProspect() { setPForm(BLANK_PROSPECT); setPEditId(null); setPModal('new') }
+  function openNewProspect() {
+    setPForm({ ...BLANK_PROSPECT, creadoPor: me?.name ?? '' })
+    setPEditId(null)
+    setPModal('new')
+  }
   function openEditProspect(p: Prospect) {
     const { prospectoId: _id, fechaAlta: _fa, ...rest } = p
     setPForm(rest); setPEditId(p.prospectoId); setPModal('edit')
@@ -223,7 +232,7 @@ export function ClientsProspectsPage() {
     setSaving(true)
     try {
       if (pEditId) { await updateProspect(pEditId, pForm); toast.success('Prospecto actualizado.') }
-      else { await addProspect({ ...pForm, creadoPor: me?.name ?? '' }); toast.success('Prospecto creado.') }
+      else { await addProspect({ ...pForm, creadoPor: pForm.creadoPor || me?.name ?? '' }); toast.success('Prospecto creado.') }
       setPModal(null)
     } finally {
       setSaving(false)
@@ -610,6 +619,15 @@ export function ClientsProspectsPage() {
               <select className="select" value={pForm.estatus} onChange={FP('estatus')}>
                 {ESTADOS_EDITABLES.map((e) => (
                   <option key={e} value={e}>{e.charAt(0).toUpperCase() + e.slice(1)}</option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="label">Contactado por</label>
+              <select className="select" value={pForm.creadoPor} onChange={FP('creadoPor')}>
+                <option value="">— Sin asignar —</option>
+                {activeUsers.map(u => (
+                  <option key={u.userId} value={u.name}>{u.name}</option>
                 ))}
               </select>
             </div>
