@@ -380,48 +380,46 @@ export function ClientsProspectsPage() {
           </div>
 
           <div className="card">
-            {/* Search + Filters row */}
-            <div className="flex flex-wrap gap-3 mb-4 items-end">
-              <div className="flex-1 min-w-[200px]">
-                <SearchBar value={qP} onChange={setQP} placeholder="Buscar empresa o contacto..." />
+            {/* Search + Filters — single row */}
+            <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-1">
+              <div className="w-56 flex-shrink-0">
+                <SearchBar value={qP} onChange={setQP} placeholder="Buscar empresa..." />
               </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <Filter size={15} className="text-gray-400 flex-shrink-0" />
-                <select
-                  className="select text-sm"
-                  value={pFilterCiudad}
-                  onChange={e => setPFilterCiudad(e.target.value)}
+              <Filter size={15} className="text-gray-400 flex-shrink-0" />
+              <select
+                className="select text-sm w-36 flex-shrink-0"
+                value={pFilterCiudad}
+                onChange={e => setPFilterCiudad(e.target.value)}
+              >
+                <option value="">Ciudad</option>
+                {prospectCiudades.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <select
+                className="select text-sm w-36 flex-shrink-0"
+                value={pFilterEstatus}
+                onChange={e => setPFilterEstatus(e.target.value)}
+              >
+                <option value="">Estatus</option>
+                {ESTADOS_PIPELINE.map(e => (
+                  <option key={e} value={e}>{e.charAt(0).toUpperCase() + e.slice(1)}</option>
+                ))}
+              </select>
+              <select
+                className="select text-sm w-40 flex-shrink-0"
+                value={pFilterContactadoPor}
+                onChange={e => setPFilterContactadoPor(e.target.value)}
+              >
+                <option value="">Responsable</option>
+                {prospectContactados.map(u => <option key={u} value={u}>{u}</option>)}
+              </select>
+              {pActiveFilters > 0 && (
+                <button
+                  className="btn-secondary text-xs flex-shrink-0 flex items-center gap-1"
+                  onClick={clearProspectFilters}
                 >
-                  <option value="">Todas las ciudades</option>
-                  {prospectCiudades.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-                <select
-                  className="select text-sm"
-                  value={pFilterEstatus}
-                  onChange={e => setPFilterEstatus(e.target.value)}
-                >
-                  <option value="">Todos los estatus</option>
-                  {ESTADOS_PIPELINE.map(e => (
-                    <option key={e} value={e}>{e.charAt(0).toUpperCase() + e.slice(1)}</option>
-                  ))}
-                </select>
-                <select
-                  className="select text-sm"
-                  value={pFilterContactadoPor}
-                  onChange={e => setPFilterContactadoPor(e.target.value)}
-                >
-                  <option value="">Todos los responsables</option>
-                  {prospectContactados.map(u => <option key={u} value={u}>{u}</option>)}
-                </select>
-                {pActiveFilters > 0 && (
-                  <button
-                    className="btn-secondary text-xs flex items-center gap-1"
-                    onClick={clearProspectFilters}
-                  >
-                    Limpiar ({pActiveFilters})
-                  </button>
-                )}
-              </div>
+                  Limpiar ({pActiveFilters})
+                </button>
+              )}
             </div>
 
             <DataTable
@@ -490,40 +488,38 @@ export function ClientsProspectsPage() {
           </div>
 
           <div className="card">
-            {/* Search + Filters row */}
-            <div className="flex flex-wrap gap-3 mb-4 items-end">
-              <div className="flex-1 min-w-[200px]">
-                <SearchBar value={qC} onChange={setQC} placeholder="Buscar por nombre, RFC..." />
+            {/* Search + Filters — single row */}
+            <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-1">
+              <div className="w-56 flex-shrink-0">
+                <SearchBar value={qC} onChange={setQC} placeholder="Buscar nombre, RFC..." />
               </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <Filter size={15} className="text-gray-400 flex-shrink-0" />
-                <select
-                  className="select text-sm"
-                  value={cFilterCiudad}
-                  onChange={e => setCFilterCiudad(e.target.value)}
+              <Filter size={15} className="text-gray-400 flex-shrink-0" />
+              <select
+                className="select text-sm w-36 flex-shrink-0"
+                value={cFilterCiudad}
+                onChange={e => setCFilterCiudad(e.target.value)}
+              >
+                <option value="">Ciudad</option>
+                {clientCiudades.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <select
+                className="select text-sm w-36 flex-shrink-0"
+                value={cFilterEstatus}
+                onChange={e => setCFilterEstatus(e.target.value)}
+              >
+                <option value="">Estatus</option>
+                <option value="activo">Activo</option>
+                <option value="inactivo">Inactivo</option>
+              </select>
+              {cActiveFilters > 0 && (
+                <button
+                  className="btn-secondary text-xs flex-shrink-0 flex items-center gap-1"
+                  onClick={clearClientFilters}
                 >
-                  <option value="">Todas las ciudades</option>
-                  {clientCiudades.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-                <select
-                  className="select text-sm"
-                  value={cFilterEstatus}
-                  onChange={e => setCFilterEstatus(e.target.value)}
-                >
-                  <option value="">Todos los estatus</option>
-                  <option value="activo">Activo</option>
-                  <option value="inactivo">Inactivo</option>
-                </select>
-                {cActiveFilters > 0 && (
-                  <button
-                    className="btn-secondary text-xs flex items-center gap-1"
-                    onClick={clearClientFilters}
-                  >
-                    Limpiar ({cActiveFilters})
-                  </button>
-                )}
-              </div>
-              <div className="text-sm text-gray-500 self-center">{filteredClients.length} resultados</div>
+                  Limpiar ({cActiveFilters})
+                </button>
+              )}
+              <span className="text-sm text-gray-400 flex-shrink-0 ml-auto">{filteredClients.length} resultados</span>
             </div>
 
             <DataTable
