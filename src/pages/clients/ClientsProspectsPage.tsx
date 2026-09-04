@@ -232,7 +232,7 @@ export function ClientsProspectsPage() {
     setSaving(true)
     try {
       if (pEditId) { await updateProspect(pEditId, pForm); toast.success('Prospecto actualizado.') }
-      else { await addProspect({ ...pForm, creadoPor: pForm.creadoPor || me?.name ?? '' }); toast.success('Prospecto creado.') }
+      else { await addProspect({ ...pForm, creadoPor: pForm.creadoPor || (me?.name ?? '') }); toast.success('Prospecto creado.') }
       setPModal(null)
     } finally {
       setSaving(false)
