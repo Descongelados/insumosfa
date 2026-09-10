@@ -5,14 +5,16 @@ import { useSalesOrdersStore } from '../../store/salesOrdersStore'
 import { useClientsStore } from '../../store/clientsStore'
 import { useProductsStore } from '../../store/productsStore'
 import { useAuthStore } from '../../store/authStore'
-import { hasRole } from '../../store/usersStore'
+import { hasRole, useUsersStore } from '../../store/usersStore'
 import { useConfigStore, type CompanyInfo } from '../../store/configStore'
+import { ROUTE_ROLES } from '../../rbac'
 import { DataTable } from '../../components/ui/DataTable'
 import { SearchBar } from '../../components/ui/SearchBar'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { Modal } from '../../components/ui/Modal'
 import { Currency } from '../../components/ui/Currency'
 import { QuotePDF } from '../../components/QuotePDF'
+import { PriceReferencePanel } from './PriceReferencePanel'
 import { toast } from '../../store/toastStore'
 import type { Quote, QuoteItem, CotizacionEstatus, Client, Product } from '../../types'
 import { Plus, FileText, ArrowRight, Trash2, Eye, Download, Share2, X, Copy, Check, UserCheck, User } from 'lucide-react'
@@ -40,6 +42,17 @@ function ClienteBadge({ qt }: { qt: Quote }) {
       <User size={11} /> Sin registro
     </span>
   )
+}
+
+/**
+ * Descuento automático por volumen (kg).
+ * Retorna el porcentaje como número (ej: 4.1, no 0.041).
+ */
+function getVolumeDiscount(cantidad: number): number {
+  if (cantidad >= 10000) return 9.5
+  if (cantidad >= 5000)  return 6.8
+  if (cantidad >= 1500)  return 4.1
+  return 0
 }
 
 // ── Print via hidden iframe ───────────────────────────────────────────────────
@@ -81,6 +94,8 @@ const BLANK_FORM = {
   vigencia: '', notas: '',
   items: [] as QuoteItem[],
   previewOpen: false,
+  sinDescuento: false,
+  sinIva: false,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -91,17 +106,37 @@ export function QuotesPage() {
   const { products, loadProducts, loading: productsLoading } = useProductsStore()
   const { user: me }                   = useAuthStore()
   const { company }                    = useConfigStore()
+  const { users, loadUsers }           = useUsersStore()
 
-  /** Nombre comercial del vendedor según el usuario logueado */
-  const atiende = me?.email?.toLowerCase().includes('ramon') || me?.name?.toLowerCase().includes('ramon')
-    ? 'Ramon Haro Fernandez'
-    : 'Wilfredo Diaz Carpio'
+  // Roles con acceso a /cotizaciones según RBAC
+  const quotesRoles = ROUTE_ROLES['/cotizaciones'] ?? []
+
+  // Usuarios activos con al menos un rol que da acceso a /cotizaciones
+  const atiendePossible = useMemo(
+    () => users.filter(u => u.active && u.roles.some(r => quotesRoles.includes(r))),
+    [users, quotesRoles]
+  )
+
+  // Estado del selector "Atiende" — se inicializa con el usuario logueado si tiene acceso
+  const defaultAtiende = useMemo(() => {
+    if (!me) return ''
+    const meInList = atiendePossible.find(u => u.userId === me.userId)
+    return meInList?.name ?? atiendePossible[0]?.name ?? ''
+  }, [me, atiendePossible])
+
+  const [atiende, setAtiende] = useState('')
+
+  // Sync defaultAtiende → state cuando la lista de usuarios cargue
+  useEffect(() => {
+    if (atiende === '' && defaultAtiende !== '') setAtiende(defaultAtiende)
+  }, [defaultAtiende])
 
   // Carga inicial + suscripción realtime para ver cotizaciones de otros usuarios
   useEffect(() => {
     void loadQuotes()
     void loadClients()
     void loadProducts()
+    void loadUsers()
     return subscribeRealtime()
   }, [])
 
@@ -147,9 +182,10 @@ export function QuotesPage() {
   }
 
   // ── helpers de form ───────────────────────────────────────────────────────
-  function calcTotals(items: QuoteItem[]) {
+  function calcTotals(items: QuoteItem[], opts?: { sinIva?: boolean }) {
     const subtotal = items.reduce((a, it) => a + it.cantidad * it.precio * (1 - it.descuento / 100), 0)
-    return { subtotal, impuestos: subtotal * TAX, total: subtotal * (1 + TAX) }
+    const impuestos = opts?.sinIva ? 0 : subtotal * TAX
+    return { subtotal, impuestos, total: subtotal + impuestos }
   }
 
   function addItem() {
@@ -163,6 +199,8 @@ export function QuotesPage() {
         if (i !== idx) return it
         const updated = { ...it, [key]: value } as QuoteItem
         if (key === 'productId') updated.precio = products.find(p => p.productId === value)?.precioVenta ?? 0
+        if ((key === 'cantidad' || key === 'productId') && !f.sinDescuento) updated.descuento = getVolumeDiscount(updated.cantidad)
+        if ((key === 'cantidad' || key === 'productId') && f.sinDescuento) updated.descuento = 0
         return updated
       }),
     }))
@@ -174,7 +212,7 @@ export function QuotesPage() {
 
   /** Construye un Quote provisional para el panel de preview (sin guardar) */
   function buildPreviewQuote(): Quote {
-    const { subtotal, impuestos, total } = calcTotals(form.items)
+    const { subtotal, impuestos, total } = calcTotals(form.items, { sinIva: form.sinIva })
     return {
       cotizacionId: 'preview', folio: 'PREV-0000',
       clienteId:       form.clienteMode === 'registrado' ? form.clienteId : '',
@@ -200,7 +238,7 @@ export function QuotesPage() {
     if (form.items.length === 0) { toast.error('Agrega al menos una partida.'); return }
     setSaving(true)
     try {
-      const { subtotal, impuestos, total } = calcTotals(form.items)
+      const { subtotal, impuestos, total } = calcTotals(form.items, { sinIva: form.sinIva })
       const quote = await addQuote({
         clienteId:        form.clienteMode === 'registrado' ? form.clienteId : '',
         clienteNombre:    form.clienteMode === 'eventual'   ? form.clienteNombre    : '',
@@ -323,6 +361,9 @@ export function QuotesPage() {
         </div>
       </div>
 
+      {/* ── Panel de referencia de precios ──────────────────────────────── */}
+      <PriceReferencePanel />
+
       {/* ── Tabla ───────────────────────────────────────────────────────── */}
       <div className="card">
         <div className="flex flex-wrap gap-3 mb-4">
@@ -397,6 +438,23 @@ export function QuotesPage() {
           }
         >
           <div className="space-y-4">
+
+            {/* Atiende */}
+            <div className="form-group">
+              <label className="label">Atiende</label>
+              <select
+                className="select"
+                value={atiende}
+                onChange={e => setAtiende(e.target.value)}
+              >
+                {atiendePossible.length === 0 && (
+                  <option value="">Cargando usuarios...</option>
+                )}
+                {atiendePossible.map(u => (
+                  <option key={u.userId} value={u.name}>{u.name}</option>
+                ))}
+              </select>
+            </div>
 
             {/* Toggle tipo de cliente */}
             <div>
@@ -503,6 +561,35 @@ export function QuotesPage() {
               </div>
             )}
 
+            {/* Opciones de precio */}
+            <div className="flex items-center gap-6">
+              <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  className="w-4 h-4 accent-blue-600"
+                  checked={form.sinDescuento}
+                  onChange={e => {
+                    const sinDescuento = e.target.checked
+                    setForm(f => ({
+                      ...f,
+                      sinDescuento,
+                      items: f.items.map(it => ({ ...it, descuento: sinDescuento ? 0 : getVolumeDiscount(it.cantidad) })),
+                    }))
+                  }}
+                />
+                Sin descuento
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  className="w-4 h-4 accent-blue-600"
+                  checked={form.sinIva}
+                  onChange={e => setForm(f => ({ ...f, sinIva: e.target.checked }))}
+                />
+                Sin IVA
+              </label>
+            </div>
+
             {/* Partidas */}
             <div>
               <div className="flex items-center justify-between mb-2">
@@ -516,6 +603,7 @@ export function QuotesPage() {
               )}
               {form.items.map((it, idx) => (
                 <div key={it.detalleId} className="grid grid-cols-12 gap-2 mb-2 items-end">
+                  {/* Producto — 5 cols */}
                   <div className="col-span-5">
                     {idx === 0 && <label className="label">Producto</label>}
                     <select
@@ -532,18 +620,45 @@ export function QuotesPage() {
                       ))}
                     </select>
                   </div>
+                  {/* Cantidad — 2 cols */}
                   <div className="col-span-2">
                     {idx === 0 && <label className="label">Cantidad</label>}
                     <input type="number" className="input" min={1} value={it.cantidad} onChange={e => updateItem(idx, 'cantidad', Number(e.target.value))} />
                   </div>
-                  <div className="col-span-2">
-                    {idx === 0 && <label className="label">Precio</label>}
-                    <input type="number" className="input" min={0} step="0.01" value={it.precio} onChange={e => updateItem(idx, 'precio', Number(e.target.value))} />
+                  {/* Precio unitario + descuento — 4 cols */}
+                  <div className="col-span-4">
+                    {idx === 0 && <label className="label">Precio Unitario</label>}
+                    <input
+                      type="number"
+                      className="input"
+                      min={0}
+                      step="0.01"
+                      value={it.precio}
+                      onChange={e => updateItem(idx, 'precio', Number(e.target.value))}
+                    />
+                    {/* Descuento: input oculto + precio neto + badge de porcentaje */}
+                    <input
+                      type="number"
+                      className="sr-only"
+                      tabIndex={-1}
+                      aria-hidden="true"
+                      min={0}
+                      max={100}
+                      value={it.descuento}
+                      onChange={e => updateItem(idx, 'descuento', Number(e.target.value))}
+                    />
+                    {it.descuento > 0 && (
+                      <div className="mt-1 flex items-baseline gap-1.5">
+                        <span className="text-sm font-semibold text-green-700">
+                          {mxn(it.precio * (1 - it.descuento / 100))}
+                        </span>
+                        <span className="text-xs text-gray-400">
+                          Desc: {it.descuento}%
+                        </span>
+                      </div>
+                    )}
                   </div>
-                  <div className="col-span-2">
-                    {idx === 0 && <label className="label">Desc%</label>}
-                    <input type="number" className="input" min={0} max={100} value={it.descuento} onChange={e => updateItem(idx, 'descuento', Number(e.target.value))} />
-                  </div>
+                  {/* Eliminar — 1 col */}
                   <div className="col-span-1">
                     {idx === 0 && <div className="label opacity-0">X</div>}
                     <button className="btn btn-danger btn-sm w-full justify-center" onClick={() => removeItem(idx)}><Trash2 size={13} /></button>
@@ -551,11 +666,14 @@ export function QuotesPage() {
                 </div>
               ))}
               {form.items.length > 0 && (() => {
-                const t = calcTotals(form.items)
+                const t = calcTotals(form.items, { sinIva: form.sinIva })
                 return (
                   <div className="mt-3 p-3 bg-gray-50 rounded-lg text-sm text-right space-y-1">
                     <div>Subtotal: <span className="font-semibold">{mxn(t.subtotal)}</span></div>
-                    <div>IVA 16%: <span className="font-semibold">{mxn(t.impuestos)}</span></div>
+                    {form.sinIva
+                      ? <div className="text-xs text-amber-600 font-medium">IVA: No aplica</div>
+                      : <div>IVA 16%: <span className="font-semibold">{mxn(t.impuestos)}</span></div>
+                    }
                     <div className="text-base font-bold text-gray-900">Total: {mxn(t.total)}</div>
                   </div>
                 )

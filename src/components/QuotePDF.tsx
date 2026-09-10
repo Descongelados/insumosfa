@@ -169,17 +169,13 @@ export const QuotePDF = forwardRef<HTMLDivElement, Props>(
             {quote.items.map((it, idx) => {
               const prod     = products.find(p => p.productId === it.productId)
               const rowBg    = idx % 2 === 0 ? '#ffffff' : '#f5f5f5'
+              const precioNeto = it.precio * (1 - it.descuento / 100)
               return (
                 <tr key={it.detalleId} style={{ background: rowBg }}>
                   <td style={tdStyle('left')}>
                     <span style={{ fontWeight: 600, fontSize: 11 }}>
                       {prod?.descripcion ?? '—'}
                     </span>
-                    {it.descuento > 0 && (
-                      <span style={{ marginLeft: 6, color: '#059669', fontSize: 10, fontWeight: 600 }}>
-                        -{it.descuento}%
-                      </span>
-                    )}
                   </td>
                   <td style={tdStyle('center')}>{prod?.unidadMedida ?? ''}</td>
                   {/* Presentación: usando categoría del producto */}
@@ -191,8 +187,14 @@ export const QuotePDF = forwardRef<HTMLDivElement, Props>(
                   <td style={tdStyle('right')}>
                     {it.cantidad.toLocaleString('es-MX', { minimumFractionDigits: 3, maximumFractionDigits: 3 })}
                   </td>
+                  {/* Precio Unitario: precio neto + descuento debajo si aplica */}
                   <td style={{ ...tdStyle('right'), fontWeight: 600 }}>
-                    {fmtMXN(it.precio)}
+                    {fmtMXN(precioNeto)}
+                    {it.descuento > 0 && (
+                      <div style={{ fontWeight: 400, fontSize: 10, color: '#059669', marginTop: 2 }}>
+                        Desc: {it.descuento}%
+                      </div>
+                    )}
                   </td>
                 </tr>
               )

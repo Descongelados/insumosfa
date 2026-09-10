@@ -3,8 +3,7 @@ import { useClientsStore } from '../../store/clientsStore'
 import { useProspectsStore } from '../../store/prospectsStore'
 import type { DatosFiscales } from '../../store/prospectsStore'
 import { useAuthStore } from '../../store/authStore'
-import { useUsersStore, hasRole } from '../../store/usersStore'
-import { ROUTE_ROLES } from '../../rbac'
+import { hasRole, useUsersStore } from '../../store/usersStore'
 import { DataTable } from '../../components/ui/DataTable'
 import { SearchBar } from '../../components/ui/SearchBar'
 import { StatusBadge } from '../../components/ui/StatusBadge'
@@ -14,7 +13,7 @@ import { CsvImportModal, type CsvColumn } from '../../components/ui/CsvImportMod
 import { toast } from '../../store/toastStore'
 import { exportToCsv } from '../../utils/exportCsv'
 import type { Client, Prospect, ProspectoEstatus } from '../../types'
-import { Users, UserSearch, Plus, CreditCard as Edit2, Trash2, UserCheck, ArrowRight, Info, CircleAlert as AlertCircle, MessageSquare, Send, Download, Upload } from 'lucide-react'
+import { Users, UserSearch, Plus, CreditCard as Edit2, Trash2, UserCheck, ArrowRight, Info, CircleAlert as AlertCircle, MessageSquare, Send, Download, Upload, Filter } from 'lucide-react'
 
 // ── Shared constants ─────────────────────────────────────────────────────────
 const REGIMENES = [
@@ -28,15 +27,14 @@ const REGIMENES = [
 ]
 
 // ── Prospects constants ───────────────────────────────────────────────────────
-const ESTADOS_EDITABLES: ProspectoEstatus[] = ['nuevo', 'contactado', 'cotizado', 'perdido']
-const ESTADOS_PIPELINE:  ProspectoEstatus[] = ['nuevo', 'contactado', 'cotizado', 'ganado', 'perdido']
+const ESTADOS_EDITABLES: ProspectoEstatus[] = ['nuevo', 'contactado', 'calificado', 'cotizado', 'perdido']
+const ESTADOS_PIPELINE:  ProspectoEstatus[] = ['nuevo', 'contactado', 'calificado', 'cotizado', 'ganado', 'perdido']
 const ORIGENES = ['Referido', 'LinkedIn', 'Expo', 'Web', 'Llamada', 'Visita', 'Otro']
 
 const BLANK_PROSPECT: Omit<Prospect, 'prospectoId' | 'fechaAlta'> = {
   empresa: '', contacto: '', correo: '', telefono: '',
   origen: ORIGENES[0], estatus: 'nuevo', valorPotencial: 0, creadoPor: '',
   ciudad: '', productosActividad: '',
-  responsableId: '', responsableNombre: '',
 }
 const BLANK_FISCAL: DatosFiscales = {
   rfc: '', regimenFiscal: REGIMENES[0], direccionFiscal: '', limiteCredito: 0,
@@ -49,7 +47,6 @@ const BLANK_CLIENT: Omit<Client, 'clientId' | 'fechaAlta'> = {
   ciudad: '', productosActividad: '',
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function fmtNoteDate(iso: string) {
   try {
@@ -58,15 +55,15 @@ function fmtNoteDate(iso: string) {
   } catch { return iso }
 }
 
+function unique(arr: string[]): string[] {
+  return Array.from(new Set(arr.filter(Boolean))).sort()
+}
+
 export function ClientsProspectsPage() {
   const { clients, loadClients, subscribeRealtime: subClients, updateClient, deleteClient, clientNotes, addClientNote, removeClientNote } = useClientsStore()
   const { prospects, loadProspects, subscribeRealtime: subProspects, addProspect, updateProspect, deleteProspect, convertirACliente, prospectNotes, addProspectNote, removeProspectNote } = useProspectsStore()
   const { user: me } = useAuthStore()
   const { users, loadUsers } = useUsersStore()
-
-  // Usuarios con acceso al módulo /clientes-prospectos
-  const modRoles = ROUTE_ROLES['/clientes-prospectos'] ?? []
-  const usuariosModulo = users.filter(u => u.active && u.roles.some(r => modRoles.includes(r)))
 
   useEffect(() => {
     void loadClients()
@@ -89,6 +86,15 @@ export function ClientsProspectsPage() {
   // ── search ─────────────────────────────────────────────────────────────────
   const [qP, setQP] = useState('')
   const [qC, setQC] = useState('')
+
+  // ── prospect filters ───────────────────────────────────────────────────────
+  const [pFilterCiudad,        setPFilterCiudad]        = useState('')
+  const [pFilterEstatus,       setPFilterEstatus]        = useState('')
+  const [pFilterContactadoPor, setPFilterContactadoPor] = useState('')
+
+  // ── client filters ─────────────────────────────────────────────────────────
+  const [cFilterCiudad,  setCFilterCiudad]  = useState('')
+  const [cFilterEstatus, setCFilterEstatus] = useState('')
 
   // ── saving state ───────────────────────────────────────────────────────────
   const [saving, setSaving] = useState(false)
@@ -118,22 +124,19 @@ export function ClientsProspectsPage() {
         productosActividad: String(row.productosActividad ?? ''),
         valorPotencial:   Number(row.valorPotencial   ?? 0),
         estatus: 'nuevo',
-        creadoPor: me?.email ?? '',
-        responsableId: '', responsableNombre: '',
+        creadoPor: me?.name ?? '',
       })
     }
   }
 
   // ── prospect state ─────────────────────────────────────────────────────────
-  type PModal = 'new' | 'edit' | 'del' | 'convert' | 'marcar_ganado' | 'cambiar_responsable' | null
+  type PModal = 'new' | 'edit' | 'del' | 'convert' | 'marcar_ganado' | null
   const [pModal, setPModal] = useState<PModal>(null)
   const [pForm, setPForm] = useState(BLANK_PROSPECT)
   const [pEditId, setPEditId] = useState<string | null>(null)
   const [pDelTarget, setPDelTarget] = useState<Prospect | null>(null)
   const [pConvTarget, setPConvTarget] = useState<Prospect | null>(null)
   const [fiscal, setFiscal] = useState<DatosFiscales>(BLANK_FISCAL)
-  const [pRespTarget, setPRespTarget] = useState<Prospect | null>(null)
-  const [pRespId, setPRespId] = useState<string>('')
 
   // ── client state ───────────────────────────────────────────────────────────
   type CModal = 'edit' | 'confirm_delete' | null
@@ -171,17 +174,39 @@ export function ClientsProspectsPage() {
     ? (notesTarget.type === 'cliente' ? clientNotes : prospectNotes).filter(n => n.entidadId === notesTarget.id)
     : []
 
-  // ── filtered lists ─────────────────────────────────────────────────────────
-  const [statusFilter, setStatusFilter] = useState<ProspectoEstatus | null>(null)
+  // ── dynamic filter options ─────────────────────────────────────────────────
+  const prospectCiudades    = unique(prospects.map(p => p.ciudad ?? ''))
+  const prospectContactados = unique(prospects.map(p => p.creadoPor ?? ''))
+  const clientCiudades      = unique(clients.map(c => c.ciudad ?? ''))
 
+  // Lista de usuarios activos para el selector de "Contactado por"
+  const activeUsers = users.filter(u => u.active)
+
+  // ── filtered lists ─────────────────────────────────────────────────────────
   const filteredProspects = prospects.filter((p) => {
-    const matchQ = [p.empresa, p.contacto, p.correo].join(' ').toLowerCase().includes(qP.toLowerCase())
-    const matchS = statusFilter === null || p.estatus === statusFilter
-    return matchQ && matchS
+    const matchSearch        = [p.empresa, p.contacto, p.correo].join(' ').toLowerCase().includes(qP.toLowerCase())
+    const matchCiudad        = !pFilterCiudad        || p.ciudad    === pFilterCiudad
+    const matchEstatus       = !pFilterEstatus       || p.estatus   === pFilterEstatus
+    const matchContactadoPor = !pFilterContactadoPor || p.creadoPor === pFilterContactadoPor
+    return matchSearch && matchCiudad && matchEstatus && matchContactadoPor
   })
-  const filteredClients = clients.filter((c) =>
-    [c.razonSocial, c.rfc, c.correo].join(' ').toLowerCase().includes(qC.toLowerCase())
-  )
+
+  const filteredClients = clients.filter((c) => {
+    const matchSearch  = [c.razonSocial, c.rfc, c.correo].join(' ').toLowerCase().includes(qC.toLowerCase())
+    const matchCiudad  = !cFilterCiudad  || c.ciudad   === cFilterCiudad
+    const matchEstatus = !cFilterEstatus || c.estatus  === cFilterEstatus
+    return matchSearch && matchCiudad && matchEstatus
+  })
+
+  const pActiveFilters = [pFilterCiudad, pFilterEstatus, pFilterContactadoPor].filter(Boolean).length
+  const cActiveFilters = [cFilterCiudad, cFilterEstatus].filter(Boolean).length
+
+  function clearProspectFilters() {
+    setPFilterCiudad(''); setPFilterEstatus(''); setPFilterContactadoPor('')
+  }
+  function clearClientFilters() {
+    setCFilterCiudad(''); setCFilterEstatus('')
+  }
 
   // ══ PROSPECT HANDLERS ══════════════════════════════════════════════════════
 
@@ -193,7 +218,11 @@ export function ClientsProspectsPage() {
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
       setFiscal((p) => ({ ...p, [k]: k === 'limiteCredito' ? Number(e.target.value) : e.target.value }))
 
-  function openNewProspect() { setPForm(BLANK_PROSPECT); setPEditId(null); setPModal('new') }
+  function openNewProspect() {
+    setPForm({ ...BLANK_PROSPECT, creadoPor: me?.name ?? '' })
+    setPEditId(null)
+    setPModal('new')
+  }
   function openEditProspect(p: Prospect) {
     const { prospectoId: _id, fechaAlta: _fa, ...rest } = p
     setPForm(rest); setPEditId(p.prospectoId); setPModal('edit')
@@ -203,7 +232,7 @@ export function ClientsProspectsPage() {
     setSaving(true)
     try {
       if (pEditId) { await updateProspect(pEditId, pForm); toast.success('Prospecto actualizado.') }
-      else { await addProspect({ ...pForm, creadoPor: me?.name ?? '' }); toast.success('Prospecto creado.') }
+      else { await addProspect({ ...pForm, creadoPor: pForm.creadoPor || (me?.name ?? '') }); toast.success('Prospecto creado.') }
       setPModal(null)
     } finally {
       setSaving(false)
@@ -242,18 +271,6 @@ export function ClientsProspectsPage() {
     setPModal(null); setPDelTarget(null)
   }
 
-  function openCambiarResponsable(p: Prospect) {
-    setPRespTarget(p)
-    setPRespId(p.responsableId ?? '')
-    setPModal('cambiar_responsable')
-  }
-  async function handleCambiarResponsable() {
-    if (!pRespTarget) return
-    await updateProspect(pRespTarget.prospectoId, { responsableId: pRespId })
-    toast.success('Responsable actualizado.')
-    setPModal(null); setPRespTarget(null)
-  }
-
   // ══ CLIENT HANDLERS ════════════════════════════════════════════════════════
 
   const FC = (k: keyof typeof cForm) =>
@@ -285,10 +302,6 @@ export function ClientsProspectsPage() {
   const byStatus = ESTADOS_PIPELINE.map((e) => ({
     e, count: prospects.filter((p) => p.estatus === e).length,
   }))
-
-  function toggleStatusFilter(e: ProspectoEstatus) {
-    setStatusFilter(prev => prev === e ? null : e)
-  }
 
   // ─────────────────────────────────────────────────────────────────────────────
   return (
@@ -359,34 +372,59 @@ export function ClientsProspectsPage() {
           {/* Pipeline counters */}
           <div className="flex gap-3 overflow-x-auto pb-2">
             {byStatus.map(({ e, count }) => (
-              <button
-                key={e}
-                onClick={() => toggleStatusFilter(e)}
-                className={[
-                  'card-sm flex-shrink-0 min-w-[100px] text-center transition-all',
-                  e === 'ganado' ? 'border-green-300 bg-green-50' : '',
-                  statusFilter === e ? 'ring-2 ring-blue-500 ring-offset-1' : 'hover:border-blue-300',
-                ].join(' ')}
-              >
+              <div key={e} className={`card-sm flex-shrink-0 min-w-[100px] text-center ${e === 'ganado' ? 'border-green-300 bg-green-50' : ''}`}>
                 <div className="text-2xl font-bold text-gray-900">{count}</div>
                 <StatusBadge status={e} />
-              </button>
+              </div>
             ))}
           </div>
-          {statusFilter && (
-            <div className="flex items-center gap-2 text-sm text-blue-700">
-              <span>Filtrando por: <strong>{statusFilter}</strong></span>
-              <button className="underline text-gray-500 hover:text-gray-700" onClick={() => setStatusFilter(null)}>Limpiar filtro</button>
-            </div>
-          )}
 
           <div className="card">
-            <div className="mb-4">
-              <SearchBar value={qP} onChange={setQP} placeholder="Buscar empresa o contacto..." />
+            {/* Search + Filters — single row */}
+            <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-1">
+              <div className="w-56 flex-shrink-0">
+                <SearchBar value={qP} onChange={setQP} placeholder="Buscar empresa..." />
+              </div>
+              <Filter size={15} className="text-gray-400 flex-shrink-0" />
+              <select
+                className="select text-sm w-36 flex-shrink-0"
+                value={pFilterCiudad}
+                onChange={e => setPFilterCiudad(e.target.value)}
+              >
+                <option value="">Ciudad</option>
+                {prospectCiudades.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <select
+                className="select text-sm w-36 flex-shrink-0"
+                value={pFilterEstatus}
+                onChange={e => setPFilterEstatus(e.target.value)}
+              >
+                <option value="">Estatus</option>
+                {ESTADOS_PIPELINE.map(e => (
+                  <option key={e} value={e}>{e.charAt(0).toUpperCase() + e.slice(1)}</option>
+                ))}
+              </select>
+              <select
+                className="select text-sm w-40 flex-shrink-0"
+                value={pFilterContactadoPor}
+                onChange={e => setPFilterContactadoPor(e.target.value)}
+              >
+                <option value="">Responsable</option>
+                {prospectContactados.map(u => <option key={u} value={u}>{u}</option>)}
+              </select>
+              {pActiveFilters > 0 && (
+                <button
+                  className="btn-secondary text-xs flex-shrink-0 flex items-center gap-1"
+                  onClick={clearProspectFilters}
+                >
+                  Limpiar ({pActiveFilters})
+                </button>
+              )}
             </div>
+
             <DataTable
               data={filteredProspects}
-              emptyMessage={qP ? `Sin resultados para "${qP}"` : 'Sin prospectos registrados.'}
+              emptyMessage={qP || pActiveFilters ? `Sin resultados para los filtros aplicados.` : 'Sin prospectos registrados.'}
               rowKey={(p) => p.prospectoId}
               columns={[
                 { key: 'empresa', header: 'Empresa' },
@@ -398,29 +436,7 @@ export function ClientsProspectsPage() {
                 { key: 'valorPotencial', header: 'Valor Potencial', render: (p) => <Currency value={p.valorPotencial} /> },
                 { key: 'estatus', header: 'Estatus', render: (p) => <StatusBadge status={p.estatus} /> },
                 { key: 'fechaAlta', header: 'Fecha Alta' },
-                {
-                  key: 'responsable',
-                  header: 'Responsable de contacto',
-                  render: (p) => {
-                    const nombre = p.responsableId
-                      ? (usuariosModulo.find(u => u.userId === p.responsableId)?.name ?? p.responsableId)
-                      : (p.creadoPor || '—')
-                    return (
-                      <div className="flex items-center gap-1.5 min-w-[140px]">
-                        <span className="text-sm text-gray-700">{nombre}</span>
-                        {canEditProspect && p.estatus !== 'ganado' && (
-                          <button
-                            className="btn btn-secondary btn-sm py-0 px-1.5 text-xs"
-                            title="Cambiar responsable"
-                            onClick={() => openCambiarResponsable(p)}
-                          >
-                            ✎
-                          </button>
-                        )}
-                      </div>
-                    )
-                  }
-                },
+                { key: 'creadoPor', header: 'Contactado por' },
                 {
                   key: 'acc', header: '', render: (p) => (
                     <div className="flex gap-1 flex-wrap">
@@ -472,13 +488,43 @@ export function ClientsProspectsPage() {
           </div>
 
           <div className="card">
-            <div className="flex justify-between mb-4">
-              <SearchBar value={qC} onChange={setQC} placeholder="Buscar por nombre, RFC..." />
-              <div className="text-sm text-gray-500 self-center">{filteredClients.length} resultados</div>
+            {/* Search + Filters — single row */}
+            <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-1">
+              <div className="w-56 flex-shrink-0">
+                <SearchBar value={qC} onChange={setQC} placeholder="Buscar nombre, RFC..." />
+              </div>
+              <Filter size={15} className="text-gray-400 flex-shrink-0" />
+              <select
+                className="select text-sm w-36 flex-shrink-0"
+                value={cFilterCiudad}
+                onChange={e => setCFilterCiudad(e.target.value)}
+              >
+                <option value="">Ciudad</option>
+                {clientCiudades.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <select
+                className="select text-sm w-36 flex-shrink-0"
+                value={cFilterEstatus}
+                onChange={e => setCFilterEstatus(e.target.value)}
+              >
+                <option value="">Estatus</option>
+                <option value="activo">Activo</option>
+                <option value="inactivo">Inactivo</option>
+              </select>
+              {cActiveFilters > 0 && (
+                <button
+                  className="btn-secondary text-xs flex-shrink-0 flex items-center gap-1"
+                  onClick={clearClientFilters}
+                >
+                  Limpiar ({cActiveFilters})
+                </button>
+              )}
+              <span className="text-sm text-gray-400 flex-shrink-0 ml-auto">{filteredClients.length} resultados</span>
             </div>
+
             <DataTable
               data={filteredClients}
-              emptyMessage={qC ? `Sin resultados para "${qC}"` : 'Sin clientes registrados.'}
+              emptyMessage={qC || cActiveFilters ? `Sin resultados para los filtros aplicados.` : 'Sin clientes registrados.'}
               rowKey={(c) => c.clientId}
               columns={[
                 { key: 'razonSocial', header: 'Razón Social' },
@@ -572,6 +618,15 @@ export function ClientsProspectsPage() {
                 ))}
               </select>
             </div>
+            <div className="form-group">
+              <label className="label">Contactado por</label>
+              <select className="select" value={pForm.creadoPor} onChange={FP('creadoPor')}>
+                <option value="">— Sin asignar —</option>
+                {activeUsers.map(u => (
+                  <option key={u.userId} value={u.name}>{u.name}</option>
+                ))}
+              </select>
+            </div>
           </div>
         </Modal>
       )}
@@ -638,46 +693,6 @@ export function ClientsProspectsPage() {
           <p className="text-sm text-gray-700">
             ¿Eliminar el prospecto <strong>{pDelTarget.empresa}</strong>? Esta acción no se puede deshacer.
           </p>
-        </Modal>
-      )}
-
-      {/* Cambiar Responsable de contacto */}
-      {pModal === 'cambiar_responsable' && pRespTarget && (
-        <Modal
-          title={`Responsable de contacto — ${pRespTarget.empresa}`}
-          onClose={() => setPModal(null)}
-          footer={
-            <>
-              <button className="btn-secondary" onClick={() => setPModal(null)}>Cancelar</button>
-              <button className="btn-primary" onClick={handleCambiarResponsable}>Guardar</button>
-            </>
-          }
-        >
-          <div className="space-y-4 text-sm">
-            <p className="text-gray-500">
-              Selecciona el usuario responsable de dar seguimiento a este prospecto.
-              Solo se muestran usuarios activos con acceso al módulo.
-            </p>
-            {usuariosModulo.length === 0 ? (
-              <p className="text-amber-600">No hay usuarios activos con acceso a este módulo.</p>
-            ) : (
-              <div className="form-group">
-                <label className="label">Responsable</label>
-                <select
-                  className="select"
-                  value={pRespId}
-                  onChange={(e) => setPRespId(e.target.value)}
-                >
-                  <option value="">— Sin asignar —</option>
-                  {usuariosModulo.map(u => (
-                    <option key={u.userId} value={u.userId}>
-                      {u.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </div>
         </Modal>
       )}
 
