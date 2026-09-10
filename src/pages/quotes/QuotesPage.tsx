@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect, useMemo } from 'react'
-import { renderToStaticMarkup } from 'react-dom/server'
+import { createRoot } from 'react-dom/client'
 import { useQuotesStore } from '../../store/quotesStore'
 import { useSalesOrdersStore } from '../../store/salesOrdersStore'
 import { useClientsStore } from '../../store/clientsStore'
@@ -55,30 +55,80 @@ function getVolumeDiscount(cantidad: number): number {
   return 0
 }
 
-// ── Print via hidden iframe ───────────────────────────────────────────────────
-function printQuoteInIframe(quote: Quote, client: Client | undefined, products: Product[], company: CompanyInfo, atiende?: string) {
-  const html = renderToStaticMarkup(
-    <QuotePDF quote={quote} client={client} products={products} companyOverride={company} atiende={atiende} />
-  )
-  const doc = `<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8" />
-  <title>${quote.folio}</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: #fff; }
-    @page { margin: 15mm; size: A4; }
-  </style>
-</head>
-<body>${html}</body>
-</html>`
-  const iframe = document.createElement('iframe')
-  iframe.style.cssText = 'position:fixed;width:0;height:0;border:none;opacity:0;pointer-events:none;'
-  document.body.appendChild(iframe)
-  const win = iframe.contentWindow!
-  win.document.open(); win.document.write(doc); win.document.close()
-  win.onload = () => { win.focus(); win.print(); setTimeout(() => document.body.removeChild(iframe), 1000) }
+// ── PDF generation via html2canvas + jsPDF ───────────────────────────────────
+async function generatePdfBlob(
+  quote: Quote,
+  client: Client | undefined,
+  products: Product[],
+  company: CompanyInfo,
+  atiende?: string,
+): Promise<Blob> {
+  const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+    import('html2canvas'),
+    import('jspdf'),
+  ])
+
+  // Montar el componente en un contenedor oculto real (fuera de pantalla)
+  const container = document.createElement('div')
+  container.style.cssText =
+    'position:fixed;left:-9999px;top:0;width:800px;background:#fff;z-index:-1;'
+  document.body.appendChild(container)
+
+  await new Promise<void>(resolve => {
+    const root = createRoot(container)
+    root.render(
+      <QuotePDF
+        quote={quote}
+        client={client}
+        products={products}
+        companyOverride={company}
+        atiende={atiende}
+      />
+    )
+    // Pequeña espera para que React termine de pintar
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+  })
+
+  const canvas = await html2canvas(container.firstElementChild as HTMLElement, {
+    scale: 2,
+    useCORS: true,
+    backgroundColor: '#ffffff',
+    logging: false,
+  })
+
+  document.body.removeChild(container)
+
+  const imgW = 210   // mm A4 ancho
+  const margin = 10  // mm margen
+  const contentW = imgW - margin * 2
+  const contentH = (canvas.height / canvas.width) * contentW
+  const pageH = 297  // mm A4 alto
+
+  const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  let yOffset = margin
+
+  // Si el contenido cabe en una página lo ponemos directo; si no, lo cortamos
+  if (contentH <= pageH - margin * 2) {
+    pdf.addImage(canvas, 'PNG', margin, yOffset, contentW, contentH)
+  } else {
+    // Corte por páginas
+    const rowH = (pageH - margin * 2) // altura disponible por página en mm
+    const rowPx = (rowH / contentW) * canvas.width // altura en px equivalente
+    let srcY = 0
+    while (srcY < canvas.height) {
+      const sliceH = Math.min(rowPx, canvas.height - srcY)
+      const sliceCanvas = document.createElement('canvas')
+      sliceCanvas.width  = canvas.width
+      sliceCanvas.height = sliceH
+      sliceCanvas.getContext('2d')!.drawImage(canvas, 0, srcY, canvas.width, sliceH, 0, 0, canvas.width, sliceH)
+      const sliceImgH = (sliceH / canvas.width) * contentW
+      if (srcY > 0) pdf.addPage()
+      pdf.addImage(sliceCanvas, 'PNG', margin, yOffset, contentW, sliceImgH)
+      srcY += sliceH
+    }
+  }
+
+  return pdf.output('blob')
 }
 
 // ── Form types ────────────────────────────────────────────────────────────────
@@ -142,9 +192,10 @@ export function QuotesPage() {
 
   const canDelete = me ? hasRole(me, ...DELETE_ROLES) : false
 
-  const [saving, setSaving]       = useState(false)
+  const [saving, setSaving]         = useState(false)
+  const [generating, setGenerating] = useState(false)
   // ── estados ───────────────────────────────────────────────────────────────
-  const [q, setQ]                 = useState('')
+  const [q, setQ]                   = useState('')
   const [statusFilter, setStatusFilter] = useState<CotizacionEstatus | 'todas'>('todas')
   const [modal, setModal]         = useState<'new' | 'preview' | 'del' | null>(null)
   const [selQuote, setSelQuote]   = useState<Quote | null>(null)
@@ -282,20 +333,33 @@ export function QuotesPage() {
   }
 
   // ── PDF ───────────────────────────────────────────────────────────────────
-  function handlePrint(quote: Quote) {
-    const client = clients.find(c => c.clientId === quote.clienteId)
-    printQuoteInIframe(quote, client, products, company, atiende)
+  async function handleDownloadPdf(quote: Quote) {
+    setGenerating(true)
+    try {
+      const client = clients.find(c => c.clientId === quote.clienteId)
+      const blob = await generatePdfBlob(quote, client, products, company, atiende)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${quote.folio}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      console.error(e)
+      toast.error('No se pudo generar el PDF. Intenta de nuevo.')
+    } finally {
+      setGenerating(false)
+    }
   }
 
   // ── share — funciona tanto para registrados como para eventuales ──────────
   function buildShareText(quote: Quote) {
     const nombre = resolveNombre(quote, clients)
-    const mxn = (v: number) => v.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })
+    const fmt = (v: number) => v.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })
     const lines = [
       `Cotización ${quote.folio}`,
       `Cliente: ${nombre}`,
     ]
-    // Datos extra del eventual
     if (!quote.clienteId) {
       if (quote.clienteRfc)      lines.push(`RFC: ${quote.clienteRfc}`)
       if (quote.clienteCorreo)   lines.push(`Correo: ${quote.clienteCorreo}`)
@@ -307,12 +371,12 @@ export function QuotesPage() {
       ...quote.items.map(it => {
         const prod = products.find(p => p.productId === it.productId)
         const importe = it.cantidad * it.precio * (1 - it.descuento / 100)
-        return ` ${prod?.sku ?? '?'} ${prod?.descripcion ?? '—'}  x${it.cantidad}  ${mxn(importe)}`
+        return ` ${prod?.sku ?? '?'} ${prod?.descripcion ?? '—'}  x${it.cantidad}  ${fmt(importe)}`
       }),
       '',
-      `Subtotal:  ${mxn(quote.subtotal)}`,
-      `IVA 16%:   ${mxn(quote.impuestos)}`,
-      `TOTAL:     ${mxn(quote.total)}`,
+      `Subtotal:  ${fmt(quote.subtotal)}`,
+      `IVA:       ${fmt(quote.impuestos)}`,
+      `TOTAL:     ${fmt(quote.total)}`,
       '',
       'Generado por InsumosFa ERP',
     )
@@ -329,12 +393,29 @@ export function QuotesPage() {
 
   async function handleNativeShare(quote: Quote) {
     const nombre = resolveNombre(quote, clients)
-    if ('share' in navigator) {
-      try {
+    setShareOpen(false)
+    setGenerating(true)
+    try {
+      const client = clients.find(c => c.clientId === quote.clienteId)
+      const blob = await generatePdfBlob(quote, client, products, company, atiende)
+      const file = new File([blob], `${quote.folio}.pdf`, { type: 'application/pdf' })
+      // Preferir compartir como archivo PDF si el navegador lo soporta
+      if ('share' in navigator && navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ title: `Cotización ${quote.folio} — ${nombre}`, files: [file] })
+      } else if ('share' in navigator) {
+        // Fallback: compartir solo texto
         await navigator.share({ title: `Cotización ${quote.folio} — ${nombre}`, text: buildShareText(quote) })
-        setShareOpen(false)
-      } catch { /* user cancelled */ }
-    } else { await handleCopyText(quote); setShareOpen(false) }
+      } else {
+        await handleCopyText(quote)
+      }
+    } catch (e: unknown) {
+      // El usuario canceló — no mostrar error
+      if (e instanceof Error && e.name !== 'AbortError') {
+        toast.error('No se pudo compartir el PDF.')
+      }
+    } finally {
+      setGenerating(false)
+    }
   }
 
   const mxn = (v: number) => v.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })
@@ -766,19 +847,24 @@ export function QuotesPage() {
                       <span>{copied ? 'Copiado' : 'Copiar como texto'}</span>
                     </button>
                     <button
-                      className="flex items-center gap-3 w-full px-4 py-3 text-sm hover:bg-gray-50 text-left transition-colors border-t border-gray-100"
+                      className="flex items-center gap-3 w-full px-4 py-3 text-sm hover:bg-gray-50 text-left transition-colors border-t border-gray-100 disabled:opacity-50"
+                      disabled={generating}
                       onClick={() => handleNativeShare(selQuote)}
                     >
                       <Share2 size={15} className="text-blue-500" />
-                      <span>{'share' in navigator ? 'Compartir (WhatsApp, Email…)' : 'Copiar al portapapeles'}</span>
+                      <span>{generating ? 'Generando PDF…' : ('share' in navigator ? 'Compartir PDF (WhatsApp, Email…)' : 'Copiar al portapapeles')}</span>
                     </button>
                   </div>
                 )}
               </div>
 
               {/* PDF */}
-              <button className="btn btn-primary btn-sm" onClick={() => { handlePrint(selQuote); setShareOpen(false) }}>
-                <Download size={13} /> Descargar PDF
+              <button
+                className="btn btn-primary btn-sm disabled:opacity-60"
+                disabled={generating}
+                onClick={() => { void handleDownloadPdf(selQuote); setShareOpen(false) }}
+              >
+                <Download size={13} /> {generating ? 'Generando…' : 'Descargar PDF'}
               </button>
 
               <button
