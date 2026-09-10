@@ -19,6 +19,8 @@ import { toast } from '../../store/toastStore'
 import type { Quote, QuoteItem, CotizacionEstatus, Client, Product } from '../../types'
 import { Plus, FileText, ArrowRight, Trash2, Eye, Download, Share2, X, Copy, Check, UserCheck, User } from 'lucide-react'
 import { exportToCsv } from '../../utils/exportCsv'
+import html2canvas from 'html2canvas'
+import { jsPDF } from 'jspdf'
 
 const TAX = 0.16
 const ESTADOS: CotizacionEstatus[] = ['borrador', 'enviada', 'aceptada', 'rechazada', 'vencida']
@@ -63,11 +65,6 @@ async function generatePdfBlob(
   company: CompanyInfo,
   atiende?: string,
 ): Promise<Blob> {
-  const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
-    import('html2canvas'),
-    import('jspdf'),
-  ])
-
   // Montar el componente en un contenedor oculto real (fuera de pantalla)
   const container = document.createElement('div')
   container.style.cssText =
