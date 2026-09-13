@@ -153,7 +153,7 @@ export interface Quote {
 }
 
 // ─── Sales Orders ──────────────────────────────────────────────────────────
-export type PedidoEstatus = 'nuevo' | 'confirmado' | 'surtiendo' | 'embarcado' | 'entregado' | 'facturado' | 'cerrado'
+export type PedidoEstatus = 'nuevo' | 'confirmado' | 'embarcado' | 'cerrado'
 
 export interface SalesOrderItem {
   detalleId: string

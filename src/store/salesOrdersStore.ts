@@ -1,7 +1,6 @@
 import { create } from 'zustand'
 import type { SalesOrder } from '../types'
 import { supabase } from '../lib/supabase'
-import { useFinanceStore } from './financeStore'
 import { toast } from './toastStore'
 import { refChannel } from './realtimeChannel'
 
@@ -114,26 +113,6 @@ export const useSalesOrdersStore = create<SalesOrdersState>()((set, get) => ({
       return
     }
 
-    // Auto-generar factura al facturar, verificando con select('id') + índice
-    if (data.estatus === 'facturado') {
-      const order = get().orders.find(o => o.pedidoId === id)
-      if (order) {
-        const { count } = await supabase
-          .from('erp_invoices_sale')
-          .select('id', { count: 'exact', head: true })
-          .eq('pedido_id', id)
-        if ((count ?? 0) === 0) {
-          const today = new Date().toISOString().split('T')[0]
-          const venc = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-          await useFinanceStore.getState().addFacturaVenta({
-            clienteId: order.clienteId, pedidoId: order.pedidoId,
-            fecha: today, fechaVencimiento: venc,
-            subtotal: order.subtotal, impuestos: order.impuestos,
-            total: order.total, saldoPendiente: order.total, estatus: 'emitida',
-          })
-        }
-      }
-    }
   },
 
   async deleteOrder(id) {

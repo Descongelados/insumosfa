@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { useSalesOrdersStore } from '../../store/salesOrdersStore'
 import { useClientsStore } from '../../store/clientsStore'
 import { useProductsStore } from '../../store/productsStore'
+import { useLogisticsStore } from '../../store/logisticsStore'
+import { useFinanceStore } from '../../store/financeStore'
 import { useAuthStore } from '../../store/authStore'
 import { hasRole } from '../../store/usersStore'
 import { DataTable } from '../../components/ui/DataTable'
@@ -12,26 +14,30 @@ import { Currency } from '../../components/ui/Currency'
 import { toast } from '../../store/toastStore'
 import { exportToCsv } from '../../utils/exportCsv'
 import type { SalesOrder, SalesOrderItem, PedidoEstatus } from '../../types'
-import { ShoppingCart, CreditCard as Edit2, Plus, Trash2, Download } from 'lucide-react'
+import { ShoppingCart, CreditCard as Edit2, Plus, Trash2, Download, Truck } from 'lucide-react'
 
-// 'facturado' moves to Finance — excluded from active pipeline display
-const ESTADOS: PedidoEstatus[] = ['nuevo', 'confirmado', 'surtiendo', 'embarcado', 'entregado', 'facturado', 'cerrado']
-const ESTADOS_ACTIVOS: PedidoEstatus[] = ['nuevo', 'confirmado', 'surtiendo', 'embarcado', 'entregado', 'cerrado']
+const ESTADOS: PedidoEstatus[] = ['nuevo', 'confirmado', 'embarcado', 'cerrado']
 
 export function SalesOrdersPage() {
   const { orders, loadOrders, subscribeRealtime: subOrders, addOrder, updateOrder, deleteOrder } = useSalesOrdersStore()
   const { clients, loadClients, subscribeRealtime: subClients } = useClientsStore()
   const { products, loadProducts, subscribeRealtime: subProducts } = useProductsStore()
+  const { addEmbarque, loadLogistics, subscribeRealtime: subLogistics } = useLogisticsStore()
+  const { addFacturaVenta, loadFinance, subscribeRealtime: subFinance } = useFinanceStore()
   const { user: me } = useAuthStore()
 
   useEffect(() => {
     void loadOrders()
     void loadClients()
     void loadProducts()
+    void loadLogistics()
+    void loadFinance()
     const u1 = subOrders()
     const u2 = subClients()
     const u3 = subProducts()
-    return () => { u1(); u2(); u3() }
+    const u4 = subLogistics()
+    const u5 = subFinance()
+    return () => { u1(); u2(); u3(); u4(); u5() }
   }, [])
 
   const [saving, setSaving] = useState(false)
@@ -43,11 +49,7 @@ export function SalesOrdersPage() {
 
   const canDelete = me ? hasRole(me, 'director', 'administracion') : false
 
-  // Facturado orders are handled in Finance — only show active pipeline here
-  const activeOrders = orders.filter((o) => o.estatus !== 'facturado')
-  const facturadosCount = orders.filter((o) => o.estatus === 'facturado').length
-
-  const filtered = activeOrders.filter((o) => {
+  const filtered = orders.filter((o) => {
     const client = clients.find((c) => c.clientId === o.clienteId)
     return [o.folio, client?.razonSocial ?? ''].join(' ').toLowerCase().includes(q.toLowerCase())
   })
@@ -59,9 +61,53 @@ export function SalesOrdersPage() {
   }
   function openDel(o: SalesOrder) { setDelTarget(o); setModal('del') }
 
-  function handleStatusChange(status: PedidoEstatus) {
-    if (sel) { updateOrder(sel.pedidoId, { estatus: status }); toast.info(`Pedido ${sel.folio} → ${status}`) }
-    setModal(null); setSel(null)
+  async function handleStatusChange(status: PedidoEstatus) {
+    if (!sel) return
+
+    if (status === 'embarcado') {
+      setSaving(true)
+      try {
+        // 1. Crear embarque en logística vinculado al pedido
+        await addEmbarque({
+          pedidoId: sel.pedidoId,
+          ordenesIds: [],
+          origen: '',
+          destino: '',
+          transportistaId: '',
+          fechaProgramada: sel.fechaEntrega ?? '',
+          costoFlete: 0,
+          estatus: 'solicitado',
+          notas: `Generado desde pedido ${sel.folio}`,
+        })
+
+        // 2. Crear factura de venta en finanzas (CxC)
+        const today = new Date().toISOString().split('T')[0]
+        const venc = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+        await addFacturaVenta({
+          clienteId: sel.clienteId,
+          pedidoId: sel.pedidoId,
+          fecha: today,
+          fechaVencimiento: venc,
+          subtotal: sel.subtotal,
+          impuestos: sel.impuestos,
+          total: sel.total,
+          saldoPendiente: sel.total,
+          estatus: 'emitida',
+        })
+
+        // 3. Actualizar estatus del pedido
+        await updateOrder(sel.pedidoId, { estatus: 'embarcado' })
+        toast.success(`Pedido ${sel.folio} embarcado → Embarque creado en Logística + Factura generada en Finanzas.`)
+      } finally {
+        setSaving(false)
+      }
+    } else {
+      await updateOrder(sel.pedidoId, { estatus: status })
+      toast.info(`Pedido ${sel.folio} → ${status}`)
+    }
+
+    setModal(null)
+    setSel(null)
   }
 
   function addItem() {
@@ -108,7 +154,7 @@ export function SalesOrdersPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title flex items-center gap-2"><ShoppingCart size={24} /> Pedidos de Venta</h1>
-          <p className="page-subtitle">{activeOrders.length} pedidos activos en pipeline</p>
+          <p className="page-subtitle">{orders.length} pedidos en pipeline</p>
         </div>
         <div className="flex gap-2">
           <button className="btn-secondary" onClick={() => exportToCsv(
@@ -120,31 +166,15 @@ export function SalesOrdersPage() {
         </div>
       </div>
 
-      {/* Pipeline status counters — only active statuses */}
+      {/* Pipeline status counters */}
       <div className="flex gap-3 overflow-x-auto pb-2">
-        {byStatus.filter(({ e }) => ESTADOS_ACTIVOS.includes(e)).map(({ e, count }) => (
+        {byStatus.map(({ e, count }) => (
           <div key={e} className="card-sm flex-shrink-0 min-w-[110px] text-center">
             <div className="text-2xl font-bold text-gray-900">{count}</div>
             <StatusBadge status={e} />
           </div>
         ))}
-        {facturadosCount > 0 && (
-          <div className="card-sm flex-shrink-0 min-w-[130px] text-center border-purple-200 bg-purple-50">
-            <div className="text-2xl font-bold text-purple-700">{facturadosCount}</div>
-            <div className="text-xs text-purple-600 font-medium mt-1">Facturado → Finanzas</div>
-          </div>
-        )}
       </div>
-
-      {/* Info banner when there are facturado orders */}
-      {facturadosCount > 0 && (
-        <div className="flex items-start gap-3 p-3 bg-purple-50 border border-purple-200 rounded-xl text-sm text-purple-800">
-          <ShoppingCart size={15} className="flex-shrink-0 mt-0.5" />
-          <span>
-            <strong>{facturadosCount} pedido(s) facturado(s)</strong> han pasado al módulo de <strong>Finanzas → CxC</strong> para su cobro. Ya no aparecen en esta lista.
-          </span>
-        </div>
-      )}
 
       <div className="card">
         <div className="flex justify-between mb-4">
@@ -181,8 +211,8 @@ export function SalesOrdersPage() {
 
       {/* Edit status modal */}
       {modal === 'edit' && sel && (
-        <Modal title={`Pedido ${sel.folio}`} onClose={() => setModal(null)} size="lg"
-          footer={<button className="btn-secondary" onClick={() => setModal(null)}>Cerrar</button>}
+        <Modal title={`Pedido ${sel.folio}`} onClose={() => { setModal(null); setSel(null) }} size="lg"
+          footer={<button className="btn-secondary" onClick={() => { setModal(null); setSel(null) }}>Cerrar</button>}
         >
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3 text-sm">
@@ -215,11 +245,20 @@ export function SalesOrdersPage() {
             </div>
             <div>
               <p className="label mb-2">Cambiar estatus</p>
-              <p className="text-xs text-gray-400 mb-2">Al marcar como <strong>Facturado</strong> el pedido pasa automáticamente a Finanzas y desaparece de esta lista.</p>
+              {sel.estatus === 'confirmado' && (
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3 flex items-center gap-2">
+                  <Truck size={14} className="flex-shrink-0" />
+                  Al marcar como <strong>Embarcado</strong> se creará automáticamente un embarque en <strong>Logística</strong> y una factura de cobro en <strong>Finanzas → CxC</strong>.
+                </p>
+              )}
               <div className="flex flex-wrap gap-2">
                 {ESTADOS.map((e) => (
-                  <button key={e} className={`btn btn-sm ${sel.estatus === e ? 'btn-primary' : 'btn-secondary'}`}
-                    onClick={() => handleStatusChange(e)}>
+                  <button
+                    key={e}
+                    className={`btn btn-sm ${sel.estatus === e ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={() => { void handleStatusChange(e) }}
+                    disabled={saving}
+                  >
                     <StatusBadge status={e} />
                   </button>
                 ))}
