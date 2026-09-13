@@ -169,7 +169,7 @@ export function DashboardPage() {
         )}
         {canPedidos && (
           <StatCard icon={<BarChart2 size={22} />} color="bg-indigo-100 text-indigo-600"
-            label="Pedidos en Proceso" value={String(orders.filter(o=>!['cerrado','embarcado'].includes(o.estatus)).length)} sub={`${orders.filter(o=>o.estatus==='embarcado').length} embarcados`} />
+            label="Pedidos Activos" value={String(orders.filter(o=>o.estatus!=='cerrado').length)} sub={`${orders.filter(o=>o.estatus==='cerrado').length} completados`} />
         )}
       </div>
 

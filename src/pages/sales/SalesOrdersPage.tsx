@@ -14,9 +14,9 @@ import { Currency } from '../../components/ui/Currency'
 import { toast } from '../../store/toastStore'
 import { exportToCsv } from '../../utils/exportCsv'
 import type { SalesOrder, SalesOrderItem, PedidoEstatus } from '../../types'
-import { ShoppingCart, CreditCard as Edit2, Plus, Trash2, Download, Truck } from 'lucide-react'
+import { ShoppingCart, CreditCard as Edit2, Plus, Trash2, Download, Truck, CheckCircle2 } from 'lucide-react'
 
-const ESTADOS: PedidoEstatus[] = ['nuevo', 'confirmado', 'embarcado', 'cerrado']
+const ESTADOS_PIPELINE: PedidoEstatus[] = ['nuevo', 'confirmado', 'embarcado']
 
 export function SalesOrdersPage() {
   const { orders, loadOrders, subscribeRealtime: subOrders, addOrder, updateOrder, deleteOrder } = useSalesOrdersStore()
@@ -41,6 +41,7 @@ export function SalesOrdersPage() {
   }, [])
 
   const [saving, setSaving] = useState(false)
+  const [tab, setTab] = useState<'pipeline' | 'completados'>('pipeline')
   const [q, setQ] = useState('')
   const [modal, setModal] = useState<'edit' | 'new' | 'del' | null>(null)
   const [sel, setSel] = useState<SalesOrder | null>(null)
@@ -49,7 +50,11 @@ export function SalesOrdersPage() {
 
   const canDelete = me ? hasRole(me, 'director', 'administracion') : false
 
-  const filtered = orders.filter((o) => {
+  const pipeline    = orders.filter(o => o.estatus !== 'cerrado')
+  const completados = orders.filter(o => o.estatus === 'cerrado')
+
+  const activeList = tab === 'pipeline' ? pipeline : completados
+  const filtered = activeList.filter((o) => {
     const client = clients.find((c) => c.clientId === o.clienteId)
     return [o.folio, client?.razonSocial ?? ''].join(' ').toLowerCase().includes(q.toLowerCase())
   })
@@ -95,9 +100,9 @@ export function SalesOrdersPage() {
           estatus: 'emitida',
         })
 
-        // 3. Actualizar estatus del pedido solo si los pasos anteriores tuvieron éxito
-        await updateOrder(sel.pedidoId, { estatus: 'embarcado' })
-        toast.success(`Pedido ${sel.folio} embarcado → Embarque creado en Logística + Factura generada en Finanzas.`)
+        // 3. Marcar pedido como cerrado (embarque + CxC creados exitosamente)
+        await updateOrder(sel.pedidoId, { estatus: 'cerrado' })
+        toast.success(`Pedido ${sel.folio} completado → Embarque en Logística + Factura en Finanzas CxC generados.`)
         setModal(null)
         setSel(null)
       } catch {
@@ -152,14 +157,14 @@ export function SalesOrdersPage() {
     setModal(null); setDelTarget(null)
   }
 
-  const byStatus = ESTADOS.map((e) => ({ e, count: orders.filter((o) => o.estatus === e).length }))
+  const byStatusPipeline = ESTADOS_PIPELINE.map((e) => ({ e, count: pipeline.filter((o) => o.estatus === e).length }))
 
   return (
     <div className="space-y-6">
       <div className="page-header">
         <div>
           <h1 className="page-title flex items-center gap-2"><ShoppingCart size={24} /> Pedidos de Venta</h1>
-          <p className="page-subtitle">{orders.length} pedidos en pipeline</p>
+          <p className="page-subtitle">{pipeline.length} en pipeline · {completados.length} completados</p>
         </div>
         <div className="flex gap-2">
           <button className="btn-secondary" onClick={() => exportToCsv(
@@ -171,15 +176,33 @@ export function SalesOrdersPage() {
         </div>
       </div>
 
-      {/* Pipeline status counters */}
-      <div className="flex gap-3 overflow-x-auto pb-2">
-        {byStatus.map(({ e, count }) => (
-          <div key={e} className="card-sm flex-shrink-0 min-w-[110px] text-center">
-            <div className="text-2xl font-bold text-gray-900">{count}</div>
-            <StatusBadge status={e} />
-          </div>
-        ))}
+      {/* Tabs */}
+      <div className="flex gap-2">
+        <button
+          className={`btn ${tab === 'pipeline' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => { setTab('pipeline'); setQ('') }}
+        >
+          <ShoppingCart size={15} /> Pipeline ({pipeline.length})
+        </button>
+        <button
+          className={`btn ${tab === 'completados' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => { setTab('completados'); setQ('') }}
+        >
+          <CheckCircle2 size={15} /> Pedidos Completados ({completados.length})
+        </button>
       </div>
+
+      {/* KPI counters — solo en pipeline */}
+      {tab === 'pipeline' && (
+        <div className="flex gap-3 overflow-x-auto pb-2">
+          {byStatusPipeline.map(({ e, count }) => (
+            <div key={e} className="card-sm flex-shrink-0 min-w-[110px] text-center">
+              <div className="text-2xl font-bold text-gray-900">{count}</div>
+              <StatusBadge status={e} />
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="card">
         <div className="flex justify-between mb-4">
@@ -199,9 +222,11 @@ export function SalesOrdersPage() {
             {
               key: 'acc', header: '', render: (o) => (
                 <div className="flex gap-1">
-                  <button className="btn btn-secondary btn-sm" onClick={() => openEdit(o)}>
-                    <Edit2 size={13} /> Estatus
-                  </button>
+                  {tab === 'pipeline' && (
+                    <button className="btn btn-secondary btn-sm" onClick={() => openEdit(o)}>
+                      <Edit2 size={13} /> Estatus
+                    </button>
+                  )}
                   {canDelete && (
                     <button className="btn btn-danger btn-sm" onClick={() => openDel(o)} title="Eliminar">
                       <Trash2 size={13} />
@@ -253,11 +278,11 @@ export function SalesOrdersPage() {
               {sel.estatus === 'confirmado' && (
                 <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3 flex items-center gap-2">
                   <Truck size={14} className="flex-shrink-0" />
-                  Al marcar como <strong>Embarcado</strong> se creará automáticamente un embarque en <strong>Logística</strong> y una factura de cobro en <strong>Finanzas → CxC</strong>.
+                  Al marcar como <strong>Embarcado</strong> se creará automáticamente un embarque en <strong>Logística</strong>, una factura en <strong>Finanzas → CxC</strong> y el pedido pasará a <strong>Pedidos Completados</strong>.
                 </p>
               )}
               <div className="flex flex-wrap gap-2">
-                {ESTADOS.map((e) => (
+                {ESTADOS_PIPELINE.map((e) => (
                   <button
                     key={e}
                     className={`btn btn-sm ${sel.estatus === e ? 'btn-primary' : 'btn-secondary'}`}
