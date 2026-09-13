@@ -95,12 +95,17 @@ export function SalesOrdersPage() {
           estatus: 'emitida',
         })
 
-        // 3. Actualizar estatus del pedido
+        // 3. Actualizar estatus del pedido solo si los pasos anteriores tuvieron éxito
         await updateOrder(sel.pedidoId, { estatus: 'embarcado' })
         toast.success(`Pedido ${sel.folio} embarcado → Embarque creado en Logística + Factura generada en Finanzas.`)
+        setModal(null)
+        setSel(null)
+      } catch {
+        // El toast de error ya lo muestra addEmbarque; solo liberamos el estado
       } finally {
         setSaving(false)
       }
+      return
     } else {
       await updateOrder(sel.pedidoId, { estatus: status })
       toast.info(`Pedido ${sel.folio} → ${status}`)

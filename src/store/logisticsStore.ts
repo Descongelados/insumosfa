@@ -101,13 +101,14 @@ export const useLogisticsStore = create<LogisticsState>()((set, get) => ({
       .rpc('erp_next_folio', { p_prefix: 'EMB', p_seq: 'erp_seq_folio_shipments' })
     const folio = (folioRow as string | null) ?? `EMB-${Date.now()}`
 
-    await supabase.from('erp_shipments').insert({
+    const { error } = await supabase.from('erp_shipments').insert({
       folio, pedido_id: data.pedidoId ?? null, origen: data.origen,
       destino: data.destino, transportista_id: data.transportistaId,
       fecha_programada: data.fechaProgramada, fecha_entrega: data.fechaEntrega ?? null,
       costo_flete: data.costoFlete, estatus: data.estatus, notas: data.notas ?? '',
       ordenes_ids: data.ordenesIds ?? [],
     })
+    if (error) { toast.error(`Error al crear embarque: ${error.message}`); throw error }
     const d = await fetchEmbarques()
     if (d) set({ embarques: d })
   },
