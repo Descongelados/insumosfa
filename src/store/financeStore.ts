@@ -244,8 +244,23 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
       p_forma_pago:  data.formaPago,
       p_referencia:  data.referencia,
     })
-    // Si se seleccionó cuenta bancaria, sumar el cobro al saldo
-    if (data.bancoId) {
+    // Si la forma de pago es Efectivo, sumar automáticamente a la Caja de Efectivo
+    if (data.formaPago === 'Efectivo') {
+      let caja = get().bancos.find(b => b.moneda === 'CAJA')
+      if (!caja) {
+        await supabase.from('erp_banks').insert({
+          banco: 'Caja Efectivo', cuenta: '', saldo: 0, moneda: 'CAJA', activo: true,
+        })
+        const d = await fetchBancos()
+        if (d) { set({ bancos: d }); caja = d.find(b => b.moneda === 'CAJA') }
+      }
+      if (caja) {
+        await supabase.from('erp_banks')
+          .update({ saldo: caja.saldo + data.monto })
+          .eq('id', caja.bancoId)
+      }
+    } else if (data.bancoId) {
+      // Si se seleccionó cuenta bancaria, sumar el cobro al saldo
       const banco = get().bancos.find(b => b.bancoId === data.bancoId)
       if (banco) {
         await supabase.from('erp_banks')
