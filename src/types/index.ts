@@ -167,6 +167,7 @@ export interface SalesOrder {
   pedidoId: string
   folio: string
   clienteId: string
+  clienteNombre?: string
   cotizacionId?: string
   fechaPedido: string
   fechaEntrega: string
@@ -255,6 +256,7 @@ export interface FacturaVenta {
   facturaId: string
   folio: string
   clienteId: string
+  clienteNombre?: string
   pedidoId?: string
   fecha: string
   fechaVencimiento: string

@@ -413,7 +413,7 @@ export function FinancePage() {
         const o = getOrder(f.pedidoId)
         return o ? <span className="font-mono text-xs text-gray-600">{o.folio}</span> : <span className="text-gray-400">-</span>
       }},
-      { key: 'cliente', header: 'Cliente', render: (f: FacturaVenta) => clients.find(c => c.clientId === f.clienteId)?.razonSocial ?? '-' },
+      { key: 'cliente', header: 'Cliente', render: (f: FacturaVenta) => clients.find(c => c.clientId === f.clienteId)?.razonSocial ?? f.clienteNombre ?? '-' },
       { key: 'fecha', header: 'Fecha' },
       { key: 'fechaVenc', header: 'Vencimiento', render: (f: FacturaVenta) => f.fechaVencimiento },
       { key: 'total', header: 'Total', render: (f: FacturaVenta) => <Currency value={f.total} /> },
@@ -1237,7 +1237,7 @@ export function FinancePage() {
               }}>
                 {porCobrar.map((f) => (
                   <option key={f.facturaId} value={f.facturaId}>
-                    {f.folio} - {clients.find(c => c.clientId === f.clienteId)?.razonSocial} ({MXN(f.saldoPendiente)})
+                    {f.folio} - {clients.find(c => c.clientId === f.clienteId)?.razonSocial ?? f.clienteNombre ?? '-'} ({MXN(f.saldoPendiente)})
                   </option>
                 ))}
               </select>

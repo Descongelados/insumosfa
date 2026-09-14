@@ -319,8 +319,13 @@ export function QuotesPage() {
   async function convertirAPedido(quote: Quote) {
     try {
       const today = new Date().toISOString().split('T')[0]
+      // Resolver nombre del cliente: registrado tiene prioridad, luego eventual
+      const nombreCliente = quote.clienteId
+        ? (clients.find(c => c.clientId === quote.clienteId)?.razonSocial ?? quote.clienteNombre ?? '')
+        : (quote.clienteNombre ?? '')
       const order = await addOrder({
         clienteId: quote.clienteId ?? '',
+        clienteNombre: nombreCliente,
         cotizacionId: quote.cotizacionId,
         fechaPedido: today,
         fechaEntrega: today,

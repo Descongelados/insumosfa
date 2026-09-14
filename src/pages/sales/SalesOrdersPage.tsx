@@ -88,8 +88,13 @@ export function SalesOrdersPage() {
         // 2. Crear factura de venta en finanzas (CxC)
         const today = new Date().toISOString().split('T')[0]
         const venc = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+        // Resolver nombre del cliente: del registro si existe, o el guardado en el pedido
+        const clienteNombre = sel.clienteNombre
+          || clients.find(c => c.clientId === sel.clienteId)?.razonSocial
+          || ''
         await addFacturaVenta({
           clienteId: sel.clienteId,
+          clienteNombre,
           pedidoId: sel.pedidoId,
           fecha: today,
           fechaVencimiento: venc,

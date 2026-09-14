@@ -19,7 +19,7 @@ export const RemisionPDF = forwardRef<HTMLDivElement, Props>(
     const { company: storeCompany } = useConfigStore()
     const company = companyOverride ?? storeCompany
 
-    const nombreCliente = client?.razonSocial ?? '—'
+    const nombreCliente = client?.razonSocial ?? factura.clienteNombre ?? order?.clienteNombre ?? '—'
     const rfcCliente    = client?.rfc ?? ''
     const correoCliente = client?.correo ?? ''
     const telCliente    = client?.telefono ?? ''

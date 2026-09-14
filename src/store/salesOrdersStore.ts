@@ -5,7 +5,7 @@ import { toast } from './toastStore'
 import { refChannel } from './realtimeChannel'
 
 type DbOrder = {
-  id: string; folio: string; cliente_id: string; cotizacion_id: string | null
+  id: string; folio: string; cliente_id: string; cliente_nombre: string; cotizacion_id: string | null
   fecha_pedido: string; fecha_entrega: string; estatus: string; iva_pct: number | null
   items: unknown; subtotal: number; impuestos: number; total: number; notas: string
 }
@@ -13,6 +13,7 @@ type DbOrder = {
 function toOrder(r: DbOrder): SalesOrder {
   return {
     pedidoId: r.id, folio: r.folio, clienteId: r.cliente_id,
+    clienteNombre: r.cliente_nombre || undefined,
     cotizacionId: r.cotizacion_id ?? undefined,
     fechaPedido: r.fecha_pedido, fechaEntrega: r.fecha_entrega,
     estatus: r.estatus as SalesOrder['estatus'],
@@ -75,7 +76,8 @@ export const useSalesOrdersStore = create<SalesOrdersState>()((set, get) => ({
     const { data: row, error } = await supabase
       .from('erp_sales_orders')
       .insert({
-        folio, cliente_id: data.clienteId, cotizacion_id: data.cotizacionId ?? null,
+        folio, cliente_id: data.clienteId, cliente_nombre: data.clienteNombre ?? '',
+        cotizacion_id: data.cotizacionId ?? null,
         fecha_pedido: data.fechaPedido, fecha_entrega: data.fechaEntrega,
         estatus: data.estatus, iva_pct: data.ivaPct ?? 16, items: data.items,
         subtotal: data.subtotal, impuestos: data.impuestos, total: data.total, notas: data.notas,

@@ -7,7 +7,7 @@ import { supabase } from '../lib/supabase'
 // ── DB type mappers ──────────────────────────────────────────────────────────
 
 type DbFV = {
-  id: string; folio: string; cliente_id: string; pedido_id: string | null
+  id: string; folio: string; cliente_id: string; cliente_nombre: string; pedido_id: string | null
   fecha: string; fecha_vencimiento: string; subtotal: number; impuestos: number
   total: number; saldo_pendiente: number; estatus: string
 }
@@ -36,6 +36,7 @@ type DbGasto = {
 function toFV(r: DbFV): FacturaVenta {
   return {
     facturaId: r.id, folio: r.folio, clienteId: r.cliente_id,
+    clienteNombre: r.cliente_nombre || undefined,
     pedidoId: r.pedido_id ?? undefined, fecha: r.fecha,
     fechaVencimiento: r.fecha_vencimiento, subtotal: r.subtotal,
     impuestos: r.impuestos, total: r.total, saldoPendiente: r.saldo_pendiente,
@@ -205,7 +206,8 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     const folio = (folioRow as string | null) ?? `FAC-${Date.now()}`
 
     const { error } = await supabase.from('erp_invoices_sale').insert({
-      folio, cliente_id: data.clienteId, pedido_id: data.pedidoId ?? null,
+      folio, cliente_id: data.clienteId, cliente_nombre: data.clienteNombre ?? '',
+      pedido_id: data.pedidoId ?? null,
       fecha: data.fecha, fecha_vencimiento: data.fechaVencimiento,
       subtotal: data.subtotal, impuestos: data.impuestos, total: data.total,
       saldo_pendiente: data.saldoPendiente, estatus: data.estatus,
