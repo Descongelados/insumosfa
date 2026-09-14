@@ -252,7 +252,6 @@ export function ClientsProspectsPage() {
   }
   async function handleConvert() {
     if (!pConvTarget) return
-    if (!fiscal.rfc.trim()) { toast.error('El RFC es obligatorio.'); return }
     if (!fiscal.direccionFiscal.trim()) { toast.error('La dirección fiscal es obligatoria.'); return }
     setSaving(true)
     try {
@@ -661,8 +660,8 @@ export function ClientsProspectsPage() {
             <p className="text-sm text-gray-500">Completa los datos fiscales para finalizar el alta:</p>
             <div className="form-grid">
               <div className="form-group">
-                <label className="label">RFC *</label>
-                <input className="input" value={fiscal.rfc} onChange={FF('rfc')} maxLength={13} placeholder="Ej. AAA010101AAA" />
+                <label className="label">RFC</label>
+                <input className="input" value={fiscal.rfc} onChange={FF('rfc')} maxLength={13} placeholder="Ej. AAA010101AAA (opcional)" />
               </div>
               <div className="form-group">
                 <label className="label">Régimen Fiscal</label>
