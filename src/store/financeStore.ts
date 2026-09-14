@@ -240,10 +240,20 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
       p_forma_pago:  data.formaPago,
       p_referencia:  data.referencia,
     })
-    // Recargar solo las dos entidades afectadas
-    const [fv, pc] = await Promise.all([fetchFacturasVenta(), fetchPagosClientes()])
+    // Si se seleccionó cuenta bancaria, sumar el cobro al saldo
+    if (data.bancoId) {
+      const banco = get().bancos.find(b => b.bancoId === data.bancoId)
+      if (banco) {
+        await supabase.from('erp_banks')
+          .update({ saldo: banco.saldo + data.monto })
+          .eq('id', data.bancoId)
+      }
+    }
+    // Recargar entidades afectadas
+    const [fv, pc, bk] = await Promise.all([fetchFacturasVenta(), fetchPagosClientes(), fetchBancos()])
     if (fv) set({ facturasVenta: fv })
     if (pc) set({ pagosClientes: pc })
+    if (bk) set({ bancos: bk })
   },
 
   async addFacturaProveedor(data) {

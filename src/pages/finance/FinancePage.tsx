@@ -109,7 +109,7 @@ export function FinancePage() {
   const [esAbono, setEsAbono] = useState(false)
 
   const [selFp, setSelFp] = useState<string>('')
-  const [pagoForm, setPagoForm] = useState({ monto: 0, formaPago: 'Transferencia', referencia: '' })
+  const [pagoForm, setPagoForm] = useState({ monto: 0, formaPago: 'Transferencia', referencia: '', bancoId: '' })
 
   const BLANK_FP = { supplierId: '', fecha: today(), fechaVencimiento: '', monto: 0, notas: '', ordenCompraId: undefined as string | undefined, formaPago: 'Transferencia', referencia: '' }
   const [fpForm, setFpForm] = useState(BLANK_FP)
@@ -252,13 +252,13 @@ export function FinancePage() {
 
   function openCobro(fv: FacturaVenta) {
     setSelFv(fv.facturaId); setEsAbono(false)
-    setPagoForm({ monto: fv.saldoPendiente, formaPago: 'Transferencia', referencia: '' })
+    setPagoForm({ monto: fv.saldoPendiente, formaPago: 'Transferencia', referencia: '', bancoId: '' })
     setModal('pago_cli')
   }
 
   function openAbono(fv: FacturaVenta) {
     setSelFv(fv.facturaId); setEsAbono(true)
-    setPagoForm({ monto: 0, formaPago: 'Transferencia', referencia: '' })
+    setPagoForm({ monto: 0, formaPago: 'Transferencia', referencia: '', bancoId: '' })
     setModal('pago_cli')
   }
 
@@ -267,10 +267,10 @@ export function FinancePage() {
     if (!fv) return
     if (pagoForm.monto <= 0) { toast.error('El monto debe ser mayor a cero.'); return }
     if (pagoForm.monto > fv.saldoPendiente) { toast.error(`El monto no puede superar el saldo pendiente (${MXN(fv.saldoPendiente)}).`); return }
-    addPagoCliente({ facturaId: selFv, clienteId: fv.clienteId, fecha: today(), ...pagoForm })
+    addPagoCliente({ facturaId: selFv, clienteId: fv.clienteId, fecha: today(), ...pagoForm, bancoId: pagoForm.bancoId || undefined })
     toast.success(`${esAbono ? 'Abono' : 'Cobro'} registrado: ${MXN(pagoForm.monto)}.`)
     setModal(null)
-    setPagoForm({ monto: 0, formaPago: 'Transferencia', referencia: '' })
+    setPagoForm({ monto: 0, formaPago: 'Transferencia', referencia: '', bancoId: '' })
     if (fv.saldoPendiente - pagoForm.monto <= 0) setCxcTab('pagadas')
   }
 
@@ -300,7 +300,7 @@ export function FinancePage() {
     }
     toast.success(`Pago a proveedor registrado: ${MXN(pagoForm.monto)}.`)
     setModal(null)
-    setPagoForm({ monto: 0, formaPago: 'Transferencia', referencia: '' })
+    setPagoForm({ monto: 0, formaPago: 'Transferencia', referencia: '', bancoId: '' })
   }
 
   async function handleSaveFP() {
@@ -857,7 +857,7 @@ export function FinancePage() {
                         className="btn btn-success btn-sm shrink-0"
                         onClick={() => {
                           setSelFp(fp.facturaProvId)
-                          setPagoForm({ monto: fp.saldoPendiente, formaPago: 'Transferencia', referencia: '' })
+                          setPagoForm({ monto: fp.saldoPendiente, formaPago: 'Transferencia', referencia: '', bancoId: '' })
                           setModal('pago_prov')
                         }}
                       >
@@ -918,7 +918,7 @@ export function FinancePage() {
                   { key: 'acc', header: '', render: (f) => f.saldoPendiente > 0 ? (
                     <button className="btn btn-success btn-sm" onClick={() => {
                       setSelFp(f.facturaProvId)
-                      setPagoForm({ monto: f.saldoPendiente, formaPago: 'Transferencia', referencia: '' })
+                      setPagoForm({ monto: f.saldoPendiente, formaPago: 'Transferencia', referencia: '', bancoId: '' })
                       setModal('pago_prov')
                     }}>Pagar</button>
                   ) : <span className="text-xs text-green-600 font-semibold">Pagado</span> },
@@ -1204,10 +1204,23 @@ export function FinancePage() {
             </div>
             <div className="form-group">
               <label className="label">Forma de Pago</label>
-              <select className="select" value={pagoForm.formaPago} onChange={(e) => setPagoForm(f => ({ ...f, formaPago: e.target.value }))}>
+              <select className="select" value={pagoForm.formaPago} onChange={(e) => setPagoForm(f => ({ ...f, formaPago: e.target.value, bancoId: '' }))}>
                 {FORMAS_PAGO.map(x => <option key={x}>{x}</option>)}
               </select>
             </div>
+            {pagoForm.formaPago !== 'Efectivo' && (
+              <div className="form-group">
+                <label className="label">Cuenta bancaria <span className="text-gray-400 font-normal">(opcional)</span></label>
+                <select className="select" value={pagoForm.bancoId} onChange={(e) => setPagoForm(f => ({ ...f, bancoId: e.target.value }))}>
+                  <option value="">— Sin asignar —</option>
+                  {bancos.filter(b => b.activo).map(b => (
+                    <option key={b.bancoId} value={b.bancoId}>
+                      {b.banco} {b.cuenta ? `···${b.cuenta.slice(-4)}` : ''} ({MXN(b.saldo)})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="form-group">
               <label className="label">Referencia</label>
               <input className="input" value={pagoForm.referencia} placeholder="TRF-20240101-001"

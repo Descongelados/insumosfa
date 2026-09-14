@@ -273,6 +273,7 @@ export interface PagoCliente {
   monto: number
   formaPago: string
   referencia: string
+  bancoId?: string
 }
 
 export interface FacturaProveedor {
