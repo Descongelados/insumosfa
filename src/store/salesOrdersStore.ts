@@ -38,6 +38,7 @@ interface SalesOrdersState {
   initialized: boolean
   loadOrders: () => Promise<void>
   subscribeRealtime: () => () => void
+  fetchOrderById: (id: string) => Promise<SalesOrder | null>
   addOrder: (o: Omit<SalesOrder, 'pedidoId' | 'folio'>) => Promise<SalesOrder>
   updateOrder: (id: string, data: Partial<SalesOrder>) => Promise<void>
   deleteOrder: (id: string) => Promise<void>
@@ -64,6 +65,16 @@ export const useSalesOrdersStore = create<SalesOrdersState>()((set, get) => ({
     } finally {
       set({ loading: false })
     }
+  },
+
+  async fetchOrderById(id) {
+    const { data, error } = await supabase
+      .from('erp_sales_orders').select('*').eq('id', id).maybeSingle()
+    if (error || !data) return null
+    const order = toOrder(data as DbOrder)
+    // Actualizar en el store local también
+    set(s => ({ orders: s.orders.map(o => o.pedidoId === id ? order : o) }))
+    return order
   },
 
   async addOrder(data) {

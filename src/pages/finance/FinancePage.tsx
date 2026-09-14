@@ -55,7 +55,7 @@ export function FinancePage() {
   } = useFinanceStore()
   const { clients, loadClients, subscribeRealtime: subClients } = useClientsStore()
   const { suppliers, loadSuppliers, subscribeRealtime: subSuppliers } = useSuppliersStore()
-  const { orders } = useSalesOrdersStore()
+  const { orders, fetchOrderById } = useSalesOrdersStore()
   const { products } = useProductsStore()
   const { ordenesCompra, loadPurchases, subscribeRealtime: subPurchases, updateOrdenCompra } = usePurchasesStore()
   const { embarques, transportistas, loadLogistics, subscribeRealtime: subLogistics } = useLogisticsStore()
@@ -174,9 +174,12 @@ export function FinancePage() {
     return orders.find(o => o.pedidoId === pedidoId)
   }
 
-  function openRemision(fv: FacturaVenta) {
+  async function openRemision(fv: FacturaVenta) {
     setSelRemision(fv)
     setModal('remision')
+    // Refrescar el pedido desde BD para asegurar items actualizados
+    if (fv.pedidoId) await fetchOrderById(fv.pedidoId)
+    setSelRemision({ ...fv }) // forzar re-render con datos frescos
   }
 
   async function buildRemisionPdf(fv: FacturaVenta): Promise<jsPDF> {
