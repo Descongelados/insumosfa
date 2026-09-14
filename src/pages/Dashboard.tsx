@@ -231,7 +231,7 @@ export function DashboardPage() {
           <div className="card">
             <h3 className="font-semibold text-gray-900 mb-4">Cuentas Bancarias</h3>
             <div className="space-y-3">
-              {bancos.map((b) => (
+              {bancos.filter(b => b.moneda !== 'CAJA').map((b) => (
                 <div key={b.bancoId} className="flex items-center justify-between p-3 rounded-lg bg-gray-50 border border-gray-200">
                   <div>
                     <div className="font-medium text-sm text-gray-900">{b.banco}</div>
@@ -239,7 +239,7 @@ export function DashboardPage() {
                   </div>
                   <div className="text-right">
                     <div className="font-bold text-gray-900">
-                      {b.saldo.toLocaleString('es-MX', { style: 'currency', currency: b.moneda })}
+                      {b.saldo.toLocaleString('es-MX', { style: 'currency', currency: b.moneda === 'USD' ? 'USD' : 'MXN' })}
                     </div>
                     <div className="text-xs text-gray-500">{b.moneda}</div>
                   </div>
