@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { createRoot } from 'react-dom/client'
 import html2canvas from 'html2canvas'
 import { jsPDF } from 'jspdf'
@@ -20,7 +20,7 @@ import { Currency } from '../../components/ui/Currency'
 import { RemisionPDF } from '../../components/RemisionPDF'
 import { toast } from '../../store/toastStore'
 import type { FacturaVenta, SalesOrder, Banco, GastoNegocio } from '../../types'
-import { DollarSign, CreditCard, Building, Eye, CircleCheck as CheckCircle, Clock, FileText, Plus, CreditCard as Edit2, Trash2, History, CirclePlus as PlusCircle, Receipt, ShoppingCart, XCircle, Truck, Download, FileDown } from 'lucide-react'
+import { DollarSign, CreditCard, Building, Eye, CircleCheck as CheckCircle, Clock, FileText, Plus, CreditCard as Edit2, Trash2, History, CirclePlus as PlusCircle, Receipt, ShoppingCart, XCircle, Truck, Download, FileDown, Share2 } from 'lucide-react'
 import { exportToCsv } from '../../utils/exportCsv'
 
 const MXN = (v: number) => v.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })
@@ -93,6 +93,7 @@ export function FinancePage() {
     | 'pago_prov'
     | 'recibo'
     | 'historial'
+    | 'remision'
     | 'new_fp'
     | 'cancel_oc_pago'
     | 'new_banco' | 'edit_banco' | 'del_banco'
@@ -103,6 +104,8 @@ export function FinancePage() {
 
   const [selFv, setSelFv] = useState<string>('')
   const [selRecibo, setSelRecibo] = useState<FacturaVenta | null>(null)
+  const [selRemision, setSelRemision] = useState<FacturaVenta | null>(null)
+  const remisionRef = useRef<HTMLDivElement>(null)
   const [esAbono, setEsAbono] = useState(false)
 
   const [selFp, setSelFp] = useState<string>('')
@@ -165,7 +168,12 @@ export function FinancePage() {
     return orders.find(o => o.pedidoId === pedidoId)
   }
 
-  async function handleDescargarRemision(fv: FacturaVenta) {
+  function openRemision(fv: FacturaVenta) {
+    setSelRemision(fv)
+    setModal('remision')
+  }
+
+  async function buildRemisionPdf(fv: FacturaVenta): Promise<jsPDF> {
     const client = clients.find(c => c.clientId === fv.clienteId)
     const order  = getOrder(fv.pedidoId)
 
@@ -214,9 +222,28 @@ export function FinancePage() {
         srcY += sliceH
       }
     }
+    return pdf
+  }
 
+  async function handleDescargarRemision(fv: FacturaVenta) {
+    const pdf = await buildRemisionPdf(fv)
     pdf.save(`remision_${fv.folio}.pdf`)
     toast.success(`Remisión ${fv.folio} descargada.`)
+  }
+
+  async function handleCompartirRemision(fv: FacturaVenta) {
+    const pdf = await buildRemisionPdf(fv)
+    const blob = pdf.output('blob')
+    const file = new File([blob], `remision_${fv.folio}.pdf`, { type: 'application/pdf' })
+    if (navigator.canShare?.({ files: [file] })) {
+      await navigator.share({ files: [file], title: `Remisión ${fv.folio}` })
+    } else {
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url; a.download = `remision_${fv.folio}.pdf`; a.click()
+      URL.revokeObjectURL(url)
+      toast.info('Compartir no disponible en este navegador — se descargó el archivo.')
+    }
   }
 
   function getPagos(facturaId: string) {
@@ -389,7 +416,7 @@ export function FinancePage() {
             <button className="btn btn-secondary btn-sm" onClick={() => openRecibo(f)} title="Ver recibo">
               <Eye size={13} /> Recibo
             </button>
-            <button className="btn btn-secondary btn-sm" onClick={() => { void handleDescargarRemision(f) }} title="Descargar remisión de cobro">
+            <button className="btn btn-secondary btn-sm" onClick={() => openRemision(f)} title="Ver remisión de cobro">
               <FileDown size={13} /> Remisión
             </button>
             {pagos.length > 0 && (
@@ -1488,6 +1515,49 @@ export function FinancePage() {
       )}
 
       {/* Ver Recibo */}
+      {/* ── Modal Preview Remisión ─────────────────────────────────────────── */}
+      {modal === 'remision' && selRemision && (() => {
+        const client = clients.find(c => c.clientId === selRemision.clienteId)
+        const order  = getOrder(selRemision.pedidoId)
+        return (
+          <Modal
+            title={`Remisión - ${selRemision.folio}`}
+            onClose={() => setModal(null)}
+            size="xl"
+            footer={
+              <div className="flex gap-2 justify-end">
+                <button className="btn-secondary" onClick={() => setModal(null)}>Cerrar</button>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => { void handleCompartirRemision(selRemision) }}
+                >
+                  <Share2 size={14} /> Compartir
+                </button>
+                <button
+                  className="btn-primary"
+                  onClick={() => { void handleDescargarRemision(selRemision) }}
+                >
+                  <Download size={14} /> Descargar
+                </button>
+              </div>
+            }
+          >
+            <div className="overflow-auto max-h-[70vh] bg-gray-50 rounded-lg p-2">
+              <div className="shadow-sm rounded" style={{ background: '#fff', minWidth: 640 }}>
+                <RemisionPDF
+                  ref={remisionRef}
+                  factura={selRemision}
+                  client={client}
+                  order={order}
+                  products={products}
+                  companyOverride={company}
+                />
+              </div>
+            </div>
+          </Modal>
+        )
+      })()}
+
       {modal === 'recibo' && selRecibo && (() => {
         const order  = getOrder(selRecibo.pedidoId)
         const client = clients.find(c => c.clientId === selRecibo.clienteId)

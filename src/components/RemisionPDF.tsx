@@ -90,7 +90,7 @@ export const RemisionPDF = forwardRef<HTMLDivElement, Props>(
           padding: '4px 12px', marginBottom: 14,
           letterSpacing: 1,
         }}>
-          DOCUMENTO SIN EFECTOS FISCALES — SOLO PARA CONTROL INTERNO
+          DOCUMENTO SIN EFECTOS FISCALES
         </div>
 
         {/* ── DATOS EMPRESA ──────────────────────────────────────────────── */}
