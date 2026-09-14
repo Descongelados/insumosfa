@@ -51,6 +51,7 @@ export function FinancePage() {
     addFacturaProveedor,
     addBanco, updateBanco, deleteBanco,
     addGasto, updateGasto, deleteGasto,
+    addCajaIngreso, depositarACuenta,
   } = useFinanceStore()
   const { clients, loadClients, subscribeRealtime: subClients } = useClientsStore()
   const { suppliers, loadSuppliers, subscribeRealtime: subSuppliers } = useSuppliersStore()
@@ -99,6 +100,7 @@ export function FinancePage() {
     | 'cancel_oc_pago'
     | 'new_banco' | 'edit_banco' | 'del_banco'
     | 'new_gasto' | 'edit_gasto' | 'del_gasto'
+    | 'caja_ingreso' | 'caja_deposito'
     | null
   const [modal, setModal] = useState<ModalType>(null)
   const [selCancelOC, setSelCancelOC] = useState<string | null>(null)
@@ -121,6 +123,10 @@ export function FinancePage() {
 
   const [gastoForm, setGastoForm] = useState<Omit<GastoNegocio, 'gastoId'>>(BLANK_GASTO)
   const [selGasto, setSelGasto] = useState<GastoNegocio | null>(null)
+
+  const [cajaIngreso, setCajaIngreso] = useState({ monto: 0, descripcion: '' })
+  const [cajaDeposito, setCajaDeposito] = useState({ monto: 0, bancoDestinoId: '' })
+  const [cajaSaving, setCajaSaving] = useState(false)
 
   // ── derived ──────────────────────────────────────────────────────────────────
   const ocsPendientesPago = ordenesCompra.filter(o => o.estatus === 'enviarPago')
@@ -989,56 +995,90 @@ export function FinancePage() {
       )}
 
       {/* ── TAB: Bancos ─────────────────────────────────────────────────────── */}
-      {tab === 'bancos' && (
-        <div className="card space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-gray-900">Cuentas Bancarias</h3>
-            {canManageBancos && (
-              <button className="btn-primary" onClick={openNewBanco}>
-                <Plus size={15} /> Nueva Cuenta
-              </button>
-            )}
-          </div>
-          {bancos.length === 0 ? (
-            <div className="text-center py-10 text-gray-400">
-              <Building size={32} className="mx-auto mb-3 opacity-40" />
-              <p className="text-sm">No hay cuentas bancarias registradas.</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {bancos.map((b) => (
-                <div key={b.bancoId} className="flex items-center justify-between p-4 rounded-xl bg-gray-50 border border-gray-200">
-                  <div>
-                    <div className="font-semibold text-gray-900">{b.banco}</div>
-                    <div className="text-sm text-gray-500">Cuenta: {b.cuenta} &bull; {b.moneda}</div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="text-right">
-                      <div className="text-xl font-bold text-gray-900">
-                        {b.saldo.toLocaleString('es-MX', { style: 'currency', currency: b.moneda })}
-                      </div>
-                      <StatusBadge status={b.activo ? 'activo' : 'inactivo'} />
-                    </div>
-                    {canManageBancos && (
-                      <div className="flex gap-1 ml-2">
-                        <button className="btn btn-secondary btn-sm" onClick={() => openEditBanco(b)}><Edit2 size={13} /></button>
-                        <button className="btn btn-danger btn-sm" onClick={() => openDelBanco(b)}><Trash2 size={13} /></button>
-                      </div>
-                    )}
-                  </div>
+      {tab === 'bancos' && (() => {
+        const caja     = bancos.find(b => b.moneda === 'CAJA')
+        const soloMXN  = bancos.filter(b => b.moneda !== 'CAJA')
+        return (
+          <div className="space-y-4">
+
+            {/* ── Caja de Efectivo ─────────────────────────────────────── */}
+            <div className="card space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                    <Receipt size={16} className="text-green-600" /> Caja de Efectivo
+                  </h3>
+                  <p className="text-xs text-gray-500 mt-0.5">Efectivo cobrado de ventas pendiente de depositar</p>
                 </div>
-              ))}
-            </div>
-          )}
-          {bancos.length > 0 && (
-            <div className="flex justify-end pt-2 border-t border-gray-200">
-              <div className="text-sm text-gray-500">
-                Saldo total MXN: <span className="font-bold text-gray-900 text-base">{MXN(saldoTotal)}</span>
+                <div className="text-right">
+                  <div className="text-2xl font-bold text-green-700">{MXN(caja?.saldo ?? 0)}</div>
+                  <div className="text-xs text-gray-400">Saldo en caja</div>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button className="btn-primary" onClick={() => { setCajaIngreso({ monto: 0, descripcion: '' }); setModal('caja_ingreso') }}>
+                  <Plus size={14} /> Registrar Cobro Efectivo
+                </button>
+                {(caja?.saldo ?? 0) > 0 && soloMXN.filter(b => b.activo).length > 0 && (
+                  <button className="btn btn-secondary" onClick={() => { setCajaDeposito({ monto: caja?.saldo ?? 0, bancoDestinoId: soloMXN.filter(b => b.activo)[0]?.bancoId ?? '' }); setModal('caja_deposito') }}>
+                    <Download size={14} /> Depositar a Banco
+                  </button>
+                )}
               </div>
             </div>
-          )}
-        </div>
-      )}
+
+            {/* ── Cuentas Bancarias ────────────────────────────────────── */}
+            <div className="card space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-gray-900">Cuentas Bancarias</h3>
+                {canManageBancos && (
+                  <button className="btn-primary" onClick={openNewBanco}>
+                    <Plus size={15} /> Nueva Cuenta
+                  </button>
+                )}
+              </div>
+              {soloMXN.length === 0 ? (
+                <div className="text-center py-10 text-gray-400">
+                  <Building size={32} className="mx-auto mb-3 opacity-40" />
+                  <p className="text-sm">No hay cuentas bancarias registradas.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {soloMXN.map((b) => (
+                    <div key={b.bancoId} className="flex items-center justify-between p-4 rounded-xl bg-gray-50 border border-gray-200">
+                      <div>
+                        <div className="font-semibold text-gray-900">{b.banco}</div>
+                        <div className="text-sm text-gray-500">Cuenta: {b.cuenta} &bull; {b.moneda}</div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <div className="text-xl font-bold text-gray-900">
+                            {b.saldo.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}
+                          </div>
+                          <StatusBadge status={b.activo ? 'activo' : 'inactivo'} />
+                        </div>
+                        {canManageBancos && (
+                          <div className="flex gap-1 ml-2">
+                            <button className="btn btn-secondary btn-sm" onClick={() => openEditBanco(b)}><Edit2 size={13} /></button>
+                            <button className="btn btn-danger btn-sm" onClick={() => openDelBanco(b)}><Trash2 size={13} /></button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {soloMXN.length > 0 && (
+                <div className="flex justify-end pt-2 border-t border-gray-200">
+                  <div className="text-sm text-gray-500">
+                    Saldo total MXN: <span className="font-bold text-gray-900 text-base">{MXN(saldoTotal)}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ── TAB: Gastos ─────────────────────────────────────────────────────── */}
       {tab === 'gastos' && (
@@ -1559,6 +1599,100 @@ export function FinancePage() {
           </div>
         </Modal>
       )}
+
+      {/* ── Modal Registrar Cobro Efectivo ──────────────────────────────────── */}
+      {modal === 'caja_ingreso' && (
+        <Modal title="Registrar Cobro en Efectivo" onClose={() => setModal(null)}
+          footer={
+            <>
+              <button className="btn-secondary" onClick={() => setModal(null)}>Cancelar</button>
+              <button className="btn-primary" disabled={cajaSaving} onClick={async () => {
+                if (cajaIngreso.monto <= 0) { toast.error('El monto debe ser mayor a cero.'); return }
+                setCajaSaving(true)
+                try {
+                  await addCajaIngreso(cajaIngreso.monto, cajaIngreso.descripcion || 'Cobro en efectivo')
+                  toast.success(`Cobro registrado en caja: ${MXN(cajaIngreso.monto)}`)
+                  setModal(null)
+                } finally { setCajaSaving(false) }
+              }}>
+                <Plus size={14} /> {cajaSaving ? 'Guardando...' : 'Registrar'}
+              </button>
+            </>
+          }
+        >
+          <div className="space-y-4">
+            <div className="form-group">
+              <label className="label">Monto recibido *</label>
+              <input type="number" className="input" min={0} step="0.01" value={cajaIngreso.monto}
+                onChange={e => setCajaIngreso(f => ({ ...f, monto: Number(e.target.value) }))} />
+            </div>
+            <div className="form-group">
+              <label className="label">Descripción</label>
+              <input className="input" value={cajaIngreso.descripcion} placeholder="Cobro de venta, abono cliente..."
+                onChange={e => setCajaIngreso(f => ({ ...f, descripcion: e.target.value }))} />
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Modal Depositar Caja a Banco ────────────────────────────────────── */}
+      {modal === 'caja_deposito' && (() => {
+        const caja    = bancos.find(b => b.moneda === 'CAJA')
+        const soloMXN = bancos.filter(b => b.moneda !== 'CAJA' && b.activo)
+        const destino = soloMXN.find(b => b.bancoId === cajaDeposito.bancoDestinoId)
+        const saldoTras = (caja?.saldo ?? 0) - cajaDeposito.monto
+        return (
+          <Modal title="Depositar Efectivo a Cuenta Bancaria" onClose={() => setModal(null)}
+            footer={
+              <>
+                <button className="btn-secondary" onClick={() => setModal(null)}>Cancelar</button>
+                <button className="btn-primary" disabled={cajaSaving || saldoTras < 0 || cajaDeposito.monto <= 0} onClick={async () => {
+                  if (cajaDeposito.monto <= 0) { toast.error('El monto debe ser mayor a cero.'); return }
+                  if (!cajaDeposito.bancoDestinoId) { toast.error('Selecciona una cuenta destino.'); return }
+                  if (saldoTras < 0) { toast.error('Saldo insuficiente en caja.'); return }
+                  setCajaSaving(true)
+                  try {
+                    await depositarACuenta(cajaDeposito.monto, cajaDeposito.bancoDestinoId)
+                    toast.success(`${MXN(cajaDeposito.monto)} depositados en ${destino?.banco ?? ''}.`)
+                    setModal(null)
+                  } finally { setCajaSaving(false) }
+                }}>
+                  <Download size={14} /> {cajaSaving ? 'Procesando...' : 'Depositar'}
+                </button>
+              </>
+            }
+          >
+            <div className="space-y-4">
+              <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm">
+                <span className="text-green-700 font-semibold">Saldo en caja: {MXN(caja?.saldo ?? 0)}</span>
+              </div>
+              <div className="form-group">
+                <label className="label">Monto a depositar *</label>
+                <input type="number" className="input" min={0} step="0.01" value={cajaDeposito.monto}
+                  onChange={e => setCajaDeposito(f => ({ ...f, monto: Number(e.target.value) }))} />
+                {saldoTras < 0 && cajaDeposito.monto > 0 && (
+                  <p className="text-xs text-red-600 mt-1">⚠ Saldo insuficiente. Máximo: {MXN(caja?.saldo ?? 0)}</p>
+                )}
+                {saldoTras >= 0 && cajaDeposito.monto > 0 && (
+                  <p className="text-xs text-gray-500 mt-1">Saldo restante en caja: {MXN(saldoTras)}</p>
+                )}
+              </div>
+              <div className="form-group">
+                <label className="label">Cuenta destino *</label>
+                <select className="select" value={cajaDeposito.bancoDestinoId}
+                  onChange={e => setCajaDeposito(f => ({ ...f, bancoDestinoId: e.target.value }))}>
+                  <option value="">— Seleccionar cuenta —</option>
+                  {soloMXN.map(b => (
+                    <option key={b.bancoId} value={b.bancoId}>
+                      {b.banco} {b.cuenta ? `···${b.cuenta.slice(-4)}` : ''} ({MXN(b.saldo)})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </Modal>
+        )
+      })()}
 
       {/* Ver Recibo */}
       {/* ── Modal Preview Remisión ─────────────────────────────────────────── */}

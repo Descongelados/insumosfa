@@ -132,6 +132,8 @@ interface FinanceState {
   updateBanco: (id: string, data: Partial<Banco>) => Promise<void>
   addBanco: (b: Omit<Banco, 'bancoId'>) => Promise<void>
   deleteBanco: (id: string) => Promise<void>
+  addCajaIngreso: (monto: number, descripcion: string) => Promise<void>
+  depositarACuenta: (monto: number, bancoDestinoId: string) => Promise<void>
   addGasto: (g: Omit<GastoNegocio, 'gastoId'>) => Promise<void>
   updateGasto: (id: string, data: Partial<Omit<GastoNegocio, 'gastoId'>>) => Promise<void>
   deleteGasto: (id: string) => Promise<void>
@@ -341,6 +343,49 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
       toast.error('Error al eliminar banco. Intenta de nuevo.')
       set({ bancos: backup })
     }
+  },
+
+  // ── Caja de efectivo ─────────────────────────────────────────────────────
+  async addCajaIngreso(monto, descripcion) {
+    // Buscar o crear la cuenta de caja (moneda = 'CAJA')
+    let caja = get().bancos.find(b => b.moneda === 'CAJA')
+    if (!caja) {
+      await supabase.from('erp_banks').insert({
+        banco: 'Caja Efectivo', cuenta: '', saldo: 0, moneda: 'CAJA', activo: true,
+      })
+      const d = await fetchBancos()
+      if (d) { set({ bancos: d }); caja = d.find(b => b.moneda === 'CAJA') }
+    }
+    if (!caja) { toast.error('No se pudo inicializar la caja.'); return }
+    await supabase.from('erp_banks')
+      .update({ saldo: caja.saldo + monto })
+      .eq('id', caja.bancoId)
+    // Registrar como gasto negativo (ingreso en caja)
+    await supabase.from('erp_gastos_negocio').insert({
+      fecha: new Date().toISOString().split('T')[0],
+      categoria: 'Otros',
+      descripcion: descripcion || 'Cobro en efectivo',
+      monto: -monto,
+      forma_pago: 'Efectivo',
+      referencia: '',
+      notas: 'Ingreso a caja',
+    })
+    const [bk] = await Promise.all([fetchBancos()])
+    if (bk) set({ bancos: bk })
+  },
+
+  async depositarACuenta(monto, bancoDestinoId) {
+    const caja = get().bancos.find(b => b.moneda === 'CAJA')
+    const destino = get().bancos.find(b => b.bancoId === bancoDestinoId)
+    if (!caja) { toast.error('No hay caja de efectivo registrada.'); return }
+    if (!destino) { toast.error('Cuenta destino no encontrada.'); return }
+    if (caja.saldo < monto) { toast.error(`Saldo insuficiente en caja (${caja.saldo.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })})`); return }
+    await Promise.all([
+      supabase.from('erp_banks').update({ saldo: caja.saldo - monto }).eq('id', caja.bancoId),
+      supabase.from('erp_banks').update({ saldo: destino.saldo + monto }).eq('id', bancoDestinoId),
+    ])
+    const bk = await fetchBancos()
+    if (bk) set({ bancos: bk })
   },
 
   async addGasto(data) {
