@@ -14,7 +14,8 @@ import type { Embarque, EmbarqueEstatus, EmbarqueOCRef, Transportista } from '..
 import { Truck, Plus, CreditCard as Edit2, Trash2, CircleAlert as AlertCircle, ToggleLeft, ToggleRight, CheckCircle, Send, Save } from 'lucide-react'
 
 // ─── constantes ────────────────────────────────────────────────────────────
-const ESTADOS_ACTIVOS: EmbarqueEstatus[] = ['solicitado', 'programado', 'recolectado', 'enTransito', 'entregado']
+const ESTADOS_PIPELINE: EmbarqueEstatus[] = ['solicitado', 'programado', 'recolectado', 'enTransito']
+const ESTADOS_ACTIVOS:  EmbarqueEstatus[] = ['solicitado', 'programado', 'recolectado', 'enTransito', 'entregado']
 
 const BLANK_TRANS: Omit<Transportista, 'transportistaId'> = {
   nombre: '', contacto: '', telefono: '', tarifaBase: 0, activo: true,
@@ -45,7 +46,7 @@ export function LogisticsPage() {
   const canDeleteEmbarque = me ? hasRole(me, 'director', 'operaciones') : false
 
   // ── estado de pestañas ───────────────────────────────────────────────────
-  const [tab, setTab] = useState<'embarques' | 'transportistas'>('embarques')
+  const [tab, setTab] = useState<'embarques' | 'entregados' | 'transportistas'>('embarques')
 
   // ── búsqueda ─────────────────────────────────────────────────────────────
   const [q, setQ] = useState('')
@@ -95,11 +96,15 @@ export function LogisticsPage() {
   const [formTrans, setFormTrans] = useState(BLANK_TRANS)
   const [editTransIdTrans, setEditTransIdTrans] = useState<string | null>(null)
 
-  // ── embarques activos (no cerrados) ─────────────────────────────────────
-  const embarquesActivos = embarques.filter(e => e.estatus !== 'cerrado')
+  // ── embarques por grupo ──────────────────────────────────────────────────
+  const embarquesActivos  = embarques.filter(e => !['cerrado', 'entregado'].includes(e.estatus))
+  const embarquesEntregados = embarques.filter(e => e.estatus === 'entregado')
 
   // ── filtros ──────────────────────────────────────────────────────────────
   const filteredEmb = embarquesActivos.filter(e =>
+    [e.folio, e.destino, e.origen].join(' ').toLowerCase().includes(q.toLowerCase())
+  )
+  const filteredEntregados = embarquesEntregados.filter(e =>
     [e.folio, e.destino, e.origen].join(' ').toLowerCase().includes(q.toLowerCase())
   )
   const filteredTrans = transportistas.filter(t =>
@@ -107,7 +112,7 @@ export function LogisticsPage() {
   )
 
   // ── KPIs ─────────────────────────────────────────────────────────────────
-  const onTime = embarques.filter(e => e.estatus === 'entregado').length
+  const onTime = embarquesEntregados.length
   const totalEmb = embarques.filter(e => ['entregado', 'cerrado'].includes(e.estatus)).length
   const pct = totalEmb > 0 ? Math.round(onTime / totalEmb * 100) : 100
 
@@ -350,6 +355,12 @@ export function LogisticsPage() {
           <Truck size={15} /> Embarques ({embarquesActivos.length})
         </button>
         <button
+          className={`btn ${tab === 'entregados' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => { setTab('entregados'); setQ('') }}
+        >
+          <CheckCircle size={15} /> Entregados ({embarquesEntregados.length})
+        </button>
+        <button
           className={`btn ${tab === 'transportistas' ? 'btn-primary' : 'btn-secondary'}`}
           onClick={() => { setTab('transportistas'); setQ('') }}
         >
@@ -357,7 +368,7 @@ export function LogisticsPage() {
         </button>
       </div>
 
-      {/* ── TABLA EMBARQUES ─────────────────────────────────────────────── */}
+      {/* ── TABLA EMBARQUES ACTIVOS ──────────────────────────────────────── */}
       {tab === 'embarques' && (
         <div className="card">
           <div className="flex justify-between mb-4">
@@ -367,7 +378,7 @@ export function LogisticsPage() {
             <div className="text-center py-12 text-gray-400">
               <Truck size={32} className="mx-auto mb-3 opacity-30" />
               <p className="text-sm">No hay embarques activos.</p>
-              <p className="text-xs mt-1 text-gray-300">Los embarques se generan desde el módulo de Compras.</p>
+              <p className="text-xs mt-1 text-gray-300">Los embarques se generan desde los módulos de Compras y Ventas.</p>
             </div>
           ) : (
             <DataTable
@@ -398,6 +409,47 @@ export function LogisticsPage() {
                         </button>
                       )}
                     </div>
+                  )
+                },
+              ]}
+            />
+          )}
+        </div>
+      )}
+
+      {/* ── TABLA ENTREGADOS ─────────────────────────────────────────────── */}
+      {tab === 'entregados' && (
+        <div className="card">
+          <div className="flex justify-between mb-4">
+            <SearchBar value={q} onChange={setQ} placeholder="Buscar folio, destino u origen..." />
+          </div>
+          {filteredEntregados.length === 0 ? (
+            <div className="text-center py-12 text-gray-400">
+              <CheckCircle size={32} className="mx-auto mb-3 opacity-30" />
+              <p className="text-sm">No hay embarques entregados aún.</p>
+            </div>
+          ) : (
+            <DataTable
+              data={filteredEntregados}
+              rowKey={e => e.embarqueId}
+              columns={[
+                { key: 'folio', header: 'Folio', render: e => <span className="font-mono font-semibold text-blue-700">{e.folio}</span> },
+                { key: 'ocs', header: 'OC(s)', render: e => e.ordenesIds?.length
+                  ? <span className="text-xs font-mono text-gray-600">{e.ordenesIds.map(r => r.folio).join(', ')}</span>
+                  : <span className="text-gray-400 text-xs">—</span>
+                },
+                { key: 'origen', header: 'Origen', render: e => <span className="text-xs text-gray-600">{e.origen}</span> },
+                { key: 'destino', header: 'Destino' },
+                { key: 'trans', header: 'Transportista', render: e =>
+                  transportistas.find(t => t.transportistaId === e.transportistaId)?.nombre
+                    ?? <span className="text-amber-600 text-xs font-medium">Sin asignar</span>
+                },
+                { key: 'fechaProg', header: 'F. Programada', render: e => e.fechaProgramada || '-' },
+                { key: 'flete', header: 'Flete', render: e => <Currency value={e.costoFlete} /> },
+                { key: 'estatus', header: 'Estatus', render: e => <StatusBadge status={e.estatus} /> },
+                {
+                  key: 'acc', header: '', render: e => (
+                    <button className="btn btn-secondary btn-sm" onClick={() => openViewEmb(e)}>Ver</button>
                   )
                 },
               ]}
@@ -649,7 +701,7 @@ export function LogisticsPage() {
             <div className="space-y-2">
               <p className="label">Cambiar estatus</p>
               <div className="flex flex-wrap gap-2">
-                {ESTADOS_ACTIVOS.map(est => (
+                {ESTADOS_PIPELINE.map(est => (
                   <button
                     key={est}
                     className={`btn btn-sm ${selEmb.estatus === est ? 'btn-primary' : 'btn-secondary'}`}

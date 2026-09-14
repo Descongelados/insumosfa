@@ -1,4 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
+import { createRoot } from 'react-dom/client'
+import html2canvas from 'html2canvas'
+import { jsPDF } from 'jspdf'
 import { useFinanceStore } from '../../store/financeStore'
 import { useClientsStore } from '../../store/clientsStore'
 import { useSuppliersStore } from '../../store/suppliersStore'
@@ -9,13 +12,15 @@ import { useLogisticsStore } from '../../store/logisticsStore'
 import { useInventoryStore } from '../../store/inventoryStore'
 import { useAuthStore } from '../../store/authStore'
 import { hasRole } from '../../store/usersStore'
+import { useConfigStore } from '../../store/configStore'
 import { DataTable } from '../../components/ui/DataTable'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { Modal } from '../../components/ui/Modal'
 import { Currency } from '../../components/ui/Currency'
+import { RemisionPDF } from '../../components/RemisionPDF'
 import { toast } from '../../store/toastStore'
 import type { FacturaVenta, SalesOrder, Banco, GastoNegocio } from '../../types'
-import { DollarSign, CreditCard, Building, Eye, CircleCheck as CheckCircle, Clock, FileText, Plus, CreditCard as Edit2, Trash2, History, CirclePlus as PlusCircle, Receipt, ShoppingCart, XCircle, Truck, Download } from 'lucide-react'
+import { DollarSign, CreditCard, Building, Eye, CircleCheck as CheckCircle, Clock, FileText, Plus, CreditCard as Edit2, Trash2, History, CirclePlus as PlusCircle, Receipt, ShoppingCart, XCircle, Truck, Download, FileDown } from 'lucide-react'
 import { exportToCsv } from '../../utils/exportCsv'
 
 const MXN = (v: number) => v.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })
@@ -54,6 +59,7 @@ export function FinancePage() {
   const { embarques, transportistas, loadLogistics, subscribeRealtime: subLogistics } = useLogisticsStore()
   const { applyMovimiento } = useInventoryStore()
   const { user: me } = useAuthStore()
+  const { company } = useConfigStore()
 
   useEffect(() => {
     void loadFinance()
@@ -157,6 +163,60 @@ export function FinancePage() {
   function getOrder(pedidoId?: string): SalesOrder | undefined {
     if (!pedidoId) return undefined
     return orders.find(o => o.pedidoId === pedidoId)
+  }
+
+  async function handleDescargarRemision(fv: FacturaVenta) {
+    const client = clients.find(c => c.clientId === fv.clienteId)
+    const order  = getOrder(fv.pedidoId)
+
+    const container = document.createElement('div')
+    container.style.cssText = 'position:fixed;left:-9999px;top:0;width:800px;background:#fff;z-index:-1;'
+    document.body.appendChild(container)
+
+    await new Promise<void>(resolve => {
+      const root = createRoot(container)
+      root.render(
+        <RemisionPDF
+          factura={fv}
+          client={client}
+          order={order}
+          products={products}
+          companyOverride={company}
+        />
+      )
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+    })
+
+    const canvas = await html2canvas(container.firstElementChild as HTMLElement, {
+      scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false,
+    })
+    document.body.removeChild(container)
+
+    const imgW = 210; const margin = 10; const contentW = imgW - margin * 2
+    const contentH = (canvas.height / canvas.width) * contentW
+    const pageH = 297
+
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+    if (contentH <= pageH - margin * 2) {
+      pdf.addImage(canvas, 'PNG', margin, margin, contentW, contentH)
+    } else {
+      const rowH = pageH - margin * 2
+      const rowPx = (rowH / contentW) * canvas.width
+      let srcY = 0
+      while (srcY < canvas.height) {
+        const sliceH = Math.min(rowPx, canvas.height - srcY)
+        const sliceCanvas = document.createElement('canvas')
+        sliceCanvas.width = canvas.width; sliceCanvas.height = sliceH
+        sliceCanvas.getContext('2d')!.drawImage(canvas, 0, srcY, canvas.width, sliceH, 0, 0, canvas.width, sliceH)
+        const sliceImgH = (sliceH / canvas.width) * contentW
+        if (srcY > 0) pdf.addPage()
+        pdf.addImage(sliceCanvas, 'PNG', margin, margin, contentW, sliceImgH)
+        srcY += sliceH
+      }
+    }
+
+    pdf.save(`remision_${fv.folio}.pdf`)
+    toast.success(`Remisión ${fv.folio} descargada.`)
   }
 
   function getPagos(facturaId: string) {
@@ -328,6 +388,9 @@ export function FinancePage() {
           <div className="flex gap-1 flex-wrap justify-end">
             <button className="btn btn-secondary btn-sm" onClick={() => openRecibo(f)} title="Ver recibo">
               <Eye size={13} /> Recibo
+            </button>
+            <button className="btn btn-secondary btn-sm" onClick={() => { void handleDescargarRemision(f) }} title="Descargar remisión de cobro">
+              <FileDown size={13} /> Remisión
             </button>
             {pagos.length > 0 && (
               <button className="btn btn-secondary btn-sm" onClick={() => openHistorial(f)}>
