@@ -515,7 +515,10 @@ export function QuotesPage() {
                     <Eye size={13} /> Ver
                   </button>
                   {(qt.estatus === 'borrador' || qt.estatus === 'enviada') && (
-                    <button className="btn btn-success btn-sm" onClick={() => convertirAPedido(qt)}>
+                    <button className="btn btn-success btn-sm" onClick={async () => {
+                      const full = await fetchQuoteById(qt.cotizacionId)
+                      convertirAPedido(full ?? qt)
+                    }}>
                       <ArrowRight size={13} /> Pedido
                     </button>
                   )}
