@@ -39,6 +39,7 @@ const BLANK_GASTO: Omit<GastoNegocio, 'gastoId'> = {
   formaPago: 'Transferencia',
   referencia: '',
   notas: '',
+  bancoId: '',
 }
 
 export function FinancePage() {
@@ -381,8 +382,16 @@ export function FinancePage() {
   async function handleSaveGasto() {
     if (!gastoForm.descripcion.trim()) { toast.error('La descripcion es requerida.'); return }
     if (gastoForm.monto <= 0) { toast.error('El monto debe ser mayor a cero.'); return }
+    // Validar saldo suficiente en la cuenta seleccionada (solo al crear, no al editar)
+    if (!selGasto && gastoForm.bancoId) {
+      const banco = bancos.find(b => b.bancoId === gastoForm.bancoId)
+      if (banco && banco.saldo < gastoForm.monto) {
+        toast.error(`Saldo insuficiente en ${banco.banco} (${MXN(banco.saldo)}). El gasto es ${MXN(gastoForm.monto)}.`)
+        return
+      }
+    }
     if (selGasto) { await updateGasto(selGasto.gastoId, gastoForm); toast.success('Gasto actualizado.') }
-    else { await addGasto(gastoForm); toast.success(`Gasto registrado: ${MXN(gastoForm.monto)}.`) }
+    else { await addGasto({ ...gastoForm, bancoId: gastoForm.bancoId || undefined }); toast.success(`Gasto registrado: ${MXN(gastoForm.monto)}.`) }
     setModal(null)
   }
 
@@ -1495,7 +1504,7 @@ export function FinancePage() {
               <div className="form-group">
                 <label className="label">Forma de Pago</label>
                 <select className="select" value={gastoForm.formaPago}
-                  onChange={(e) => setGastoForm(f => ({ ...f, formaPago: e.target.value }))}>
+                  onChange={(e) => setGastoForm(f => ({ ...f, formaPago: e.target.value, bancoId: '' }))}>
                   {FORMAS_PAGO.map(x => <option key={x}>{x}</option>)}
                 </select>
               </div>
@@ -1505,6 +1514,30 @@ export function FinancePage() {
                   onChange={(e) => setGastoForm(f => ({ ...f, referencia: e.target.value }))} />
               </div>
             </div>
+            {gastoForm.formaPago !== 'Efectivo' && (
+              <div className="form-group">
+                <label className="label">Cuenta bancaria <span className="text-gray-400 font-normal">(opcional)</span></label>
+                <select className="select" value={gastoForm.bancoId ?? ''} onChange={(e) => setGastoForm(f => ({ ...f, bancoId: e.target.value }))}>
+                  <option value="">— Sin asignar —</option>
+                  {bancos.filter(b => b.activo).map(b => (
+                    <option key={b.bancoId} value={b.bancoId}>
+                      {b.banco} {b.cuenta ? `···${b.cuenta.slice(-4)}` : ''} — Saldo: {MXN(b.saldo)}
+                    </option>
+                  ))}
+                </select>
+                {gastoForm.bancoId && (() => {
+                  const banco = bancos.find(b => b.bancoId === gastoForm.bancoId)
+                  if (!banco) return null
+                  const saldoTras = banco.saldo - gastoForm.monto
+                  return (
+                    <p className={`text-xs mt-1 ${saldoTras < 0 ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
+                      Saldo actual: {MXN(banco.saldo)} → tras gasto: <strong>{MXN(saldoTras)}</strong>
+                      {saldoTras < 0 && ' ⚠ Saldo insuficiente'}
+                    </p>
+                  )
+                })()}
+              </div>
+            )}
             <div className="form-group">
               <label className="label">Notas</label>
               <textarea className="textarea" rows={2} value={gastoForm.notas}

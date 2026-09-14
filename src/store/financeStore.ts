@@ -349,8 +349,18 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
       descripcion: data.descripcion, monto: data.monto,
       forma_pago: data.formaPago, referencia: data.referencia, notas: data.notas,
     })
-    const d = await fetchGastos()
+    // Si se seleccionó cuenta bancaria, descontar el gasto del saldo
+    if (data.bancoId) {
+      const banco = get().bancos.find(b => b.bancoId === data.bancoId)
+      if (banco) {
+        await supabase.from('erp_banks')
+          .update({ saldo: banco.saldo - data.monto })
+          .eq('id', data.bancoId)
+      }
+    }
+    const [d, bk] = await Promise.all([fetchGastos(), fetchBancos()])
     if (d) set({ gastos: d })
+    if (bk) set({ bancos: bk })
   },
 
   async updateGasto(id, data) {
