@@ -173,7 +173,7 @@ export function SalesOrdersPage() {
         </div>
         <div className="flex gap-2">
           <button className="btn-secondary" onClick={() => exportToCsv(
-            filtered.map(o => ({ folio: o.folio, cliente: clients.find(c => c.clientId === o.clienteId)?.razonSocial ?? '-', fecha: o.fechaPedido, entrega: o.fechaEntrega, total: o.total, estatus: o.estatus })),
+            filtered.map(o => ({ folio: o.folio, cliente: clients.find(c => c.clientId === o.clienteId)?.razonSocial ?? o.clienteNombre ?? '-', fecha: o.fechaPedido, entrega: o.fechaEntrega, total: o.total, estatus: o.estatus })),
             { folio: 'Folio', cliente: 'Cliente', fecha: 'Fecha Pedido', entrega: 'Fecha Entrega', total: 'Total', estatus: 'Estatus' },
             `pedidos_${new Date().toISOString().slice(0,10)}`
           )} title="Exportar CSV"><Download size={15} /> CSV</button>
@@ -218,7 +218,7 @@ export function SalesOrdersPage() {
           rowKey={(o) => o.pedidoId}
           columns={[
             { key: 'folio', header: 'Folio', render: (o) => <span className="font-mono font-semibold text-blue-700">{o.folio}</span> },
-            { key: 'cliente', header: 'Cliente', render: (o) => clients.find(c => c.clientId === o.clienteId)?.razonSocial ?? '-' },
+            { key: 'cliente', header: 'Cliente', render: (o) => clients.find(c => c.clientId === o.clienteId)?.razonSocial ?? o.clienteNombre ?? '-' },
             { key: 'fechaPedido', header: 'Fecha Pedido' },
             { key: 'fechaEntrega', header: 'Fecha Entrega', render: (o) => o.fechaEntrega || '-' },
             { key: 'items', header: 'Partidas', render: (o) => o.items.length },
@@ -251,7 +251,7 @@ export function SalesOrdersPage() {
         >
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div><span className="text-gray-500">Cliente:</span> <strong>{clients.find(c => c.clientId === sel.clienteId)?.razonSocial}</strong></div>
+              <div><span className="text-gray-500">Cliente:</span> <strong>{clients.find(c => c.clientId === sel.clienteId)?.razonSocial ?? sel.clienteNombre ?? '-'}</strong></div>
               <div><span className="text-gray-500">Total:</span> <Currency value={sel.total} /></div>
               <div><span className="text-gray-500">Estatus actual:</span> <StatusBadge status={sel.estatus} /></div>
               <div><span className="text-gray-500">F. Pedido:</span> {sel.fechaPedido}</div>
