@@ -23,7 +23,7 @@ const labels: Record<string, string> = {
   aceptada: 'Aceptada', pagada: 'Pagada', entregado: 'Entregado',
   ganado: 'Ganado', recibida: 'Recibida', cerrada: 'Cerrada',
   surtiendo: 'Surtiendo', enRevision: 'En Revisión', cotizado: 'Cotizado',
-  embarcado: 'Embarcado', enTransito: 'En Tránsito', parcial: 'Parcial',
+  embarcado: 'Procesar', enTransito: 'En Tránsito', parcial: 'Parcial',
   recolectado: 'Recolectado', contactado: 'Contactado',
   perdido: 'Perdido', vencida: 'Vencida', cancelada: 'Cancelada',
   facturado: 'Facturado', calificado: 'Calificado',

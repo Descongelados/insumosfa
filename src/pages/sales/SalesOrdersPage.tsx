@@ -278,7 +278,7 @@ export function SalesOrdersPage() {
               {sel.estatus === 'confirmado' && (
                 <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3 flex items-center gap-2">
                   <Truck size={14} className="flex-shrink-0" />
-                  Al marcar como <strong>Embarcado</strong> se creará automáticamente un embarque en <strong>Logística</strong>, una factura en <strong>Finanzas → CxC</strong> y el pedido pasará a <strong>Pedidos Completados</strong>.
+                  Al marcar como <strong>Procesar</strong> se creará automáticamente un embarque en <strong>Logística</strong>, una factura en <strong>Finanzas → CxC</strong> y el pedido pasará a <strong>Pedidos Completados</strong>.
                 </p>
               )}
               <div className="flex flex-wrap gap-2">
