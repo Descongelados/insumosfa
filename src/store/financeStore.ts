@@ -192,22 +192,24 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
       if (fp) set({ facturasProveedor: fp })
       if (pp) set({ pagosProveedores: pp })
 
-      // Auto-regularización de Caja Efectivo para cobros históricos en Efectivo que no tenían caja inicializada
       let finalBancos = bk || []
-      const totalCobradoEfectivo = (pc || []).filter(p => p.formaPago === 'Efectivo').reduce((acc, p) => acc + p.monto, 0)
-      if (totalCobradoEfectivo > 0) {
-        let caja = finalBancos.find(b => b.moneda === 'CAJA')
-        if (!caja) {
-          await supabase.from('erp_banks').insert({
-            banco: 'Caja Efectivo', cuenta: '', saldo: totalCobradoEfectivo, moneda: 'CAJA', activo: true,
-          })
-          const freshBancos = await fetchBancos()
-          if (freshBancos) finalBancos = freshBancos
-        } else if (caja.saldo === 0) {
-          // Si la caja estaba en 0 pero hay cobros históricos en efectivo, actualizar con el total
-          await supabase.from('erp_banks').update({ saldo: totalCobradoEfectivo }).eq('id', caja.bancoId)
-          caja.saldo = totalCobradoEfectivo
+      try {
+        const totalCobradoEfectivo = (pc || []).filter(p => p.formaPago === 'Efectivo').reduce((acc, p) => acc + p.monto, 0)
+        if (totalCobradoEfectivo > 0) {
+          let caja = finalBancos.find(b => b.moneda === 'CAJA')
+          if (!caja) {
+            await supabase.from('erp_banks').insert({
+              banco: 'Caja Efectivo', cuenta: '', saldo: totalCobradoEfectivo, moneda: 'CAJA', activo: true,
+            })
+            const freshBancos = await fetchBancos()
+            if (freshBancos) finalBancos = freshBancos
+          } else if (caja.saldo === 0) {
+            await supabase.from('erp_banks').update({ saldo: totalCobradoEfectivo }).eq('id', caja.bancoId)
+            finalBancos = finalBancos.map(b => b.bancoId === caja?.bancoId ? { ...b, saldo: totalCobradoEfectivo } : b)
+          }
         }
+      } catch (err) {
+        console.warn('Auto-regularizacion caja:', err)
       }
 
       if (finalBancos) set({ bancos: finalBancos })
