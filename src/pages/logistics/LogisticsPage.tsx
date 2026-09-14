@@ -14,7 +14,7 @@ import type { Embarque, EmbarqueEstatus, EmbarqueOCRef, Transportista } from '..
 import { Truck, Plus, CreditCard as Edit2, Trash2, CircleAlert as AlertCircle, ToggleLeft, ToggleRight, CheckCircle, Send, Save } from 'lucide-react'
 
 // ─── constantes ────────────────────────────────────────────────────────────
-const ESTADOS_PIPELINE: EmbarqueEstatus[] = ['solicitado', 'programado', 'recolectado', 'enTransito']
+const ESTADOS_PIPELINE: EmbarqueEstatus[] = ['solicitado', 'programado', 'recolectado', 'enTransito', 'entregado']
 const ESTADOS_ACTIVOS:  EmbarqueEstatus[] = ['solicitado', 'programado', 'recolectado', 'enTransito', 'entregado']
 
 const BLANK_TRANS: Omit<Transportista, 'transportistaId'> = {
