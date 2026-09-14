@@ -8,10 +8,10 @@ import { toast } from '../../store/toastStore'
 import type { User, Role } from '../../types'
 import { Users, Plus, CreditCard as Edit2, Trash2, ToggleLeft, ToggleRight, KeyRound, CircleAlert as AlertCircle } from 'lucide-react'
 
-const ROLES: Role[] = ['director', 'administracion', 'compras', 'ventas', 'operaciones', 'almacen']
+const ROLES: Role[] = ['director', 'administracion', 'compras', 'ventas', 'operaciones', 'almacen', 'cobranza']
 const ROLE_LABELS: Record<Role, string> = {
   director: 'Director General', administracion: 'Administración', compras: 'Compras',
-  ventas: 'Ventas', operaciones: 'Operaciones', almacen: 'Almacén',
+  ventas: 'Ventas', operaciones: 'Operaciones', almacen: 'Almacén', cobranza: 'Cobranza',
 }
 
 const BLANK_USER: Omit<User, 'userId' | 'createdAt'> = {

@@ -1,5 +1,5 @@
 // ─── Auth & Security ───────────────────────────────────────────────────────
-export type Role = 'director' | 'administracion' | 'compras' | 'ventas' | 'operaciones' | 'almacen'
+export type Role = 'director' | 'administracion' | 'compras' | 'ventas' | 'operaciones' | 'almacen' | 'cobranza'
 
 export interface User {
   userId: string

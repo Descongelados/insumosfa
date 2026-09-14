@@ -16,8 +16,8 @@ export const ROUTE_ROLES: Record<string, Role[]> = {
   '/proveedores':           ['director', 'administracion', 'compras'],
   '/compras':               ['director', 'compras', 'operaciones', 'almacen'],
   '/logistica':             ['director', 'operaciones', 'almacen'],
-  '/finanzas':              ['director', 'administracion'],
-  '/reportes':              ['director', 'administracion'],
+  '/finanzas':              ['director', 'administracion', 'cobranza'],
+  '/reportes':              ['director', 'administracion', 'cobranza'],
   '/configuracion':         ['director', 'administracion', 'compras', 'ventas', 'operaciones', 'almacen'],
 }
 
@@ -106,13 +106,13 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Finanzas',
     icon: DollarSign,
     to: '/finanzas',
-    roles: ['director', 'administracion'],
+    roles: ['director', 'administracion', 'cobranza'],
   },
   {
     label: 'Reportes',
     icon: BarChart2,
     to: '/reportes',
-    roles: ['director', 'administracion'],
+    roles: ['director', 'administracion', 'cobranza'],
   },
   {
     label: 'Configuración',

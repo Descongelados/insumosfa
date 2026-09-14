@@ -77,6 +77,7 @@ export function FinancePage() {
     return () => { u1(); u2(); u3(); u4(); u5() }
   }, [])
 
+  const isReadOnly       = me ? hasRole(me, 'cobranza') && !hasRole(me, 'director', 'administracion') : false
   const canManageBancos  = me ? hasRole(me, 'director', 'administracion') : false
   const canManageGastos  = me ? hasRole(me, 'director', 'administracion') : false
   const canCancelPagoCxP = me ? hasRole(me, 'director', 'administracion') : false
@@ -446,12 +447,12 @@ export function FinancePage() {
                 <span className="ml-1 text-xs font-bold text-indigo-600">{pagos.length}</span>
               </button>
             )}
-            {showCobrar && f.saldoPendiente > 0 && (
+            {!isReadOnly && showCobrar && f.saldoPendiente > 0 && (
               <button className="btn btn-warning btn-sm" onClick={() => openAbono(f)}>
                 <PlusCircle size={13} /> Abonar
               </button>
             )}
-            {showCobrar && f.saldoPendiente > 0 && (
+            {!isReadOnly && showCobrar && f.saldoPendiente > 0 && (
               <button className="btn btn-success btn-sm" onClick={() => openCobro(f)}>
                 <CheckCircle size={13} /> Cobrar
               </button>
@@ -817,7 +818,7 @@ export function FinancePage() {
                             <XCircle size={13} /> Cancelar
                           </button>
                         )}
-                        <button
+                        {!isReadOnly && <button
                           className="btn btn-primary btn-sm"
                           onClick={async () => {
                             setFpForm({
@@ -836,7 +837,7 @@ export function FinancePage() {
                           }}
                         >
                           <Plus size={13} /> Iniciar Pago
-                        </button>
+                        </button>}
                       </div>
                     </div>
                   )
@@ -874,7 +875,7 @@ export function FinancePage() {
                           Flete: <Currency value={fp.total} />
                         </div>
                       </div>
-                      <button
+                      {!isReadOnly && <button
                         className="btn btn-success btn-sm shrink-0"
                         onClick={() => {
                           setSelFp(fp.facturaProvId)
@@ -883,7 +884,7 @@ export function FinancePage() {
                         }}
                       >
                         <Plus size={13} /> Pagar flete
-                      </button>
+                      </button>}
                     </div>
                   )
                 })}
@@ -898,9 +899,9 @@ export function FinancePage() {
                 <h3 className="font-semibold text-gray-900">Cuentas por Pagar</h3>
                 <p className="text-xs text-gray-500 mt-0.5">Facturas de proveedores pendientes de pago</p>
               </div>
-              <button className="btn-primary" onClick={() => { setFpForm({ ...BLANK_FP, supplierId: suppliers[0]?.supplierId ?? '' }); setModal('new_fp') }}>
+              {!isReadOnly && <button className="btn-primary" onClick={() => { setFpForm({ ...BLANK_FP, supplierId: suppliers[0]?.supplierId ?? '' }); setModal('new_fp') }}>
                 <Plus size={15} /> Registrar Factura Proveedor
-              </button>
+              </button>}
             </div>
             <div className="flex flex-wrap gap-2 mb-2">
               <input
@@ -937,11 +938,11 @@ export function FinancePage() {
                   )},
                   { key: 'estatus', header: 'Estatus', render: (f) => <StatusBadge status={f.estatus} /> },
                   { key: 'acc', header: '', render: (f) => f.saldoPendiente > 0 ? (
-                    <button className="btn btn-success btn-sm" onClick={() => {
+                    !isReadOnly ? <button className="btn btn-success btn-sm" onClick={() => {
                       setSelFp(f.facturaProvId)
                       setPagoForm({ monto: f.saldoPendiente, formaPago: 'Transferencia', referencia: '', bancoId: '' })
                       setModal('pago_prov')
-                    }}>Pagar</button>
+                    }}>Pagar</button> : <span className="text-xs text-orange-600 font-semibold">Pendiente</span>
                   ) : <span className="text-xs text-green-600 font-semibold">Pagado</span> },
                 ]}
               />
@@ -1022,7 +1023,7 @@ export function FinancePage() {
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
-                {soloMXN.filter(b => b.activo).length > 0 && (
+                {!isReadOnly && soloMXN.filter(b => b.activo).length > 0 && (
                   <button className="btn-primary" onClick={() => { setCajaDeposito({ monto: caja?.saldo ?? 0, bancoDestinoId: soloMXN.filter(b => b.activo)[0]?.bancoId ?? '' }); setModal('caja_deposito') }}>
                     <Download size={14} /> Ingresar a Cuenta Bancaria
                   </button>
