@@ -192,6 +192,7 @@ export function QuotesPage() {
   const [saving, setSaving]         = useState(false)
   const [generating, setGenerating] = useState(false)
   // ── estados ───────────────────────────────────────────────────────────────
+  const [tab, setTab]               = useState<'activas' | 'aceptadas'>('activas')
   const [q, setQ]                   = useState('')
   const [statusFilter, setStatusFilter] = useState<CotizacionEstatus | 'todas'>('todas')
   const [modal, setModal]         = useState<'new' | 'preview' | 'del' | null>(null)
@@ -204,12 +205,18 @@ export function QuotesPage() {
   const shareRef = useRef<HTMLDivElement>(null)
 
   // ── búsqueda — incluye clientes eventuales ────────────────────────────────
-  const filtered = useMemo(() => quotes.filter(qt => {
-    const nombre = resolveNombre(qt, clients).toLowerCase()
-    const matchQ = [qt.folio, nombre].join(' ').toLowerCase().includes(q.toLowerCase())
-    const matchS = statusFilter === 'todas' || qt.estatus === statusFilter
-    return matchQ && matchS
-  }), [quotes, clients, q, statusFilter])
+  const activeQuotes   = useMemo(() => quotes.filter(qt => qt.estatus !== 'aceptada'), [quotes])
+  const acceptedQuotes = useMemo(() => quotes.filter(qt => qt.estatus === 'aceptada'), [quotes])
+
+  const filtered = useMemo(() => {
+    const base = tab === 'aceptadas' ? acceptedQuotes : activeQuotes
+    return base.filter(qt => {
+      const nombre = resolveNombre(qt, clients).toLowerCase()
+      const matchQ = [qt.folio, nombre].join(' ').toLowerCase().includes(q.toLowerCase())
+      const matchS = tab === 'aceptadas' || statusFilter === 'todas' || qt.estatus === statusFilter
+      return matchQ && matchS
+    })
+  }, [quotes, clients, q, statusFilter, tab, activeQuotes, acceptedQuotes])
 
   function handleExport() {
     exportToCsv(
@@ -449,14 +456,28 @@ export function QuotesPage() {
       {/* ── Panel de referencia de precios ──────────────────────────────── */}
       <PriceReferencePanel />
 
+      {/* ── Pestañas ─────────────────────────────────────────────────────── */}
+      <div className="tabs mb-0">
+        <button className={`tab ${tab === 'activas' ? 'tab-active' : ''}`} onClick={() => { setTab('activas'); setQ('') }}>
+          Cotizaciones
+          {activeQuotes.length > 0 && <span className="ml-1.5 text-xs font-bold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">{activeQuotes.length}</span>}
+        </button>
+        <button className={`tab ${tab === 'aceptadas' ? 'tab-active' : ''}`} onClick={() => { setTab('aceptadas'); setQ('') }}>
+          Cotizaciones Aceptadas
+          {acceptedQuotes.length > 0 && <span className="ml-1.5 text-xs font-bold bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">{acceptedQuotes.length}</span>}
+        </button>
+      </div>
+
       {/* ── Tabla ───────────────────────────────────────────────────────── */}
       <div className="card">
         <div className="flex flex-wrap gap-3 mb-4">
           <SearchBar value={q} onChange={setQ} placeholder="Buscar folio o cliente..." />
+          {tab === 'activas' && (
           <select className="select w-auto text-sm" value={statusFilter} onChange={e => setStatusFilter(e.target.value as CotizacionEstatus | 'todas')}>
             <option value="todas">Todos los estatus</option>
             {ESTADOS.map(e => <option key={e} value={e}>{e.charAt(0).toUpperCase() + e.slice(1)}</option>)}
           </select>
+          )}
         </div>
         <DataTable
           data={filtered}
