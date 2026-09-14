@@ -108,6 +108,7 @@ export function FinancePage() {
   const [selFv, setSelFv] = useState<string>('')
   const [selRecibo, setSelRecibo] = useState<FacturaVenta | null>(null)
   const [selRemision, setSelRemision] = useState<FacturaVenta | null>(null)
+  const [remisionOrder, setRemisionOrder] = useState<SalesOrder | null>(null)
   const remisionRef = useRef<HTMLDivElement>(null)
   const [esAbono, setEsAbono] = useState(false)
 
@@ -176,10 +177,13 @@ export function FinancePage() {
 
   async function openRemision(fv: FacturaVenta) {
     setSelRemision(fv)
+    setRemisionOrder(null)
     setModal('remision')
-    // Refrescar el pedido desde BD para asegurar items actualizados
-    if (fv.pedidoId) await fetchOrderById(fv.pedidoId)
-    setSelRemision({ ...fv }) // forzar re-render con datos frescos
+    // Refrescar pedido desde BD y guardarlo en estado local del modal
+    if (fv.pedidoId) {
+      const fresh = await fetchOrderById(fv.pedidoId)
+      setRemisionOrder(fresh)
+    }
   }
 
   async function buildRemisionPdf(fv: FacturaVenta): Promise<jsPDF> {
@@ -1663,7 +1667,7 @@ export function FinancePage() {
       {/* ── Modal Preview Remisión ─────────────────────────────────────────── */}
       {modal === 'remision' && selRemision && (() => {
         const client = clients.find(c => c.clientId === selRemision.clienteId)
-        const order  = getOrder(selRemision.pedidoId)
+        const order  = remisionOrder ?? getOrder(selRemision.pedidoId)
         return (
           <Modal
             title={`Remisión - ${selRemision.folio}`}
