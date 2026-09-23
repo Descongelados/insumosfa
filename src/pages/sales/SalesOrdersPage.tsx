@@ -4,6 +4,7 @@ import { useClientsStore } from '../../store/clientsStore'
 import { useProductsStore } from '../../store/productsStore'
 import { useLogisticsStore } from '../../store/logisticsStore'
 import { useFinanceStore } from '../../store/financeStore'
+import { useInventoryStore } from '../../store/inventoryStore'
 import { useAuthStore } from '../../store/authStore'
 import { hasRole } from '../../store/usersStore'
 import { DataTable } from '../../components/ui/DataTable'
@@ -14,7 +15,7 @@ import { Currency } from '../../components/ui/Currency'
 import { toast } from '../../store/toastStore'
 import { exportToCsv } from '../../utils/exportCsv'
 import type { SalesOrder, SalesOrderItem, PedidoEstatus } from '../../types'
-import { ShoppingCart, CreditCard as Edit2, Plus, Trash2, Download, Truck, CheckCircle2 } from 'lucide-react'
+import { ShoppingCart, CreditCard as Edit2, Plus, Trash2, Download, Truck, CheckCircle2, Ban } from 'lucide-react'
 
 const ESTADOS_PIPELINE: PedidoEstatus[] = ['nuevo', 'confirmado', 'embarcado']
 
@@ -24,6 +25,7 @@ export function SalesOrdersPage() {
   const { products, loadProducts, subscribeRealtime: subProducts } = useProductsStore()
   const { addEmbarque, loadLogistics, subscribeRealtime: subLogistics } = useLogisticsStore()
   const { addFacturaVenta, loadFinance, subscribeRealtime: subFinance } = useFinanceStore()
+  const { loadInventory, subscribeRealtime: subInventory } = useInventoryStore()
   const { user: me } = useAuthStore()
 
   useEffect(() => {
@@ -32,28 +34,32 @@ export function SalesOrdersPage() {
     void loadProducts()
     void loadLogistics()
     void loadFinance()
+    void loadInventory()
     const u1 = subOrders()
     const u2 = subClients()
     const u3 = subProducts()
     const u4 = subLogistics()
     const u5 = subFinance()
-    return () => { u1(); u2(); u3(); u4(); u5() }
+    const u6 = subInventory()
+    return () => { u1(); u2(); u3(); u4(); u5(); u6() }
   }, [])
 
   const [saving, setSaving] = useState(false)
-  const [tab, setTab] = useState<'pipeline' | 'completados'>('pipeline')
+  const [tab, setTab] = useState<'pipeline' | 'completados' | 'cancelados'>('pipeline')
   const [q, setQ] = useState('')
-  const [modal, setModal] = useState<'edit' | 'new' | 'del' | null>(null)
+  const [modal, setModal] = useState<'edit' | 'new' | 'del' | 'cancel' | null>(null)
   const [sel, setSel] = useState<SalesOrder | null>(null)
   const [delTarget, setDelTarget] = useState<SalesOrder | null>(null)
+  const [cancelTarget, setCancelTarget] = useState<SalesOrder | null>(null)
   const [form, setForm] = useState({ clienteId: '', fechaEntrega: '', notas: '', ivaPct: 16 as 0 | 8 | 16, items: [] as SalesOrderItem[] })
 
   const canDelete = me ? hasRole(me, 'director', 'administracion') : false
 
-  const pipeline    = orders.filter(o => o.estatus !== 'cerrado')
+  const pipeline    = orders.filter(o => o.estatus !== 'cerrado' && o.estatus !== 'cancelado')
   const completados = orders.filter(o => o.estatus === 'cerrado')
+  const cancelados  = orders.filter(o => o.estatus === 'cancelado')
 
-  const activeList = tab === 'pipeline' ? pipeline : completados
+  const activeList = tab === 'pipeline' ? pipeline : (tab === 'completados' ? completados : cancelados)
   const filtered = activeList.filter((o) => {
     const client = clients.find((c) => c.clientId === o.clienteId)
     return [o.folio, client?.razonSocial ?? ''].join(' ').toLowerCase().includes(q.toLowerCase())
@@ -65,6 +71,7 @@ export function SalesOrdersPage() {
     setModal('new')
   }
   function openDel(o: SalesOrder) { setDelTarget(o); setModal('del') }
+  function openCancel(o: SalesOrder) { setCancelTarget(o); setModal('cancel') }
 
   async function handleStatusChange(status: PedidoEstatus) {
     if (!sel) return
@@ -106,7 +113,7 @@ export function SalesOrdersPage() {
         })
 
         // 3. Marcar pedido como cerrado (embarque + CxC creados exitosamente)
-        await updateOrder(sel.pedidoId, { estatus: 'cerrado' })
+        await updateOrder(sel.pedidoId, { estatus: 'cerrado' }, me?.email)
         toast.success(`Pedido ${sel.folio} completado → Embarque en Logística + Factura en Finanzas CxC generados.`)
         setModal(null)
         setSel(null)
@@ -117,7 +124,7 @@ export function SalesOrdersPage() {
       }
       return
     } else {
-      await updateOrder(sel.pedidoId, { estatus: status })
+      await updateOrder(sel.pedidoId, { estatus: status }, me?.email)
       toast.info(`Pedido ${sel.folio} → ${status}`)
     }
 
@@ -148,8 +155,8 @@ export function SalesOrdersPage() {
       const subtotal = form.items.reduce((a, it) => a + it.cantidad * it.precio * (1 - it.descuento / 100), 0)
       const impuestos = subtotal * (form.ivaPct / 100)
       const total = subtotal + impuestos
-      const order = await addOrder({ ...form, fechaPedido: new Date().toISOString().split('T')[0], estatus: 'nuevo', subtotal, impuestos, total })
-      toast.success(`Pedido ${order.folio} creado.`)
+      const order = await addOrder({ ...form, fechaPedido: new Date().toISOString().split('T')[0], estatus: 'nuevo', subtotal, impuestos, total }, me?.email)
+      toast.success(`Pedido ${order.folio} creado y descontado del inventario.`)
       setModal(null)
       setForm({ clienteId: '', fechaEntrega: '', notas: '', ivaPct: 16, items: [] })
     } finally {
@@ -158,8 +165,24 @@ export function SalesOrdersPage() {
   }
 
   function handleDelete() {
-    if (delTarget) { deleteOrder(delTarget.pedidoId); toast.success(`Pedido ${delTarget.folio} eliminado.`) }
+    if (delTarget) {
+      deleteOrder(delTarget.pedidoId, me?.email)
+      toast.success(`Pedido ${delTarget.folio} eliminado y stock reintegrado.`)
+    }
     setModal(null); setDelTarget(null)
+  }
+
+  async function handleConfirmCancel() {
+    if (cancelTarget) {
+      setSaving(true)
+      try {
+        await updateOrder(cancelTarget.pedidoId, { estatus: 'cancelado' }, me?.email)
+        toast.success(`Pedido ${cancelTarget.folio} cancelado. El inventario ha sido devuelto.`)
+      } finally {
+        setSaving(false)
+      }
+    }
+    setModal(null); setCancelTarget(null)
   }
 
   const byStatusPipeline = ESTADOS_PIPELINE.map((e) => ({ e, count: pipeline.filter((o) => o.estatus === e).length }))
@@ -169,7 +192,7 @@ export function SalesOrdersPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title flex items-center gap-2"><ShoppingCart size={24} /> Pedidos de Venta</h1>
-          <p className="page-subtitle">{pipeline.length} en pipeline · {completados.length} completados</p>
+          <p className="page-subtitle">{pipeline.length} en pipeline · {completados.length} completados · {cancelados.length} cancelados</p>
         </div>
         <div className="flex gap-2">
           <button className="btn-secondary" onClick={() => exportToCsv(
@@ -182,7 +205,7 @@ export function SalesOrdersPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2">
+      <div className="flex gap-2 flex-wrap">
         <button
           className={`btn ${tab === 'pipeline' ? 'btn-primary' : 'btn-secondary'}`}
           onClick={() => { setTab('pipeline'); setQ('') }}
@@ -194,6 +217,12 @@ export function SalesOrdersPage() {
           onClick={() => { setTab('completados'); setQ('') }}
         >
           <CheckCircle2 size={15} /> Pedidos Completados ({completados.length})
+        </button>
+        <button
+          className={`btn ${tab === 'cancelados' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => { setTab('cancelados'); setQ('') }}
+        >
+          <Ban size={15} /> Cancelados ({cancelados.length})
         </button>
       </div>
 
@@ -228,9 +257,14 @@ export function SalesOrdersPage() {
               key: 'acc', header: '', render: (o) => (
                 <div className="flex gap-1">
                   {tab === 'pipeline' && (
-                    <button className="btn btn-secondary btn-sm" onClick={() => openEdit(o)}>
-                      <Edit2 size={13} /> Estatus
-                    </button>
+                    <>
+                      <button className="btn btn-secondary btn-sm" onClick={() => openEdit(o)}>
+                        <Edit2 size={13} /> Estatus
+                      </button>
+                      <button className="btn btn-warning btn-sm" onClick={() => openCancel(o)} title="Cancelar pedido">
+                        <Ban size={13} /> Cancelar
+                      </button>
+                    </>
                   )}
                   {canDelete && (
                     <button className="btn btn-danger btn-sm" onClick={() => openDel(o)} title="Eliminar">
@@ -247,7 +281,18 @@ export function SalesOrdersPage() {
       {/* Edit status modal */}
       {modal === 'edit' && sel && (
         <Modal title={`Pedido ${sel.folio}`} onClose={() => { setModal(null); setSel(null) }} size="lg"
-          footer={<button className="btn-secondary" onClick={() => { setModal(null); setSel(null) }}>Cerrar</button>}
+          footer={
+            <div className="flex gap-2 justify-between w-full">
+              {sel.estatus !== 'cancelado' && (
+                <button className="btn-danger btn-sm" onClick={() => { setCancelTarget(sel); setModal('cancel') }}>
+                  <Ban size={13} /> Cancelar Pedido (Revertir Stock)
+                </button>
+              )}
+              <div className="flex gap-2 ml-auto">
+                <button className="btn-secondary" onClick={() => { setModal(null); setSel(null) }}>Cerrar</button>
+              </div>
+            </div>
+          }
         >
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3 text-sm">
@@ -384,13 +429,36 @@ export function SalesOrdersPage() {
         </Modal>
       )}
 
+      {/* Cancel confirm */}
+      {modal === 'cancel' && cancelTarget && (
+        <Modal title="Cancelar pedido" onClose={() => setModal(null)}
+          footer={
+            <>
+              <button className="btn-secondary" onClick={() => setModal(null)}>Cerrar</button>
+              <button className="btn-danger" onClick={handleConfirmCancel} disabled={saving}>
+                <Ban size={14} /> {saving ? 'Cancelando...' : 'Confirmar Cancelación'}
+              </button>
+            </>
+          }
+        >
+          <div className="space-y-3 text-sm text-gray-700">
+            <p>
+              ¿Deseas cancelar el pedido <strong>{cancelTarget.folio}</strong>?
+            </p>
+            <p className="p-3 bg-amber-50 border border-amber-200 rounded text-amber-800 text-xs">
+              ⚠️ Al cancelar el pedido, las cantidades descontadas de los productos se devolverán automáticamente al inventario (registrando una devolución en el Kardex).
+            </p>
+          </div>
+        </Modal>
+      )}
+
       {/* Delete confirm */}
       {modal === 'del' && delTarget && (
         <Modal title="Eliminar pedido" onClose={() => setModal(null)}
           footer={<><button className="btn-secondary" onClick={() => setModal(null)}>Cancelar</button><button className="btn-danger" onClick={handleDelete}><Trash2 size={14} /> Eliminar</button></>}
         >
           <p className="text-sm text-gray-700">
-            ¿Eliminar el pedido <strong>{delTarget.folio}</strong>? Esta acción no se puede deshacer.
+            ¿Eliminar el pedido <strong>{delTarget.folio}</strong>? Esta acción no se puede deshacer y devolverá las existencias al inventario.
           </p>
         </Modal>
       )}

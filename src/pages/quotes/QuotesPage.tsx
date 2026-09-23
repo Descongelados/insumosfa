@@ -332,9 +332,9 @@ export function QuotesPage() {
         estatus: 'nuevo', ivaPct: 16,
         items: quote.items.map(i => ({ ...i, detalleId: `sod${Date.now()}${Math.random()}` })),
         subtotal: quote.subtotal, impuestos: quote.impuestos, total: quote.total, notas: quote.notas ?? '',
-      })
+      }, me?.email)
       void updateQuote(quote.cotizacionId, { estatus: 'aceptada' })
-      toast.success(`Pedido ${order.folio} creado desde ${quote.folio}.`)
+      toast.success(`Pedido ${order.folio} creado desde ${quote.folio} y descontado de inventario.`)
       setModal(null)
     } catch (err) {
       console.error('convertirAPedido error:', err)
