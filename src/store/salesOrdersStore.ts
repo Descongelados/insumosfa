@@ -90,7 +90,7 @@ export const useSalesOrdersStore = create<SalesOrdersState>()((set, get) => ({
       .insert({
         folio, cliente_id: data.clienteId, cliente_nombre: data.clienteNombre ?? '',
         cotizacion_id: data.cotizacionId ?? null,
-        fecha_pedido: data.fechaPedido, fechaEntrega: data.fechaEntrega,
+        fecha_pedido: data.fechaPedido, fecha_entrega: data.fechaEntrega,
         estatus: data.estatus, iva_pct: data.ivaPct ?? 16, items: data.items,
         subtotal: data.subtotal, impuestos: data.impuestos, total: data.total, notas: data.notas,
       })
