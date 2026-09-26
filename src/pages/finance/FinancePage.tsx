@@ -56,7 +56,7 @@ export function FinancePage() {
   } = useFinanceStore()
   const { clients, loadClients, subscribeRealtime: subClients } = useClientsStore()
   const { suppliers, loadSuppliers, subscribeRealtime: subSuppliers } = useSuppliersStore()
-  const { orders, fetchOrderById, updateOrder } = useSalesOrdersStore()
+  const { orders, loadOrders, subscribeRealtime: subOrders, fetchOrderById, updateOrder } = useSalesOrdersStore()
   const { products } = useProductsStore()
   const { ordenesCompra, loadPurchases, subscribeRealtime: subPurchases, updateOrdenCompra } = usePurchasesStore()
   const { embarques, transportistas, loadLogistics, subscribeRealtime: subLogistics, updateEmbarque } = useLogisticsStore()
@@ -69,19 +69,22 @@ export function FinancePage() {
     void loadClients()
     void loadSuppliers()
     void loadPurchases()
+    void loadOrders()
     void loadLogistics()
     const u1 = subFinance()
     const u2 = subClients()
     const u3 = subSuppliers()
     const u4 = subPurchases()
-    const u5 = subLogistics()
-    return () => { u1(); u2(); u3(); u4(); u5() }
+    const u5 = subOrders()
+    const u6 = subLogistics()
+    return () => { u1(); u2(); u3(); u4(); u5(); u6() }
   }, [])
 
   const isReadOnly       = me ? hasRole(me, 'cobranza') && !hasRole(me, 'director', 'administracion') : false
   const canManageBancos  = me ? hasRole(me, 'director', 'administracion') : false
   const canManageGastos  = me ? hasRole(me, 'director', 'administracion') : false
   const canCancelPagoCxP = me ? hasRole(me, 'director', 'administracion') : false
+  const canCancelPedidoCxc = me ? hasRole(me, 'director', 'administracion') : false
 
   const [tab, setTab] = useState<'pagos' | 'cxc' | 'cxp' | 'bancos' | 'gastos'>('pagos')
   const [cxcTab, setCxcTab] = useState<'cobrar' | 'pagadas'>('cobrar')
@@ -443,7 +446,7 @@ export function FinancePage() {
         const embarqueBloquea = embarqueAsociado
           ? (['enTransito', 'entregado', 'cerrado'] as Embarque['estatus'][]).includes(embarqueAsociado.estatus)
           : false
-        const puedecancelarPedido = showCobrar && !!pedido && !embarqueBloquea && f.estatus !== 'cancelada'
+        const puedecancelarPedido = canCancelPedidoCxc && showCobrar && !!pedido && !embarqueBloquea && f.estatus !== 'cancelada'
         return (
           <div className="flex gap-1 flex-wrap justify-end">
             <button className="btn btn-secondary btn-sm" onClick={() => openRecibo(f)} title="Ver recibo">
