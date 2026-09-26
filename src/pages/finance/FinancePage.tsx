@@ -19,7 +19,7 @@ import { Modal } from '../../components/ui/Modal'
 import { Currency } from '../../components/ui/Currency'
 import { RemisionPDF } from '../../components/RemisionPDF'
 import { toast } from '../../store/toastStore'
-import type { FacturaVenta, SalesOrder, Banco, GastoNegocio } from '../../types'
+import type { FacturaVenta, SalesOrder, Banco, GastoNegocio, Embarque } from '../../types'
 import { DollarSign, CreditCard, Building, Eye, CircleCheck as CheckCircle, Clock, FileText, Plus, CreditCard as Edit2, Trash2, History, CirclePlus as PlusCircle, Receipt, ShoppingCart, XCircle, Truck, Download, FileDown, Share2 } from 'lucide-react'
 import { exportToCsv } from '../../utils/exportCsv'
 
@@ -49,13 +49,14 @@ export function FinancePage() {
     loadFinance, subscribeRealtime: subFinance,
     addPagoCliente, addPagoProveedor,
     addFacturaProveedor,
+    updateFacturaVenta,
     addBanco, updateBanco, deleteBanco,
     addGasto, updateGasto, deleteGasto,
     depositarACuenta,
   } = useFinanceStore()
   const { clients, loadClients, subscribeRealtime: subClients } = useClientsStore()
   const { suppliers, loadSuppliers, subscribeRealtime: subSuppliers } = useSuppliersStore()
-  const { orders, fetchOrderById } = useSalesOrdersStore()
+  const { orders, fetchOrderById, updateOrder } = useSalesOrdersStore()
   const { products } = useProductsStore()
   const { ordenesCompra, loadPurchases, subscribeRealtime: subPurchases, updateOrdenCompra } = usePurchasesStore()
   const { embarques, transportistas, loadLogistics, subscribeRealtime: subLogistics } = useLogisticsStore()
@@ -99,12 +100,14 @@ export function FinancePage() {
     | 'remision'
     | 'new_fp'
     | 'cancel_oc_pago'
+    | 'cancel_pedido_cxc'
     | 'new_banco' | 'edit_banco' | 'del_banco'
     | 'new_gasto' | 'edit_gasto' | 'del_gasto'
     | 'caja_deposito'
     | null
   const [modal, setModal] = useState<ModalType>(null)
   const [selCancelOC, setSelCancelOC] = useState<string | null>(null)
+  const [selCancelPedidoCxc, setSelCancelPedidoCxc] = useState<FacturaVenta | null>(null)
 
   const [selFv, setSelFv] = useState<string>('')
   const [selRecibo, setSelRecibo] = useState<FacturaVenta | null>(null)
@@ -433,6 +436,14 @@ export function FinancePage() {
       { key: 'estatus', header: 'Estatus', render: (f: FacturaVenta) => <StatusBadge status={f.estatus} /> },
       { key: 'acc', header: '', render: (f: FacturaVenta) => {
         const pagos = getPagos(f.facturaId)
+        const pedido = getOrder(f.pedidoId)
+        const embarqueAsociado = pedido
+          ? embarques.find(e => e.pedidoId === pedido.pedidoId)
+          : undefined
+        const embarqueBloquea = embarqueAsociado
+          ? (['enTransito', 'entregado', 'cerrado'] as Embarque['estatus'][]).includes(embarqueAsociado.estatus)
+          : false
+        const puedecancelarPedido = showCobrar && !!pedido && !embarqueBloquea && f.estatus !== 'cancelada'
         return (
           <div className="flex gap-1 flex-wrap justify-end">
             <button className="btn btn-secondary btn-sm" onClick={() => openRecibo(f)} title="Ver recibo">
@@ -455,6 +466,15 @@ export function FinancePage() {
             {!isReadOnly && showCobrar && f.saldoPendiente > 0 && (
               <button className="btn btn-success btn-sm" onClick={() => openCobro(f)}>
                 <CheckCircle size={13} /> Cobrar
+              </button>
+            )}
+            {puedecancelarPedido && (
+              <button
+                className="btn btn-danger btn-sm"
+                title="Cancelar orden de compra"
+                onClick={() => { setSelCancelPedidoCxc(f); setModal('cancel_pedido_cxc') }}
+              >
+                <XCircle size={13} /> Cancelar OC
               </button>
             )}
           </div>
@@ -1373,6 +1393,52 @@ export function FinancePage() {
               <p>¿Cancelar el proceso de pago de la OC <strong className="font-mono">{oc.folio}</strong>?</p>
               <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
                 La orden regresará a Compras con estatus <strong>confirmada</strong> para ser procesada nuevamente.
+              </div>
+            </div>
+          </Modal>
+        ) : null
+      })()}
+
+      {/* Cancelar Pedido de CxC */}
+      {modal === 'cancel_pedido_cxc' && selCancelPedidoCxc && (() => {
+        const fv = selCancelPedidoCxc
+        const pedido = getOrder(fv.pedidoId)
+        const embarqueAsociado = pedido
+          ? embarques.find(e => e.pedidoId === pedido.pedidoId)
+          : undefined
+        const closeFn = () => { setModal(null); setSelCancelPedidoCxc(null) }
+        return pedido ? (
+          <Modal
+            title="Cancelar orden de venta"
+            onClose={closeFn}
+            footer={
+              <>
+                <button className="btn-secondary" onClick={closeFn}>No, mantener</button>
+                <button className="btn-danger" onClick={async () => {
+                  await updateOrder(pedido.pedidoId, { estatus: 'cerrado' })
+                  await updateFacturaVenta(fv.facturaId, { estatus: 'cancelada' })
+                  toast.warning(`Pedido ${pedido.folio} cancelado y factura ${fv.folio} marcada como cancelada.`)
+                  closeFn()
+                }}>
+                  <XCircle size={14} /> Sí, cancelar pedido
+                </button>
+              </>
+            }
+          >
+            <div className="space-y-3 text-sm text-gray-700">
+              <p>
+                ¿Cancelar el pedido <strong className="font-mono">{pedido.folio}</strong> asociado a la factura{' '}
+                <strong className="font-mono">{fv.folio}</strong>?
+              </p>
+              {embarqueAsociado && (
+                <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-800">
+                  <Truck size={14} />
+                  Embarque <strong className="font-mono">{embarqueAsociado.folio}</strong> en estatus{' '}
+                  <strong>{embarqueAsociado.estatus}</strong> — aún no ha sido despachado.
+                </div>
+              )}
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-800">
+                El pedido pasará a <strong>cerrado</strong> y la factura quedará como <strong>cancelada</strong>. Esta acción no se puede deshacer.
               </div>
             </div>
           </Modal>
