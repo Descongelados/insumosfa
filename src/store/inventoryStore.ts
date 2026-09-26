@@ -138,22 +138,21 @@ export const useInventoryStore = create<InventoryState>()((set, get) => ({
   },
 
   async applyMovimiento({ productId, tipo, cantidad, documentoOrigen, usuario, notas = '' }) {
-    const existing = get().inventario.find(i => i.productId === productId)
+    // Leer el stock actual directamente desde la BD para evitar usar
+    // un estado local desactualizado (problema en cancelaciones/eliminaciones).
+    const { data: freshRow } = await supabase
+      .from('erp_inventory')
+      .select('*')
+      .eq('product_id', productId)
+      .maybeSingle()
+
+    const existing = freshRow ? toInv(freshRow as DbInv) : null
     const anterior = existing?.cantidadDisponible ?? 0
     const esEntrada = ['EntradaCompra', 'Devolucion'].includes(tipo)
     const nueva = esEntrada ? anterior + cantidad : Math.max(0, anterior - cantidad)
 
-    // Optimistic update
+    // Actualizar stock en BD
     if (existing) {
-      set(s => ({
-        inventario: s.inventario.map(i =>
-          i.productId === productId ? { ...i, cantidadDisponible: nueva } : i,
-        ),
-      }))
-    }
-
-    if (existing) {
-      // updated_at lo maneja el trigger en BD
       await supabase
         .from('erp_inventory')
         .update({ cantidad_disponible: nueva })
@@ -163,15 +162,31 @@ export const useInventoryStore = create<InventoryState>()((set, get) => ({
         product_id: productId, cantidad_disponible: nueva,
         cantidad_comprometida: 0, cantidad_transito: 0,
       })
-      // Recargar para obtener el id asignado
-      const { data: fresh } = await supabase.from('erp_inventory').select('*').eq('product_id', productId)
-      if (fresh) set(s => ({ inventario: [...s.inventario, ...(fresh as DbInv[]).map(toInv)] }))
     }
 
+    // Registrar movimiento en kardex
     await supabase.from('erp_kardex').insert({
       product_id: productId, tipo, cantidad, documento_origen: documentoOrigen,
       usuario, notas, fecha: new Date().toISOString().split('T')[0],
       existencia_anterior: anterior, existencia_nueva: nueva,
+    })
+
+    // Sincronizar estado local
+    set(s => {
+      const found = s.inventario.find(i => i.productId === productId)
+      if (found) {
+        return {
+          inventario: s.inventario.map(i =>
+            i.productId === productId ? { ...i, cantidadDisponible: nueva } : i,
+          ),
+        }
+      }
+      return {
+        inventario: [...s.inventario, {
+          inventarioId: '', productId,
+          cantidadDisponible: nueva, cantidadComprometida: 0, cantidadTransito: 0,
+        }],
+      }
     })
   },
 }))
