@@ -1479,26 +1479,14 @@ export function FinancePage() {
                     await updateEmbarque(embarqueAsoc.embarqueId, { estatus: 'cancelado' })
                   }
 
-                  // 2. Registrar en kardex la cancelación por cada item del pedido
-                  for (const item of pedido.items) {
-                    await applyMovimiento({
-                      productId: item.productId,
-                      tipo: 'Ajuste',
-                      cantidad: 0,
-                      documentoOrigen: pedido.folio,
-                      usuario: me?.name ?? 'Finanzas',
-                      notas: `Cancelación pedido ${pedido.folio} — factura ${fv.folio}${embarqueAsoc ? ` — embarque ${embarqueAsoc.folio} cancelado` : ''}. Mercancía regresa a disponible.`,
-                    })
-                  }
-
-                  // 3. Cerrar el pedido de venta
-                  await updateOrder(pedido.pedidoId, { estatus: 'cerrado' })
+                  // 2. Cancelar el pedido de venta (revertirá automáticamente el stock y registrará Devolución en Kardex)
+                  await updateOrder(pedido.pedidoId, { estatus: 'cancelado' }, me?.email || me?.name || 'Finanzas')
 
                   // 4. Marcar la factura como cancelada
                   await updateFacturaVenta(fv.facturaId, { estatus: 'cancelada' })
 
                   toast.warning(
-                    `Pedido ${pedido.folio} cerrado y factura ${fv.folio} cancelada.` +
+                    `Pedido ${pedido.folio} cancelado (stock devuelto) y factura ${fv.folio} cancelada.` +
                     (embarqueAsoc ? ` Embarque ${embarqueAsoc.folio} cancelado.` : '')
                   )
                   closeFn()
@@ -1529,7 +1517,7 @@ export function FinancePage() {
               )}
 
               <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-800">
-                El pedido pasará a <strong>cerrado</strong>, la factura a <strong>cancelada</strong> y se registrará la cancelación en el kardex. Esta acción no se puede deshacer.
+                El pedido pasará a <strong>cancelado</strong> (el stock descontado se devolverá automáticamente al inventario), la factura a <strong>cancelada</strong> y el embarque (si existe y no ha salido) a <strong>cancelado</strong>. Esta acción no se puede deshacer.
               </div>
             </div>
           </Modal>
