@@ -471,10 +471,10 @@ export function FinancePage() {
             {puedecancelarPedido && (
               <button
                 className="btn btn-danger btn-sm"
-                title="Cancelar orden de compra"
+                title="Cancelar pedido de venta"
                 onClick={() => { setSelCancelPedidoCxc(f); setModal('cancel_pedido_cxc') }}
               >
-                <XCircle size={13} /> Cancelar OC
+                <XCircle size={13} /> Cancelar Pedido
               </button>
             )}
           </div>
@@ -1453,21 +1453,51 @@ export function FinancePage() {
       {modal === 'cancel_pedido_cxc' && selCancelPedidoCxc && (() => {
         const fv = selCancelPedidoCxc
         const pedido = getOrder(fv.pedidoId)
-        const embarqueAsociado = pedido
-          ? embarques.find(e => e.pedidoId === pedido.pedidoId)
-          : undefined
+        if (!pedido) return null
+
+        // Embarque asociado al pedido de venta (vínculo por pedidoId)
+        const ESTADOS_BLOQUEANTES_CXC: Embarque['estatus'][] = ['enTransito', 'entregado', 'cerrado', 'cancelado']
+        const embarqueAsoc = embarques.find(e =>
+          e.pedidoId === pedido.pedidoId &&
+          !ESTADOS_BLOQUEANTES_CXC.includes(e.estatus)
+        )
         const closeFn = () => { setModal(null); setSelCancelPedidoCxc(null) }
-        return pedido ? (
+
+        return (
           <Modal
-            title="Cancelar orden de venta"
+            title="Cancelar pedido de venta"
             onClose={closeFn}
             footer={
               <>
                 <button className="btn-secondary" onClick={closeFn}>No, mantener</button>
                 <button className="btn-danger" onClick={async () => {
+                  // 1. Cancelar embarque asociado si existe
+                  if (embarqueAsoc) {
+                    await updateEmbarque(embarqueAsoc.embarqueId, { estatus: 'cancelado' })
+                  }
+
+                  // 2. Registrar en kardex la cancelación por cada item del pedido
+                  for (const item of pedido.items) {
+                    await applyMovimiento({
+                      productId: item.productId,
+                      tipo: 'Ajuste',
+                      cantidad: 0,
+                      documentoOrigen: pedido.folio,
+                      usuario: me?.name ?? 'Finanzas',
+                      notas: `Cancelación pedido ${pedido.folio} — factura ${fv.folio}${embarqueAsoc ? ` — embarque ${embarqueAsoc.folio} cancelado` : ''}. Mercancía regresa a disponible.`,
+                    })
+                  }
+
+                  // 3. Cerrar el pedido de venta
                   await updateOrder(pedido.pedidoId, { estatus: 'cerrado' })
+
+                  // 4. Marcar la factura como cancelada
                   await updateFacturaVenta(fv.facturaId, { estatus: 'cancelada' })
-                  toast.warning(`Pedido ${pedido.folio} cancelado y factura ${fv.folio} marcada como cancelada.`)
+
+                  toast.warning(
+                    `Pedido ${pedido.folio} cerrado y factura ${fv.folio} cancelada.` +
+                    (embarqueAsoc ? ` Embarque ${embarqueAsoc.folio} cancelado.` : '')
+                  )
                   closeFn()
                 }}>
                   <XCircle size={14} /> Sí, cancelar pedido
@@ -1480,19 +1510,27 @@ export function FinancePage() {
                 ¿Cancelar el pedido <strong className="font-mono">{pedido.folio}</strong> asociado a la factura{' '}
                 <strong className="font-mono">{fv.folio}</strong>?
               </p>
-              {embarqueAsociado && (
-                <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-800">
-                  <Truck size={14} />
-                  Embarque <strong className="font-mono">{embarqueAsociado.folio}</strong> en estatus{' '}
-                  <strong>{embarqueAsociado.estatus}</strong> — aún no ha sido despachado.
+
+              {embarqueAsoc ? (
+                <div className="flex items-start gap-2 p-3 bg-orange-50 border border-orange-200 rounded-lg text-xs text-orange-800">
+                  <Truck size={14} className="mt-0.5 shrink-0" />
+                  <span>
+                    Se cancelará también el embarque <strong className="font-mono">{embarqueAsoc.folio}</strong>{' '}
+                    (estatus actual: <strong>{embarqueAsoc.estatus}</strong>).
+                  </span>
+                </div>
+              ) : (
+                <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-600">
+                  No hay embarque activo asociado a este pedido.
                 </div>
               )}
+
               <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-800">
-                El pedido pasará a <strong>cerrado</strong> y la factura quedará como <strong>cancelada</strong>. Esta acción no se puede deshacer.
+                El pedido pasará a <strong>cerrado</strong>, la factura a <strong>cancelada</strong> y se registrará la cancelación en el kardex. Esta acción no se puede deshacer.
               </div>
             </div>
           </Modal>
-        ) : null
+        )
       })()}
 
       {/* Pago Proveedor */}
