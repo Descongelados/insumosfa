@@ -11,7 +11,7 @@ import { StatusBadge } from '../../components/ui/StatusBadge'
 import { Modal } from '../../components/ui/Modal'
 import { Currency } from '../../components/ui/Currency'
 import type { Embarque, EmbarqueEstatus, EmbarqueOCRef, Transportista } from '../../types'
-import { Truck, Plus, CreditCard as Edit2, Trash2, CircleAlert as AlertCircle, ToggleLeft, ToggleRight, CheckCircle, Send, Save } from 'lucide-react'
+import { Truck, Plus, CreditCard as Edit2, Trash2, CircleAlert as AlertCircle, ToggleLeft, ToggleRight, CheckCircle, Send, Save, Ban } from 'lucide-react'
 
 // ─── constantes ────────────────────────────────────────────────────────────
 const ESTADOS_PIPELINE: EmbarqueEstatus[] = ['solicitado', 'programado', 'recolectado', 'enTransito', 'entregado']
@@ -46,7 +46,7 @@ export function LogisticsPage() {
   const canDeleteEmbarque = me ? hasRole(me, 'director', 'operaciones') : false
 
   // ── estado de pestañas ───────────────────────────────────────────────────
-  const [tab, setTab] = useState<'embarques' | 'entregados' | 'transportistas'>('embarques')
+  const [tab, setTab] = useState<'embarques' | 'entregados' | 'cancelados' | 'transportistas'>('embarques')
 
   // ── búsqueda ─────────────────────────────────────────────────────────────
   const [q, setQ] = useState('')
@@ -97,8 +97,9 @@ export function LogisticsPage() {
   const [editTransIdTrans, setEditTransIdTrans] = useState<string | null>(null)
 
   // ── embarques por grupo ──────────────────────────────────────────────────
-  const embarquesActivos  = embarques.filter(e => !['cerrado', 'entregado', 'cancelado'].includes(e.estatus))
+  const embarquesActivos    = embarques.filter(e => !['cerrado', 'entregado', 'cancelado'].includes(e.estatus))
   const embarquesEntregados = embarques.filter(e => e.estatus === 'entregado')
+  const embarquesCancelados = embarques.filter(e => e.estatus === 'cancelado')
 
   // ── filtros ──────────────────────────────────────────────────────────────
   const filteredEmb = embarquesActivos.filter(e =>
@@ -106,6 +107,9 @@ export function LogisticsPage() {
   )
   const filteredEntregados = embarquesEntregados.filter(e =>
     [e.folio, e.destino, e.origen].join(' ').toLowerCase().includes(q.toLowerCase())
+  )
+  const filteredCancelados = embarquesCancelados.filter(e =>
+    [e.folio, e.destino, e.origen, e.notas].join(' ').toLowerCase().includes(q.toLowerCase())
   )
   const filteredTrans = transportistas.filter(t =>
     [t.nombre, t.contacto].join(' ').toLowerCase().includes(q.toLowerCase())
@@ -347,7 +351,7 @@ export function LogisticsPage() {
       </div>
 
       {/* Pestañas */}
-      <div className="flex gap-2">
+      <div className="flex gap-2 flex-wrap">
         <button
           className={`btn ${tab === 'embarques' ? 'btn-primary' : 'btn-secondary'}`}
           onClick={() => { setTab('embarques'); setQ('') }}
@@ -359,6 +363,12 @@ export function LogisticsPage() {
           onClick={() => { setTab('entregados'); setQ('') }}
         >
           <CheckCircle size={15} /> Entregados ({embarquesEntregados.length})
+        </button>
+        <button
+          className={`btn ${tab === 'cancelados' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => { setTab('cancelados'); setQ('') }}
+        >
+          <Ban size={15} /> Cancelados ({embarquesCancelados.length})
         </button>
         <button
           className={`btn ${tab === 'transportistas' ? 'btn-primary' : 'btn-secondary'}`}
@@ -458,6 +468,52 @@ export function LogisticsPage() {
         </div>
       )}
 
+      {/* ── TABLA CANCELADOS ─────────────────────────────────────────────── */}
+      {tab === 'cancelados' && (
+        <div className="card">
+          <div className="flex justify-between mb-4">
+            <SearchBar value={q} onChange={setQ} placeholder="Buscar folio, destino, origen o notas..." />
+          </div>
+          {filteredCancelados.length === 0 ? (
+            <div className="text-center py-12 text-gray-400">
+              <Ban size={32} className="mx-auto mb-3 opacity-30" />
+              <p className="text-sm">No hay embarques cancelados.</p>
+            </div>
+          ) : (
+            <DataTable
+              data={filteredCancelados}
+              rowKey={e => e.embarqueId}
+              columns={[
+                { key: 'folio', header: 'Folio', render: e => <span className="font-mono font-semibold text-gray-500">{e.folio}</span> },
+                { key: 'ocs', header: 'OC(s) / Pedido', render: e => {
+                  if (e.ordenesIds?.length) {
+                    return <span className="text-xs font-mono text-gray-500">{e.ordenesIds.map(r => r.folio).join(', ')}</span>
+                  }
+                  if (e.notas) {
+                    return <span className="text-xs text-gray-400 italic">{e.notas}</span>
+                  }
+                  return <span className="text-gray-300 text-xs">—</span>
+                }},
+                { key: 'origen', header: 'Origen', render: e => <span className="text-xs text-gray-500">{e.origen || '—'}</span> },
+                { key: 'destino', header: 'Destino', render: e => <span className="text-xs text-gray-500">{e.destino || '—'}</span> },
+                { key: 'trans', header: 'Transportista', render: e =>
+                  transportistas.find(t => t.transportistaId === e.transportistaId)?.nombre
+                    ?? <span className="text-gray-400 text-xs">—</span>
+                },
+                { key: 'fechaProg', header: 'F. Programada', render: e => <span className="text-xs text-gray-500">{e.fechaProgramada || '—'}</span> },
+                { key: 'flete', header: 'Flete', render: e => <Currency value={e.costoFlete} /> },
+                { key: 'estatus', header: 'Estatus', render: e => <StatusBadge status={e.estatus} /> },
+                {
+                  key: 'acc', header: '', render: e => (
+                    <button className="btn btn-secondary btn-sm" onClick={() => openViewEmb(e)}>Ver</button>
+                  )
+                },
+              ]}
+            />
+          )}
+        </div>
+      )}
+
       {/* ── TABLA TRANSPORTISTAS ────────────────────────────────────────── */}
       {tab === 'transportistas' && (
         <div className="card">
@@ -527,7 +583,7 @@ export function LogisticsPage() {
                 </button>
               )}
               {/* Guardar transportista / origen cuando NO está en solicitado */}
-              {selEmb.estatus !== 'solicitado' && (editTransId !== (selEmb.transportistaId ?? '') || editOrigen !== (selEmb.origen ?? '')) && (
+              {selEmb.estatus !== 'solicitado' && selEmb.estatus !== 'cancelado' && (editTransId !== (selEmb.transportistaId ?? '') || editOrigen !== (selEmb.origen ?? '')) && (
                 <button className="btn btn-warning" onClick={() => void handleSaveTransportista()}>
                   <Edit2 size={13} /> Guardar cambios
                 </button>
@@ -552,175 +608,190 @@ export function LogisticsPage() {
           size="lg"
         >
           <div className="space-y-5">
+            {/* Banner de cancelado */}
+            {selEmb.estatus === 'cancelado' && (
+              <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
+                <Ban size={15} className="flex-shrink-0 mt-0.5" />
+                <span>Este embarque fue <strong>cancelado</strong>. Se muestra solo como registro histórico.</span>
+              </div>
+            )}
+
             {/* Info estática del embarque */}
             <div className="grid grid-cols-2 gap-3 text-sm p-4 bg-gray-50 rounded-xl border border-gray-200">
               <div>
                 <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">Origen</span>
-                <span className="text-gray-800">{selEmb.origen}</span>
+                <span className="text-gray-800">{selEmb.origen || '—'}</span>
               </div>
               <div>
                 <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">Estatus</span>
                 <StatusBadge status={selEmb.estatus} />
               </div>
-              {selEmb.estatus !== 'solicitado' && (
-                <>
-                  <div>
-                    <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">Destino</span>
-                    <span className="text-gray-800">{selEmb.destino}</span>
+              <div>
+                <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">Destino</span>
+                <span className="text-gray-800">{selEmb.destino || '—'}</span>
+              </div>
+              <div>
+                <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">Flete</span>
+                <span className="text-gray-800"><Currency value={selEmb.costoFlete} /></span>
+              </div>
+              <div>
+                <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">F. Programada</span>
+                <span className="text-gray-800">{selEmb.fechaProgramada || '—'}</span>
+              </div>
+              {(selEmb.ordenesIds?.length ?? 0) > 0 && (
+                <div>
+                  <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">OC(s)</span>
+                  <span className="text-xs font-mono text-blue-700">{selEmb.ordenesIds!.map(r => r.folio).join(', ')}</span>
+                </div>
+              )}
+              {selEmb.notas && (
+                <div className="col-span-2">
+                  <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">Notas</span>
+                  <span className="text-gray-700 text-xs">{selEmb.notas}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Edición solo cuando NO está cancelado */}
+            {selEmb.estatus !== 'cancelado' && (
+              <>
+                {/* ── Edición de campos cuando estatus = "solicitado" ─────────── */}
+                {selEmb.estatus === 'solicitado' && (
+                  <div className="space-y-4 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                    <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">
+                      Datos del embarque — editable en estado Solicitado
+                    </p>
+
+                    {/* OC de compras — solo lectura */}
+                    {(selEmb.ordenesIds?.length ?? 0) > 0 && (
+                      <div className="form-group">
+                        <label className="label">Orden(es) de Compra</label>
+                        <div className="input bg-gray-100 text-gray-700 font-mono text-sm cursor-not-allowed">
+                          {selEmb.ordenesIds!.map(r => `${r.folio} (${r.kgEmbarcados} kg)`).join(', ')}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Origen */}
+                    <div className="form-group">
+                      <label className="label">Origen del envío</label>
+                      <input
+                        className="input"
+                        value={editOrigen}
+                        onChange={e => setEditOrigen(e.target.value)}
+                        placeholder="Ej. Bodega Tepatitlán, Jalisco"
+                      />
+                    </div>
+
+                    {/* Destino */}
+                    <div className="form-group">
+                      <label className="label">Destino</label>
+                      <input
+                        className="input"
+                        value={editDestino}
+                        onChange={e => setEditDestino(e.target.value)}
+                        placeholder="Dirección o ciudad de destino"
+                      />
+                    </div>
+
+                    {/* Cantidad a transportar y fecha programada en grid */}
+                    <div className="form-grid">
+                      <div className="form-group">
+                        <label className="label">Cantidad a transportar (kg)</label>
+                        <input
+                          type="number"
+                          className="input"
+                          value={editCantidad}
+                          min={0}
+                          onChange={e => setEditCantidad(Number(e.target.value))}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label className="label">Fecha programada</label>
+                        <input
+                          type="date"
+                          className="input"
+                          value={editFechaProgramada}
+                          onChange={e => setEditFechaProgramada(e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Costo del flete */}
+                    <div className="form-group">
+                      <label className="label">Costo del flete (MXN)</label>
+                      <input
+                        type="number"
+                        className="input"
+                        value={editCostoFlete}
+                        min={0}
+                        onChange={e => setEditCostoFlete(Number(e.target.value))}
+                      />
+                    </div>
+
+                    {solicitadoCambiado() && (
+                      <p className="text-xs text-blue-600">Cambios pendientes — presiona "Guardar cambios" para confirmar.</p>
+                    )}
                   </div>
-                  <div>
-                    <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">Flete</span>
-                    <span className="text-gray-800"><Currency value={selEmb.costoFlete} /></span>
+                )}
+
+                {/* Editar origen + transportista (cuando no es solicitado) */}
+                {selEmb.estatus !== 'solicitado' && (
+                  <div className="space-y-1">
+                    <label className="label">Origen del envío</label>
+                    <input
+                      className="input"
+                      value={editOrigen}
+                      onChange={e => setEditOrigen(e.target.value)}
+                      placeholder="Ej. Bodega Tepatitlán, Jalisco"
+                    />
                   </div>
-                  <div>
-                    <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">F. Programada</span>
-                    <span className="text-gray-800">{selEmb.fechaProgramada || '—'}</span>
+                )}
+                <div className="space-y-1">
+                  <label className="label">Transportista</label>
+                  <select
+                    className="select"
+                    value={editTransId}
+                    onChange={e => setEditTransIdEmb(e.target.value)}
+                  >
+                    <option value="">— Sin asignar —</option>
+                    {transportistas.filter(t => t.activo).map(t => (
+                      <option key={t.transportistaId} value={t.transportistaId}>
+                        {t.nombre}{t.tarifaBase > 0 ? ` — ${t.tarifaBase.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {(editTransId !== (selEmb.transportistaId ?? '') || (selEmb.estatus !== 'solicitado' && editOrigen !== (selEmb.origen ?? ''))) && (
+                    <p className="text-xs text-amber-600">Cambios pendientes — presiona "Guardar cambios" para confirmar.</p>
+                  )}
+                </div>
+
+                {/* Cambiar estatus */}
+                <div className="space-y-2">
+                  <p className="label">Cambiar estatus</p>
+                  <div className="flex flex-wrap gap-2">
+                    {ESTADOS_PIPELINE.map(est => (
+                      <button
+                        key={est}
+                        className={`btn btn-sm ${selEmb.estatus === est ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => void handleCambiarEstatus(est)}
+                      >
+                        <StatusBadge status={est} />
+                      </button>
+                    ))}
                   </div>
-                  {(selEmb.ordenesIds?.length ?? 0) > 0 && (
-                    <div>
-                      <span className="text-xs text-gray-500 uppercase font-semibold block mb-0.5">OC(s)</span>
-                      <span className="text-xs font-mono text-blue-700">{selEmb.ordenesIds!.map(r => r.folio).join(', ')}</span>
+                  {selEmb.estatus === 'entregado' && (selEmb.ordenesIds?.length ?? 0) > 0 && (
+                    <div className="flex items-start gap-2 p-3 bg-green-50 border border-green-200 rounded-lg text-green-800 text-xs mt-2">
+                      <CheckCircle size={14} className="flex-shrink-0 mt-0.5" />
+                      <span>
+                        Embarque entregado. Presiona <strong>"Enviar a CxP"</strong> para cerrar el embarque
+                        y mover la(s) OC(s) a Cuentas por Pagar.
+                      </span>
                     </div>
                   )}
-                </>
-              )}
-            </div>
-
-            {/* ── Edición de campos cuando estatus = "solicitado" ─────────── */}
-            {selEmb.estatus === 'solicitado' && (
-              <div className="space-y-4 p-4 bg-blue-50 border border-blue-200 rounded-xl">
-                <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">
-                  Datos del embarque — editable en estado Solicitado
-                </p>
-
-                {/* OC de compras — solo lectura */}
-                {(selEmb.ordenesIds?.length ?? 0) > 0 && (
-                  <div className="form-group">
-                    <label className="label">Orden(es) de Compra</label>
-                    <div className="input bg-gray-100 text-gray-700 font-mono text-sm cursor-not-allowed">
-                      {selEmb.ordenesIds!.map(r => `${r.folio} (${r.kgEmbarcados} kg)`).join(', ')}
-                    </div>
-                  </div>
-                )}
-
-                {/* Origen */}
-                <div className="form-group">
-                  <label className="label">Origen del envío</label>
-                  <input
-                    className="input"
-                    value={editOrigen}
-                    onChange={e => setEditOrigen(e.target.value)}
-                    placeholder="Ej. Bodega Tepatitlán, Jalisco"
-                  />
                 </div>
-
-                {/* Destino */}
-                <div className="form-group">
-                  <label className="label">Destino</label>
-                  <input
-                    className="input"
-                    value={editDestino}
-                    onChange={e => setEditDestino(e.target.value)}
-                    placeholder="Dirección o ciudad de destino"
-                  />
-                </div>
-
-                {/* Cantidad a transportar y fecha programada en grid */}
-                <div className="form-grid">
-                  <div className="form-group">
-                    <label className="label">Cantidad a transportar (kg)</label>
-                    <input
-                      type="number"
-                      className="input"
-                      value={editCantidad}
-                      min={0}
-                      onChange={e => setEditCantidad(Number(e.target.value))}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="label">Fecha programada</label>
-                    <input
-                      type="date"
-                      className="input"
-                      value={editFechaProgramada}
-                      onChange={e => setEditFechaProgramada(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                {/* Costo del flete */}
-                <div className="form-group">
-                  <label className="label">Costo del flete (MXN)</label>
-                  <input
-                    type="number"
-                    className="input"
-                    value={editCostoFlete}
-                    min={0}
-                    onChange={e => setEditCostoFlete(Number(e.target.value))}
-                  />
-                </div>
-
-                {solicitadoCambiado() && (
-                  <p className="text-xs text-blue-600">Cambios pendientes — presiona "Guardar cambios" para confirmar.</p>
-                )}
-              </div>
+              </>
             )}
-
-            {/* Editar origen + transportista (cuando no es solicitado) */}
-            {selEmb.estatus !== 'solicitado' && (
-              <div className="space-y-1">
-                <label className="label">Origen del envío</label>
-                <input
-                  className="input"
-                  value={editOrigen}
-                  onChange={e => setEditOrigen(e.target.value)}
-                  placeholder="Ej. Bodega Tepatitlán, Jalisco"
-                />
-              </div>
-            )}
-            <div className="space-y-1">
-              <label className="label">Transportista</label>
-              <select
-                className="select"
-                value={editTransId}
-                onChange={e => setEditTransIdEmb(e.target.value)}
-              >
-                <option value="">— Sin asignar —</option>
-                {transportistas.filter(t => t.activo).map(t => (
-                  <option key={t.transportistaId} value={t.transportistaId}>
-                    {t.nombre}{t.tarifaBase > 0 ? ` — ${t.tarifaBase.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}` : ''}
-                  </option>
-                ))}
-              </select>
-              {(editTransId !== (selEmb.transportistaId ?? '') || (selEmb.estatus !== 'solicitado' && editOrigen !== (selEmb.origen ?? ''))) && (
-                <p className="text-xs text-amber-600">Cambios pendientes — presiona "Guardar cambios" para confirmar.</p>
-              )}
-            </div>
-
-            {/* Cambiar estatus */}
-            <div className="space-y-2">
-              <p className="label">Cambiar estatus</p>
-              <div className="flex flex-wrap gap-2">
-                {ESTADOS_PIPELINE.map(est => (
-                  <button
-                    key={est}
-                    className={`btn btn-sm ${selEmb.estatus === est ? 'btn-primary' : 'btn-secondary'}`}
-                    onClick={() => void handleCambiarEstatus(est)}
-                  >
-                    <StatusBadge status={est} />
-                  </button>
-                ))}
-              </div>
-              {selEmb.estatus === 'entregado' && (selEmb.ordenesIds?.length ?? 0) > 0 && (
-                <div className="flex items-start gap-2 p-3 bg-green-50 border border-green-200 rounded-lg text-green-800 text-xs mt-2">
-                  <CheckCircle size={14} className="flex-shrink-0 mt-0.5" />
-                  <span>
-                    Embarque entregado. Presiona <strong>"Enviar a CxP"</strong> para cerrar el embarque
-                    y mover la(s) OC(s) a Cuentas por Pagar.
-                  </span>
-                </div>
-              )}
-            </div>
           </div>
         </Modal>
       )}
