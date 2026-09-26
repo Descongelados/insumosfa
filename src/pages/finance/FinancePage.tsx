@@ -89,7 +89,7 @@ export function FinancePage() {
   const [tab, setTab] = useState<'pagos' | 'cxc' | 'cxp' | 'bancos' | 'gastos'>('pagos')
   const [cxcTab, setCxcTab] = useState<'cobrar' | 'pagadas' | 'canceladas'>('cobrar')
 
-  // ── Filtros de búsqueda ──────────────────────────────────────────────────────
+  // ── Filtros de búsqueda ──────────────────────────────────────────────
   const [qCxc, setQCxc] = useState('')
   const [qCxp, setQCxp] = useState('')
   const [qGastos, setQGastos] = useState('')
@@ -135,12 +135,12 @@ export function FinancePage() {
   const [cajaDeposito, setCajaDeposito] = useState({ monto: 0, bancoDestinoId: '' })
   const [cajaSaving, setCajaSaving] = useState(false)
 
-  // ── derived ──────────────────────────────────────────────────────────────────
+  // ── derived ──────────────────────────────────────────────────────────────
   const ocsPendientesPago = ordenesCompra.filter(o => o.estatus === 'enviarPago')
   // Facturas de proveedor cuyo origen es un flete de embarque
   const facturasFleteProveedor = facturasProveedor.filter(f => f.embarqueId)
 
-  const porCobrar = facturasVenta.filter(f => f.saldoPendiente > 0)
+  const porCobrar = facturasVenta.filter(f => f.saldoPendiente > 0 && f.estatus !== 'cancelada')
   const pagadas   = facturasVenta.filter(f => f.saldoPendiente === 0 && f.estatus === 'pagada')
   const canceladas  = facturasVenta.filter(f => f.estatus === 'cancelada')
   const cxcPendiente = porCobrar.reduce((a, f) => a + f.saldoPendiente, 0)
@@ -155,7 +155,7 @@ export function FinancePage() {
   const pagosMes      = pagosProveedores.filter(p => p.fecha.startsWith(mesActual))
   const totalPagosMes = pagosMes.reduce((a, p) => a + p.monto, 0)
 
-  // ── Listas filtradas para búsqueda ───────────────────────────────────────────
+  // ── Listas filtradas para búsqueda ───────────────────────────────────────
   const filteredPorCobrar = useMemo(() => porCobrar.filter(f => {
     const cli = clients.find(c => c.clientId === f.clienteId)?.razonSocial ?? ''
     return [f.folio, cli].join(' ').toLowerCase().includes(qCxc.toLowerCase())
@@ -182,7 +182,7 @@ export function FinancePage() {
     return matchQ && matchCat
   }), [gastos, qGastos, gastoCatFilter])
 
-  // ── helpers ───────────────────────────────────────────────────────────────────
+  // ── helpers ───────────────────────────────────────────────────────────────
   function getOrder(pedidoId?: string): SalesOrder | undefined {
     if (!pedidoId) return undefined
     return orders.find(o => o.pedidoId === pedidoId)
@@ -425,7 +425,7 @@ export function FinancePage() {
     setModal(null); setSelGasto(null)
   }
 
-  // ── column helpers ────────────────────────────────────────────────────────────
+  // ── column helpers ────────────────────────────────────────────────────────
   function cxcColumns(showCobrar: boolean) {
     return [
       { key: 'folio', header: 'Factura', render: (f: FacturaVenta) => <span className="font-mono font-semibold text-blue-700">{f.folio}</span> },
@@ -578,7 +578,7 @@ export function FinancePage() {
         </button>
       </div>
 
-      {/* ── TAB: Pagos del Mes ───────────────────────────────────────────────────── */}
+      {/* ── TAB: Pagos del Mes ───────────────────────────────────────────────── */}
       {tab === 'pagos' && (
         <div className="space-y-4">
 
@@ -730,7 +730,7 @@ export function FinancePage() {
         </div>
       )}
 
-      {/* ── TAB: CxC ──────────────────────────────────────────────────────────────── */}
+      {/* ── TAB: CxC ──────────────────────────────────────────────────────────── */}
       {tab === 'cxc' && (
         <div className="space-y-4">
           <div className="flex gap-2 border-b border-gray-200 pb-0">
@@ -829,7 +829,7 @@ export function FinancePage() {
         </div>
       )}
 
-      {/* ── TAB: CxP ──────────────────────────────────────────────────────────────── */}
+      {/* ── TAB: CxP ──────────────────────────────────────────────────────────── */}
       {tab === 'cxp' && (
         <div className="space-y-4">
 
@@ -1057,7 +1057,7 @@ export function FinancePage() {
         </div>
       )}
 
-      {/* ── TAB: Bancos ─────────────────────────────────────────────────────────── */}
+      {/* ── TAB: Bancos ─────────────────────────────────────────────────────── */}
       {tab === 'bancos' && (() => {
         const caja     = bancos.find(b => b.moneda === 'CAJA')
         const soloMXN  = bancos.filter(b => b.moneda !== 'CAJA')
@@ -1140,7 +1140,7 @@ export function FinancePage() {
         )
       })()}
 
-      {/* ── TAB: Gastos ─────────────────────────────────────────────────────────── */}
+      {/* ── TAB: Gastos ─────────────────────────────────────────────────────── */}
       {tab === 'gastos' && (
         <div className="space-y-4">
           {/* Resumen del mes */}
@@ -1264,7 +1264,7 @@ export function FinancePage() {
         </div>
       )}
 
-      {/* ╔═ MODALES ════════════════════════════════════════════════════════════════ */}
+      {/* ╔═ MODALES ═══════════════════════════════════════════════════════════ */}
 
       {/* Cobro / Abono */}
       {modal === 'pago_cli' && (
@@ -1782,8 +1782,8 @@ export function FinancePage() {
         </Modal>
       )}
 
-      {/* ── Modal Registrar Cobro Efectivo ────────────────────────────────────────── */}
-      {/* ── Modal Ingresar Efectivo a Cuenta Bancaria ──────────────────────────── */}
+      {/* ── Modal Registrar Cobro Efectivo ────────────────────────────────────── */}
+      {/* ── Modal Ingresar Efectivo a Cuenta Bancaria ──────────────────────── */}
       {modal === 'caja_deposito' && (() => {
         const caja    = bancos.find(b => b.moneda === 'CAJA')
         const soloMXN = bancos.filter(b => b.moneda !== 'CAJA' && b.activo)
@@ -1843,7 +1843,7 @@ export function FinancePage() {
       })()}
 
       {/* Ver Recibo */}
-      {/* ── Modal Preview Remisión ─────────────────────────────────────────────── */}
+      {/* ── Modal Preview Remisión ─────────────────────────────────────────── */}
       {modal === 'remision' && selRemision && (() => {
         const client = clients.find(c => c.clientId === selRemision.clienteId)
         const order  = remisionOrder ?? getOrder(selRemision.pedidoId)
