@@ -97,7 +97,7 @@ export function LogisticsPage() {
   const [editTransIdTrans, setEditTransIdTrans] = useState<string | null>(null)
 
   // ── embarques por grupo ──────────────────────────────────────────────────
-  const embarquesActivos  = embarques.filter(e => !['cerrado', 'entregado'].includes(e.estatus))
+  const embarquesActivos  = embarques.filter(e => !['cerrado', 'entregado', 'cancelado'].includes(e.estatus))
   const embarquesEntregados = embarques.filter(e => e.estatus === 'entregado')
 
   // ── filtros ──────────────────────────────────────────────────────────────

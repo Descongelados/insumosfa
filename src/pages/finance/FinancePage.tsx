@@ -59,7 +59,7 @@ export function FinancePage() {
   const { orders, fetchOrderById, updateOrder } = useSalesOrdersStore()
   const { products } = useProductsStore()
   const { ordenesCompra, loadPurchases, subscribeRealtime: subPurchases, updateOrdenCompra } = usePurchasesStore()
-  const { embarques, transportistas, loadLogistics, subscribeRealtime: subLogistics } = useLogisticsStore()
+  const { embarques, transportistas, loadLogistics, subscribeRealtime: subLogistics, updateEmbarque } = useLogisticsStore()
   const { applyMovimiento } = useInventoryStore()
   const { user: me } = useAuthStore()
   const { company } = useConfigStore()
@@ -1374,29 +1374,79 @@ export function FinancePage() {
       {/* Cancelar OC de CxP */}
       {modal === 'cancel_oc_pago' && selCancelOC && (() => {
         const oc = ocsPendientesPago.find(o => o.ordenCompraId === selCancelOC)
-        return oc ? (
-          <Modal title="Cancelar proceso de pago" onClose={() => { setModal(null); setSelCancelOC(null) }}
+        if (!oc) return null
+
+        // Embarque asociado a esta OC (por ordenesIds), solo si aún no fue despachado
+        const ESTADOS_BLOQUEANTES: Embarque['estatus'][] = ['enTransito', 'entregado', 'cerrado', 'cancelado']
+        const embarqueAsoc = embarques.find(e =>
+          e.ordenesIds?.some(r => r.ordenCompraId === oc.ordenCompraId) &&
+          !ESTADOS_BLOQUEANTES.includes(e.estatus)
+        )
+
+        const closeFn = () => { setModal(null); setSelCancelOC(null) }
+
+        return (
+          <Modal
+            title="Cancelar proceso de pago"
+            onClose={closeFn}
             footer={
               <>
-                <button className="btn-secondary" onClick={() => { setModal(null); setSelCancelOC(null) }}>No, mantener</button>
+                <button className="btn-secondary" onClick={closeFn}>No, mantener</button>
                 <button className="btn-danger" onClick={async () => {
+                  // 1. Cancelar embarque asociado si existe
+                  if (embarqueAsoc) {
+                    await updateEmbarque(embarqueAsoc.embarqueId, { estatus: 'cancelado' })
+                  }
+
+                  // 2. Registrar en kardex la cancelación por cada item de la OC
+                  for (const item of oc.items) {
+                    await applyMovimiento({
+                      productId: item.productId,
+                      tipo: 'Ajuste',
+                      cantidad: 0,          // sin cambio en stock disponible — solo nota en kardex
+                      documentoOrigen: oc.folio,
+                      usuario: me?.name ?? 'Finanzas',
+                      notas: `Cancelación OC ${oc.folio}${embarqueAsoc ? ` — embarque ${embarqueAsoc.folio} cancelado` : ''}. Mercancía no ingresó al inventario.`,
+                    })
+                  }
+
+                  // 3. Regresar OC a Compras
                   await updateOrdenCompra(oc.ordenCompraId, { estatus: 'confirmada' })
-                  toast.warning(`OC ${oc.folio} regresada a Compras con estatus confirmada.`)
-                  setModal(null); setSelCancelOC(null)
+
+                  toast.warning(
+                    `OC ${oc.folio} regresada a Compras.` +
+                    (embarqueAsoc ? ` Embarque ${embarqueAsoc.folio} cancelado.` : '')
+                  )
+                  closeFn()
                 }}>
-                  <XCircle size={14} /> Sí, cancelar pago
+                  <XCircle size={14} /> Sí, cancelar
                 </button>
               </>
             }
           >
             <div className="space-y-3 text-sm text-gray-700">
               <p>¿Cancelar el proceso de pago de la OC <strong className="font-mono">{oc.folio}</strong>?</p>
+
+              {embarqueAsoc ? (
+                <div className="flex items-start gap-2 p-3 bg-orange-50 border border-orange-200 rounded-lg text-xs text-orange-800">
+                  <Truck size={14} className="mt-0.5 shrink-0" />
+                  <span>
+                    Se cancelará también el embarque <strong className="font-mono">{embarqueAsoc.folio}</strong>{' '}
+                    (estatus actual: <strong>{embarqueAsoc.estatus}</strong>).
+                  </span>
+                </div>
+              ) : (
+                <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-600">
+                  No hay embarque activo asociado a esta OC.
+                </div>
+              )}
+
               <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
-                La orden regresará a Compras con estatus <strong>confirmada</strong> para ser procesada nuevamente.
+                La OC regresará a Compras con estatus <strong>confirmada</strong>. Se registrará la cancelación en el kardex de cada producto.
               </div>
             </div>
           </Modal>
-        ) : null
+        )
       })()}
 
       {/* Cancelar Pedido de CxC */}

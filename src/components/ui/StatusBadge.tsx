@@ -10,7 +10,7 @@ const variants = {
   embarcado: 'badge-yellow', enTransito: 'badge-yellow', parcial: 'badge-yellow',
   recolectado: 'badge-yellow', contactado: 'badge-yellow',
   rechazada: 'badge-red', inactivo: 'badge-red', perdido: 'badge-red',
-  vencida: 'badge-red', cancelada: 'badge-red',
+  vencida: 'badge-red', cancelada: 'badge-red', cancelado: 'badge-red',
   facturado: 'badge-purple', calificado: 'badge-purple',
   solicitado: 'badge-orange', creada: 'badge-orange',
   alta: 'badge-red', media: 'badge-yellow', baja: 'badge-gray',
@@ -25,7 +25,7 @@ const labels: Record<string, string> = {
   surtiendo: 'Surtiendo', enRevision: 'En Revisión', cotizado: 'Cotizado',
   embarcado: 'Procesar', enTransito: 'En Tránsito', parcial: 'Parcial',
   recolectado: 'Recolectado', contactado: 'Contactado',
-  perdido: 'Perdido', vencida: 'Vencida', cancelada: 'Cancelada',
+  perdido: 'Perdido', vencida: 'Vencida', cancelada: 'Cancelada', cancelado: 'Cancelado',
   facturado: 'Facturado', calificado: 'Calificado',
   solicitado: 'Solicitado', creada: 'Creada', alta: 'Alta', media: 'Media', baja: 'Baja',
 }
