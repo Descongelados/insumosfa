@@ -18,7 +18,7 @@ export const ROUTE_ROLES: Record<string, Role[]> = {
   '/logistica':             ['director', 'operaciones', 'almacen'],
   '/finanzas':              ['director', 'administracion', 'cobranza'],
   '/reportes':              ['director', 'administracion', 'cobranza'],
-  '/configuracion':         ['director', 'administracion', 'compras', 'ventas', 'operaciones', 'almacen'],
+  '/configuracion':         ['director', 'administracion', 'compras', 'ventas', 'operaciones', 'almacen', 'cobranza'],
 }
 
 /** Devuelve true si alguno de los roles del usuario da acceso a la ruta */
@@ -118,6 +118,6 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Configuración',
     icon: Settings,
     to: '/configuracion',
-    roles: ['director', 'administracion', 'compras', 'ventas', 'operaciones', 'almacen'],
+    roles: ['director', 'administracion', 'compras', 'ventas', 'operaciones', 'almacen', 'cobranza'],
   },
 ]
